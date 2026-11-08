@@ -498,6 +498,20 @@
     .pager:empty { display: none; }
     .pager-info { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-muted); }
     .pager-info select.input { width: auto; }
+    .range-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+    .range-segments { display: flex; max-width: 100%; overflow-x: auto; padding: 3px; gap: 2px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-muted); }
+    .range-segment {
+      flex: none; min-height: 30px; padding: 5px 11px; border: 1px solid transparent; border-radius: 5px;
+      background: transparent; color: var(--text-secondary); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer;
+      transition: background-color 0.15s, color 0.15s;
+    }
+    .range-segment:hover { background: color-mix(in srgb, var(--bg-elevated) 55%, transparent); color: var(--text-primary); }
+    .range-segment:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .range-segment[aria-pressed="true"] { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border-subtle); box-shadow: var(--shadow-sm); font-weight: 600; }
+    .range-custom { display: flex; order: 1; flex-basis: 100%; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+    .range-custom label { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 12px; min-width: 0; }
+    .range-custom .input { width: 200px; max-width: 100%; }
+    .range-error { color: var(--danger); font-size: 12px; }
     .pager-nav { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
     .pager-nav .btn { min-width: 30px; justify-content: center; }
     .pager-nav .btn[aria-current="page"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
@@ -582,6 +596,8 @@
       .modal-foot { padding: 12px 16px; }
       .pick-row { grid-template-columns: 20px 1fr; }
       .pick-name, .pick-meta { grid-column: 2; text-align: left; }
+      .range-custom label { width: 100%; }
+      .range-custom .input { flex: 1; width: 0; }
     }
   </style>
 </head>
@@ -641,6 +657,23 @@
     </div>
 
     <section class="panel" role="tabpanel" id="panel-logs" aria-labelledby="tab-logs">
+      <form class="range-tools" id="logs-range-form" novalidate>
+        <div class="range-segments" id="logs-range" role="group">
+          <button class="range-segment" type="button" data-range="all" aria-pressed="true" data-i18n="logs.range.all">All</button>
+          <button class="range-segment" type="button" data-range="today" aria-pressed="false" data-i18n="logs.range.today">Today</button>
+          <button class="range-segment" type="button" data-range="24h" aria-pressed="false" data-i18n="logs.range.24h">24 hours</button>
+          <button class="range-segment" type="button" data-range="7d" aria-pressed="false" data-i18n="logs.range.7d">Last 7 days</button>
+          <button class="range-segment" type="button" data-range="30d" aria-pressed="false" data-i18n="logs.range.30d">Last 30 days</button>
+          <button class="range-segment" type="button" data-range="custom" aria-pressed="false" aria-controls="logs-range-custom" aria-expanded="false" data-i18n="logs.range.custom">Custom</button>
+        </div>
+        <div class="range-custom" id="logs-range-custom" hidden>
+          <label for="logs-range-start"><span data-i18n="logs.range.from">From</span> <input class="input input-sm" id="logs-range-start" type="datetime-local" step="60"></label>
+          <label for="logs-range-end"><span data-i18n="logs.range.to">To</span> <input class="input input-sm" id="logs-range-end" type="datetime-local" step="60"></label>
+          <button class="btn btn-secondary btn-sm" type="submit" data-i18n="logs.range.apply">Apply</button>
+        </div>
+        <span class="range-error" id="logs-range-error" role="status" hidden></span>
+      </form>
+      <div class="notice" id="logs-error" data-state="error" role="alert" hidden><span class="notice-text" id="logs-error-text"></span></div>
       <div class="summary strip" id="logs-summary"></div>
       <section class="card">
         <div class="card-header">
@@ -877,8 +910,25 @@
       'logs.error': 'Error',
       'logs.search': 'Search model, key, error',
       'logs.hint': 'Keeps the latest {n} requests on disk',
+      'logs.hintDays': 'Keeps up to {n} requests from the last {d} days on disk',
+      'logs.hintOff': 'Request logging is off (log-retention: 0)',
       'logs.count': '{n} requests',
       'logs.empty': 'No requests yet.',
+      'logs.noMatch': 'No matching requests.',
+      'logs.storeError': 'Request log storage error: {msg}',
+      'logs.range.label': 'Time range',
+      'logs.range.hint': 'Filters by request start time; the totals and the list both follow it.',
+      'logs.range.all': 'All',
+      'logs.range.today': 'Today',
+      'logs.range.24h': '24 hours',
+      'logs.range.7d': 'Last 7 days',
+      'logs.range.30d': 'Last 30 days',
+      'logs.range.custom': 'Custom',
+      'logs.range.from': 'From',
+      'logs.range.to': 'To',
+      'logs.range.apply': 'Apply',
+      'logs.range.incomplete': 'Enter both the start and the end time, to the minute',
+      'logs.range.order': 'The end time must be after the start time',
       'logs.col.time': 'Time',
       'logs.col.model': 'Client model / upstream',
       'logs.col.effort': 'Effort',
@@ -1135,8 +1185,25 @@
       'logs.error': '失败',
       'logs.search': '搜索模型、凭据、错误',
       'logs.hint': '磁盘上保留最近 {n} 条请求',
+      'logs.hintDays': '磁盘上保留最近 {d} 天、最多 {n} 条请求',
+      'logs.hintOff': '请求日志已关闭（log-retention: 0）',
       'logs.count': '{n} 条请求',
       'logs.empty': '还没有请求。',
+      'logs.noMatch': '没有匹配的请求。',
+      'logs.storeError': '请求日志存储出错：{msg}',
+      'logs.range.label': '时间范围',
+      'logs.range.hint': '按请求开始时间筛选，统计和列表都按这个时段。',
+      'logs.range.all': '全部',
+      'logs.range.today': '今天',
+      'logs.range.24h': '24 小时',
+      'logs.range.7d': '近 7 天',
+      'logs.range.30d': '近 30 天',
+      'logs.range.custom': '自定义',
+      'logs.range.from': '从',
+      'logs.range.to': '至',
+      'logs.range.apply': '应用',
+      'logs.range.incomplete': '请填写完整的起止时间，精确到分钟',
+      'logs.range.order': '结束时间需晚于开始时间',
       'logs.col.time': '时间',
       'logs.col.model': '客户端模型 / 上游',
       'logs.col.effort': '思考强度',
@@ -2723,6 +2790,9 @@
     renderCheckedAt();
     renderConfig();
     logsSearch.placeholder = t('logs.search');
+    logsRangeGroup.setAttribute('aria-label', t('logs.range.label'));
+    logsRangeGroup.title = t('logs.range.hint');
+    syncLogRange();
     renderLogs();
     renderSummary();
     renderKeys();
@@ -2757,9 +2827,129 @@
     if (LOG_SIZES.includes(saved)) logState.size = saved;
   } catch (_) { /* ignore */ }
 
+  // ---- Request log time range (same choices as ClinePassBridge) ----
+  const logsRangeForm = $('logs-range-form');
+  const logsRangeGroup = $('logs-range');
+  const logsRangeCustom = $('logs-range-custom');
+  const logsRangeStart = $('logs-range-start');
+  const logsRangeEnd = $('logs-range-end');
+  const logsRangeError = $('logs-range-error');
+  const logsError = $('logs-error');
+  const logsErrorText = $('logs-error-text');
+  const LOG_RANGE_KEY = 'cliproxy-wokey-log-range';
+  const LOG_RANGES = ['all', 'today', '24h', '7d', '30d', 'custom'];
+  const LOCAL_MINUTE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+  // start and end are the applied custom bounds (datetime-local values);
+  // edits in the inputs only count once Apply is pressed.
+  const logRange = { range: 'all', start: '', end: '', error: '' };
+
+  // localMinute formats a date for a datetime-local input.
+  function localMinute(date) {
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+  function nextMinute() { return new Date(Math.floor(Date.now() / 60000) * 60000 + 60000); }
+
+  function syncLogRange() {
+    const custom = logRange.range === 'custom';
+    logsRangeCustom.hidden = !custom;
+    for (const button of logsRangeGroup.querySelectorAll('[data-range]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.range === logRange.range));
+      if (button.dataset.range === 'custom') button.setAttribute('aria-expanded', String(custom));
+    }
+    logsRangeError.textContent = logRange.error ? t(logRange.error) : '';
+    logsRangeError.hidden = !logRange.error;
+  }
+
+  function rememberLogRange() {
+    try { localStorage.setItem(LOG_RANGE_KEY, JSON.stringify({ range: logRange.range, start: logRange.start, end: logRange.end })); } catch (_) { /* ignore */ }
+  }
+
+  // customRangeError checks a pair of datetime-local values.
+  function customRangeError(start, end) {
+    if (!LOCAL_MINUTE.test(start) || !LOCAL_MINUTE.test(end)) return 'logs.range.incomplete';
+    const from = new Date(start).getTime();
+    const to = new Date(end).getTime();
+    if (!Number.isFinite(from) || !Number.isFinite(to)) return 'logs.range.incomplete';
+    return from < to ? '' : 'logs.range.order';
+  }
+
+  // applyCustomRange takes the inputs as the custom range when they are valid.
+  function applyCustomRange() {
+    logRange.error = customRangeError(logsRangeStart.value, logsRangeEnd.value);
+    if (!logRange.error) {
+      logRange.start = logsRangeStart.value;
+      logRange.end = logsRangeEnd.value;
+    }
+    syncLogRange();
+    return !logRange.error;
+  }
+
+  // logRangeParams turns the selected range into from/to query parameters.
+  // Relative ranges are recomputed against the current time on every load;
+  // null means the custom range is not usable yet.
+  function logRangeParams() {
+    switch (logRange.range) {
+      case 'custom':
+        if (customRangeError(logRange.start, logRange.end)) return null;
+        return { from: new Date(logRange.start).toISOString(), to: new Date(logRange.end).toISOString() };
+      case 'today': {
+        const start = new Date();
+        start.setHours(0, 0, 0, 0);
+        return { from: start.toISOString() };
+      }
+      case '24h': case '7d': case '30d':
+        return { from: new Date(nextMinute().getTime() - { '24h': 1, '7d': 7, '30d': 30 }[logRange.range] * 86400000).toISOString() };
+      default:
+        return {};
+    }
+  }
+
+  (function restoreLogRange() {
+    const end = nextMinute();
+    logRange.start = localMinute(new Date(end.getTime() - 86400000));
+    logRange.end = localMinute(end);
+    try {
+      const saved = JSON.parse(localStorage.getItem(LOG_RANGE_KEY) || 'null');
+      if (saved && LOG_RANGES.includes(saved.range)) {
+        logRange.range = saved.range;
+        if (!customRangeError(String(saved.start || ''), String(saved.end || ''))) {
+          logRange.start = saved.start;
+          logRange.end = saved.end;
+        }
+      }
+    } catch (_) { /* ignore */ }
+    logsRangeStart.value = logRange.start;
+    logsRangeEnd.value = logRange.end;
+    syncLogRange();
+  })();
+
+  logsRangeGroup.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-range]');
+    if (!button || button.dataset.range === logRange.range) return;
+    logRange.range = button.dataset.range;
+    logRange.error = '';
+    if (logRange.range === 'custom') {
+      if (!applyCustomRange()) return;
+      logsRangeStart.focus();
+    }
+    syncLogRange();
+    rememberLogRange();
+    logState.offset = 0;
+    loadLogs(true);
+  });
+  logsRangeForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (!applyCustomRange()) return;
+    rememberLogRange();
+    logState.offset = 0;
+    loadLogs(false);
+  });
+
   async function loadLogs(silent) {
+    const range = logRangeParams();
+    if (!range) return;
     const seq = ++logState.seq;
-    const params = new URLSearchParams({ limit: logState.size, offset: logState.offset, status: logsStatus.value, search: logsSearch.value.trim() });
+    const params = new URLSearchParams({ limit: logState.size, offset: logState.offset, status: logsStatus.value, search: logsSearch.value.trim(), ...range });
     if (!silent) setBusy(logsRefresh, true);
     try {
       const page = await api('/logs?' + params.toString());
@@ -2821,6 +3011,8 @@
     const page = logState.page;
     logsSummary.replaceChildren();
     logsPager.replaceChildren();
+    logsError.hidden = !(page && page.error);
+    logsErrorText.textContent = page && page.error ? t('logs.storeError', { msg: page.error }) : '';
     if (!page) return;
     const sum = page.summary || {};
     logsSummary.append(
@@ -2828,11 +3020,14 @@
       stripItem(t('logs.sum.tokens'), fmtTokens((sum.input_tokens || 0) + (sum.output_tokens || 0)), t('logs.sum.io', { i: fmtTokens(sum.input_tokens), o: fmtTokens(sum.output_tokens), c: fmtTokens(sum.cached_tokens) })),
       stripItem(t('logs.sum.cache'), fmtPct(sum.cache_hit_rate)),
       stripItem(t('logs.sum.speed'), fmtRate(sum.output_tokens_per_second)));
-    logsHint.textContent = t('logs.hint', { n: page.retention });
+    logsHint.textContent = !(page.retention > 0) ? t('logs.hintOff')
+      : page.retention_days > 0 ? t('logs.hintDays', { n: fmtCount(page.retention), d: page.retention_days })
+        : t('logs.hint', { n: fmtCount(page.retention) });
     logsCount.textContent = t('logs.count', { n: page.total });
     const items = page.items || [];
     if (!items.length) {
-      logsBody.replaceChildren(el('div', { class: 'empty', text: t('logs.empty') }));
+      const filtered = logRange.range !== 'all' || logsStatus.value !== 'all' || logsSearch.value.trim() !== '';
+      logsBody.replaceChildren(el('div', { class: 'empty', text: t(filtered ? 'logs.noMatch' : 'logs.empty') }));
       return;
     }
     const cols = ['time', 'model', 'effort', 'result', 'cred', 'timing', 'usage'];

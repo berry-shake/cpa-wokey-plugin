@@ -76,8 +76,9 @@ plugins:
       models-refresh-minutes: 60          # 模型目录轮询间隔（分钟），0 = 不轮询，只按需加载
       request-timeout-seconds: 600        # 非流式请求超时
       stream-idle-timeout-seconds: 300    # 流式响应多久没有新数据就中断
-      data-dir: plugins/wokey-data        # 插件数据目录（请求日志），相对路径按 CPA 的工作目录算
-      log-retention: 1000                 # 请求日志保留多少条，0 = 不记录
+      data-dir: plugins/wokey-data        # 插件数据目录（请求日志数据库 requests.db），相对路径按 CPA 的工作目录算
+      log-retention: 100000               # 请求日志最多保留多少条（上限 1000000），0 = 不记录
+      log-retention-days: 30              # 请求日志保留多少天，0 = 不按天数清理，只受条数限制
 ```
 
 非法的值会被忽略并回退到默认值，同时写一条警告日志，不会让插件注册失败。
@@ -209,14 +210,17 @@ Wokey 在这个接口里会顺带结算冷却期已满的作废礼品卡，除�
 - 发卡令牌只显示打码后的样子。编辑时留空表示不改，勾选"移除已保存的令牌"才会删掉；填了新令牌会先调用发卡接口校验，通过才保存（添加时勾了"跳过 Key 校验"则不校验）。
 - **模型目录** 页：Wokey 公开模型的提供方、上下文长度、价格，以及每个模型在 CPA 里注册的名字和服务它的 Key 数。
 - **请求日志** 页：经过本插件的每次调用，最新的在前。
-  - 顶部统计条：请求数（成功 / 失败）、输入 / 输出 / 缓存 Token、缓存命中率、平均输出速度，按当前筛选条件统计。
+  - 最上面是时间范围：全部、今天、24 小时、近 7 天、近 30 天、自定义（精确到分钟的起止时间，点"应用"生效）。按请求开始时间筛选，选择会记在浏览器里。
+  - 统计条：请求数（成功 / 失败）、输入 / 输出 / 缓存 Token、缓存命中率、平均输出速度，按当前时间范围和筛选条件统计。
   - 每行显示时间、模型（和发给 Wokey 的上游模型）、思考强度、结果状态码、凭据、Wokey 实际返回的模型、首字时间 / 总耗时、Token 用量；点开一行能看到接口、是否流式、认证文件、缓存写入、思考 Token、输出速度，失败的还有错误码、出错阶段（输出前 / 流式中途）和错误信息。
-  - 可以按模型、凭据、认证文件、错误信息或状态码搜索，按成功 / 失败筛选，每页 50 条；清空需要 3 秒内再点一次确认。
+  - 可以按模型、凭据、认证文件、错误信息或状态码搜索，按成功 / 失败筛选；每页 20 / 50 / 100 / 200 条，可以输入页码跳转；清空需要 3 秒内再点一次确认。
   - 日志只记录元数据和用量，不记录请求和响应内容。
 - **配置概览** 页：插件配置的当前生效值（可以展开成 YAML）、CPA 的强制前缀开关和全局代理。强制前缀没开时会提示同名模型会进入公共号池。
 - 支持 English / 中文。
 
-请求日志按行追加写到 `<data-dir>/requests.jsonl`（默认 `plugins/wokey-data/requests.jsonl`），插件重启后会读回来。内存里只保留最近 `log-retention` 条；文件行数到保留条数的两倍时整体重写一次，只留最近的部分，所以文件不会无限增长。
+请求日志存在 SQLite 数据库 `<data-dir>/requests.db`（默认 `plugins/wokey-data/requests.db`，WAL 模式，旁边会有 `-wal` 和 `-shm` 文件），查询、筛选和统计都在数据库里做。超过 `log-retention` 条或早于 `log-retention-days` 天的记录会自动删掉。用的是纯 Go 的 SQLite（modernc.org/sqlite），不依赖系统的 libsqlite3。
+
+从旧版本升级时，原来的 `requests.jsonl` 会在第一次启动时导入数据库，导入成功后删除。
 
 启用、停用和删除走 CPA 原生的认证文件接口（`PATCH /v0/management/auth-files/status`、`DELETE /v0/management/auth-files?name=...`），和在 CPA 面板里操作效果相同。
 
@@ -231,7 +235,7 @@ POST  /v0/management/plugins/wokey/models/refresh   强制重新拉取模型目�
 POST  /v0/management/plugins/wokey/credentials      添加 Key
 PATCH /v0/management/plugins/wokey/credentials      编辑 Key
 GET   /v0/management/plugins/wokey/credentials/quota?auth_index=...   账户余额、Key 消费，以及发卡令牌对应的收益
-GET   /v0/management/plugins/wokey/logs?search=&status=all|success|error&limit=50&offset=0   请求日志（最新的在前）和统计
+GET   /v0/management/plugins/wokey/logs?search=&status=all|success|error&from=&to=&limit=50&offset=0   请求日志（最新的在前）和统计；from / to 是 RFC 3339 时间，按请求开始时间筛选，含 from 不含 to
 DELETE /v0/management/plugins/wokey/logs            清空请求日志
 ```
 

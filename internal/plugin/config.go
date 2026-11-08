@@ -16,7 +16,9 @@ const (
 	defaultRequestTimeoutSeconds = 600
 	defaultStreamIdleSeconds     = 300
 	defaultDataDir               = "plugins/wokey-data"
-	defaultLogRetention          = 1000
+	defaultLogRetention          = 100000
+	defaultLogRetentionDays      = 30
+	maxLogRetention              = 1000000
 )
 
 // Config is the plugin-owned subtree under plugins.configs.wokey in the CPA
@@ -41,6 +43,9 @@ type Config struct {
 	DataDir string
 	// LogRetention is how many requests the request log keeps; 0 disables it.
 	LogRetention int
+	// LogRetentionDays drops request log entries older than this many days;
+	// 0 keeps them until LogRetention pushes them out.
+	LogRetentionDays int
 }
 
 type rawConfig struct {
@@ -51,6 +56,7 @@ type rawConfig struct {
 	StreamIdleSeconds     *int    `yaml:"stream-idle-timeout-seconds"`
 	DataDir               string  `yaml:"data-dir"`
 	LogRetention          *int    `yaml:"log-retention"`
+	LogRetentionDays      *int    `yaml:"log-retention-days"`
 }
 
 func defaultConfig() Config {
@@ -62,6 +68,7 @@ func defaultConfig() Config {
 		StreamIdleTimeout:     defaultStreamIdleSeconds * time.Second,
 		DataDir:               defaultDataDir,
 		LogRetention:          defaultLogRetention,
+		LogRetentionDays:      defaultLogRetentionDays,
 	}
 }
 
@@ -114,9 +121,16 @@ func parseConfig(raw []byte) (Config, []string) {
 	}
 	if parsed.LogRetention != nil {
 		if n := *parsed.LogRetention; n >= 0 {
-			cfg.LogRetention = min(n, 100000)
+			cfg.LogRetention = min(n, maxLogRetention)
 		} else {
 			warnings = append(warnings, "ignoring negative log-retention")
+		}
+	}
+	if parsed.LogRetentionDays != nil {
+		if n := *parsed.LogRetentionDays; n >= 0 {
+			cfg.LogRetentionDays = min(n, 3650)
+		} else {
+			warnings = append(warnings, "ignoring negative log-retention-days")
 		}
 	}
 	return cfg, warnings

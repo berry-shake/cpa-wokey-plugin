@@ -106,6 +106,7 @@ func (s *Service) Close() {
 	s.cancel()
 	s.streams.waitTimeout(3 * time.Second)
 	s.clients.closeIdle()
+	s.reqlog.close()
 }
 
 type rpcLifecycleRequest struct {
@@ -254,7 +255,7 @@ func (s *Service) register(request []byte) rpcRegistration {
 	for _, warning := range warnings {
 		s.logf("warn", "wokey: "+warning, nil)
 	}
-	s.reqlog.configure(cfg.DataDir, cfg.LogRetention)
+	s.reqlog.configure(cfg.DataDir, cfg.LogRetention, cfg.LogRetentionDays)
 	s.loopOnce.Do(func() { go s.refreshLoop() })
 	if previous.ModelPrefix != cfg.ModelPrefix || previous.BaseURL != cfg.BaseURL {
 		// The default auth prefix is applied when CPA parses an auth file,
@@ -295,8 +296,9 @@ func configFields() []pluginapi.ConfigField {
 		{Name: "models-refresh-minutes", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultModelsRefreshMinutes, Description: "How often to poll Wokey's model catalog; 0 disables polling."},
 		{Name: "request-timeout-seconds", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultRequestTimeoutSeconds, Description: "Timeout for non-streaming requests and for stream response headers."},
 		{Name: "stream-idle-timeout-seconds", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultStreamIdleSeconds, Description: "Abort a stream after this long without upstream bytes."},
-		{Name: "data-dir", Type: pluginapi.ConfigFieldTypeString, Default: defaultDataDir, Description: "Directory for plugin data such as the request log, relative to CPA's working directory."},
-		{Name: "log-retention", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultLogRetention, Description: "How many requests the request log keeps; 0 disables it."},
+		{Name: "data-dir", Type: pluginapi.ConfigFieldTypeString, Default: defaultDataDir, Description: "Directory for plugin data such as the request log database (requests.db), relative to CPA's working directory."},
+		{Name: "log-retention", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultLogRetention, Description: "Most requests the request log keeps; 0 disables it."},
+		{Name: "log-retention-days", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultLogRetentionDays, Description: "Drop request log entries older than this many days; 0 keeps them until log-retention is reached."},
 	}
 }
 

@@ -3,6 +3,7 @@ package plugin
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -175,7 +176,7 @@ func TestExecuteRewritesModelAndForwards(t *testing.T) {
 		writeJSON(rw, http.StatusOK, map[string]any{"id": "c1", "object": "chat.completion"})
 	}))
 	svc, _ := newTestService(t, upstream)
-	svc.reqlog.configure("", 10)
+	svc.reqlog.configure("", 10, 0)
 
 	envelope := decodeEnvelope(t, svc.execute(executorRequest("openai", "wokey/model-a", `{"model":"wokey/model-a","messages":[]}`)))
 	if !envelope.OK {
@@ -314,7 +315,8 @@ func TestCallDispatch(t *testing.T) {
 
 func TestRegisterCapabilities(t *testing.T) {
 	svc, _ := newTestService(t, nil)
-	raw, _ := json.Marshal(rpcLifecycleRequest{ConfigYAML: []byte("models-refresh-minutes: 0\nbase-url: http://127.0.0.1:1\n"), SchemaVersion: 99})
+	config := "models-refresh-minutes: 0\nbase-url: http://127.0.0.1:1\ndata-dir: " + strconv.Quote(t.TempDir()) + "\n"
+	raw, _ := json.Marshal(rpcLifecycleRequest{ConfigYAML: []byte(config), SchemaVersion: 99})
 	envelope := decodeEnvelope(t, svc.Call(pluginabi.MethodPluginRegister, raw))
 	if !envelope.OK {
 		t.Fatalf("register: %+v", envelope.Error)
@@ -327,7 +329,7 @@ func TestRegisterCapabilities(t *testing.T) {
 	if !caps.AuthProvider || !caps.ModelProvider || !caps.Executor || !caps.ManagementAPI || !caps.QuotaProvider {
 		t.Errorf("capabilities = %+v", caps)
 	}
-	if reg.Metadata.Logo != logoPath || len(reg.Metadata.ConfigFields) != 7 {
+	if reg.Metadata.Logo != logoPath || len(reg.Metadata.ConfigFields) != 8 {
 		t.Errorf("metadata = %+v", reg.Metadata)
 	}
 	if negotiateSchemaVersion(0) != 1 || negotiateSchemaVersion(2) != 2 {

@@ -119,9 +119,16 @@ func (s *Service) handleManagement(req pluginapi.ManagementRequest) pluginapi.Ma
 		case http.MethodGet:
 			limit, _ := strconv.Atoi(req.Query.Get("limit"))
 			offset, _ := strconv.Atoi(req.Query.Get("offset"))
+			from, errFrom := parseLogTime(req.Query.Get("from"))
+			to, errTo := parseLogTime(req.Query.Get("to"))
+			if errFrom != nil || errTo != nil {
+				return jsonResponse(http.StatusBadRequest, errorBody{Error: "invalid_range", Message: "from and to must be RFC 3339 times"})
+			}
 			return jsonResponse(http.StatusOK, s.reqlog.query(logQuery{
 				Search: req.Query.Get("search"),
 				Status: req.Query.Get("status"),
+				From:   from,
+				To:     to,
 				Limit:  limit,
 				Offset: offset,
 			}))
@@ -721,4 +728,13 @@ func jsonResponse(status int, v any) pluginapi.ManagementResponse {
 		},
 		Body: raw,
 	}
+}
+
+// parseLogTime reads a request log range bound; empty means unbounded.
+func parseLogTime(raw string) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return time.Time{}, nil
+	}
+	return time.Parse(time.RFC3339Nano, raw)
 }

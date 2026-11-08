@@ -487,7 +487,7 @@ func TestDefaultPrefixChangeReRegisters(t *testing.T) {
 
 	// The default prefix is applied when CPA parses the file, so a config
 	// change must re-save the file for CPA to pick it up.
-	raw, _ := json.Marshal(rpcLifecycleRequest{ConfigYAML: []byte("models-refresh-minutes: 0\nmodel-prefix: wk\nbase-url: " + upstream.URL + "\n")})
+	raw, _ := json.Marshal(rpcLifecycleRequest{ConfigYAML: []byte("models-refresh-minutes: 0\nmodel-prefix: wk\nlog-retention: 0\nbase-url: " + upstream.URL + "\n")})
 	if envelope := decodeEnvelope(t, svc.Call(pluginabi.MethodPluginReconfigure, raw)); !envelope.OK {
 		t.Fatalf("reconfigure: %+v", envelope.Error)
 	}
