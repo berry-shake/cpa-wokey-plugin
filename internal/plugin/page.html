@@ -962,7 +962,8 @@
       'logs.d.cacheWrite': 'Cache write',
       'logs.d.reasoning': 'Reasoning tokens',
       'logs.d.speed': 'Output speed',
-      'logs.d.auth': 'Auth ID',
+      'logs.d.auth': 'Auth Index',
+      'logs.d.key': 'API key',
       'logs.d.error': 'Error',
       'logs.phase.request': 'before output',
       'logs.phase.stream': 'during stream',
@@ -1237,7 +1238,8 @@
       'logs.d.cacheWrite': '缓存写入',
       'logs.d.reasoning': '思考 Token',
       'logs.d.speed': '输出速度',
-      'logs.d.auth': 'Auth ID',
+      'logs.d.auth': 'Auth Index',
+      'logs.d.key': 'API Key',
       'logs.d.error': '错误信息',
       'logs.phase.request': '输出前',
       'logs.phase.stream': '流式中途',
@@ -3044,37 +3046,64 @@
           el('div', { class: 'mono served', text: '↳ ' + (e.served_model || t('logs.notReported')), title: t('logs.servedHint', { m: e.served_model || t('logs.notReported') }) })),
         el('div', { text: e.reasoning_effort || '—', 'data-label': t('logs.col.effort') }),
         el('div', { 'data-label': t('logs.col.result') }, result, el('div', { class: 'sub', text: e.stream ? t('logs.stream') : t('logs.nonStream') })),
-        el('div', { class: 'clip', text: logCredential(e), title: e.auth_id || '', 'data-label': t('logs.col.cred') }),
+        el('div', { class: 'clip', text: logCredential(e), title: logKey(e), 'data-label': t('logs.col.cred') }),
         el('div', { 'data-label': t('logs.col.timing') }, el('div', { class: 'log-lat' }, latLine('ttft', e.ttft_ms, e.output_tokens), latLine('total', e.duration_ms, e.output_tokens))),
         el('div', { class: 'log-usage', 'data-label': t('logs.col.usage') },
           el('div', { text: fmtCount(e.input_tokens) + ' / ' + fmtCount(e.output_tokens), title: t('logs.usageHint') }),
           el('div', { class: 'sub', title: t('logs.speedHint') }, t('logs.cacheLine', { c: fmtCount(e.cached_tokens), p: cacheRate }) + ' · ' + fmtRate(e.output_tokens_per_second))),
         el('span', { class: 'log-chev', 'aria-hidden': 'true', text: '›' }));
+      const authIndex = detailItem(t('logs.d.auth'), logAuthIndex(e));
+      const keyItem = detailItem(t('logs.d.key'), logKey(e) || '—');
       const detail = el('div', { class: 'log-detail' },
         detailItem('ID', e.id),
         detailItem(t('logs.d.endpoint'), e.endpoint || '—'),
         detailItem(t('logs.d.stream'), e.stream ? t('logs.yes') : t('logs.no')),
         detailItem(t('logs.d.status'), String(e.http_status || '—')),
-        detailItem(t('logs.d.auth'), e.auth_id || '—'),
+        authIndex,
+        keyItem,
         detailItem(t('logs.d.cacheWrite'), String(e.cache_write_tokens || 0)),
         detailItem(t('logs.d.reasoning'), String(e.reasoning_tokens || 0)),
         detailItem(t('logs.d.speed'), fmtRate(e.output_tokens_per_second)),
         e.error_code ? detailItem(t('logs.d.code'), e.error_code) : null,
         e.error_phase ? detailItem(t('logs.d.phase'), t('logs.phase.' + e.error_phase)) : null,
         e.error ? detailItem(t('logs.d.error'), e.error, 'err danger-text') : null);
-      return el('details', { class: 'log-row' }, summary, detail);
+      const row = el('details', { class: 'log-row' }, summary, detail);
+      // The credentials may load after the log, so look the index up on open.
+      row.addEventListener('toggle', () => {
+        if (!row.open) return;
+        authIndex.lastChild.textContent = logAuthIndex(e);
+        keyItem.lastChild.textContent = logKey(e) || '—';
+      });
+      return row;
     });
     logsBody.replaceChildren(head, ...rows);
     renderLogPager(page, items.length);
   }
 
-  // logCredential names the key behind a log entry the way the credential
-  // cards do (label, else masked key); the auth file name stays in the details.
+  // logCredential names the key behind a log entry by its auth file, without
+  // the extension; the masked key is in the tooltip and the details.
   function logCredential(e) {
+    return fileStem(e.auth_id) || logKey(e) || '—';
+  }
+
+  // logCred finds the current credential behind an entry by its auth file;
+  // entries of deleted credentials have none.
+  function logCred(e) {
     const creds = ui.status && Array.isArray(ui.status.credentials) ? ui.status.credentials : [];
-    const cred = e.auth_id ? creds.find((c) => c.id === e.auth_id || c.name === e.auth_id) : null;
-    if (cred) return cred.label || cred.key_masked || fileStem(cred.name);
-    return e.credential && e.credential !== e.auth_id ? e.credential : fileStem(e.auth_id || '') || '—';
+    return e.auth_id ? creds.find((c) => c.id === e.auth_id || c.name === e.auth_id) || null : null;
+  }
+
+  function logAuthIndex(e) {
+    const cred = logCred(e);
+    return (cred && cred.auth_index) || '—';
+  }
+
+  // logKey is the masked key of an entry. Early 0.1.7 builds stored the auth
+  // file name in its place, so those entries take it from the credential.
+  function logKey(e) {
+    if (e.credential && e.credential !== e.auth_id) return e.credential;
+    const cred = logCred(e);
+    return (cred && cred.key_masked) || '';
   }
 
   function renderLogPager(page, shown) {
