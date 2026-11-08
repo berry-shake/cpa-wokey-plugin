@@ -33,7 +33,7 @@ plugins:
 ```bash
 curl -X POST -H "Authorization: Bearer $MANAGEMENT_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"version":"0.1.3"}' \
+  -d '{"version":"0.1.4"}' \
   http://127.0.0.1:8317/v0/management/plugin-store/wokey/install
 ```
 
@@ -233,7 +233,7 @@ curl -X PATCH -H "Authorization: Bearer $MANAGEMENT_KEY" \
 ```bash
 go test ./...
 CGO_ENABLED=1 go build -buildmode=c-shared \
-  -ldflags '-X main.pluginVersion=0.1.3-dev' \
+  -ldflags '-X main.pluginVersion=0.1.4-dev' \
   -o wokey.dylib .
 ```
 

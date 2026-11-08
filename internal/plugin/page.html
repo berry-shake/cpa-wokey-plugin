@@ -259,10 +259,6 @@
     .summary { box-shadow: var(--shadow-sm); }
     .summary .strip-value { font-size: 16px; }
     .summary .strip-note { font-size: 12px; }
-    .meters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .meters .strip-item { padding: 6px 14px; }
-    .meters .strip-item:nth-child(odd) { border-left: none; }
-    .meters .strip-item:nth-child(n+3) { border-top: 1px solid var(--border-subtle); }
     .cred-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; padding: 14px 18px; }
     .cred-list > .empty, .cred-list > .empty-state { grid-column: 1 / -1; }
     .cred {
@@ -293,7 +289,13 @@
       padding-top: 10px;
       border-top: 1px solid var(--border-subtle);
     }
-    .cred-usage { min-width: 0; display: grid; gap: 8px; }
+    .cred-usage { min-width: 0; display: grid; gap: 10px; }
+    .meters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+    .meter { min-width: 0; }
+    .meter-label, .meter-value, .meter-note { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .meter-label { font-size: 11px; color: var(--text-muted); }
+    .meter-value { margin-top: 2px; font-size: 15px; font-weight: 650; line-height: 1.3; font-variant-numeric: tabular-nums; }
+    .meter-note { margin-top: 1px; font-size: 11px; color: var(--text-muted); }
     .cap-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-muted); }
     .cap-head strong { color: var(--success); font-variant-numeric: tabular-nums; }
     .cap.warn .cap-head strong { color: var(--warning); }
@@ -1768,6 +1770,14 @@
       el('div', { class: 'track', role: 'progressbar', 'aria-label': label, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': Math.round(fraction * 100) }, fill));
   }
 
+  // One figure of a card's usage row: label, value, optional note below.
+  function meter(label, value, note, noteClass) {
+    return el('div', { class: 'meter' },
+      el('div', { class: 'meter-label', text: label, title: label }),
+      el('div', { class: 'meter-value', text: value, title: value }),
+      note ? el('div', { class: 'meter-note' + (noteClass ? ' ' + noteClass : ''), text: note, title: note }) : null);
+  }
+
   function usageBlock(cred) {
     const box = el('div', { class: 'cred-usage' });
     if (cred.read_error) return box;
@@ -1787,17 +1797,17 @@
       box.appendChild(state);
       return box;
     }
-    const meters = el('div', { class: 'strip meters' });
+    const meters = el('div', { class: 'meters' });
     if (d.balance) {
       const reserved = Number(d.balance.reserved_usd) > 0 ? t('usage.reserved', { v: fmtUSD(d.balance.reserved_usd) }) : t('usage.balanceNote');
-      meters.appendChild(statItem(t('usage.balance'), fmtUSD(d.balance.available_usd), reserved));
+      meters.appendChild(meter(t('usage.balance'), fmtUSD(d.balance.available_usd), reserved));
     } else {
-      meters.appendChild(statItem(t('usage.balance'), '—', d.balance_error || '', 'danger-text'));
+      meters.appendChild(meter(t('usage.balance'), '—', d.balance_error || '', 'danger-text'));
     }
     const k = d.key;
-    meters.appendChild(statItem(t('usage.spent24h'), k ? fmtUSD(k.daily_usd) : '—'));
-    meters.appendChild(statItem(t('usage.spent7d'), k ? fmtUSD(k.weekly_usd) : '—'));
-    meters.appendChild(statItem(t('usage.spent30d'), k ? fmtUSD(k.monthly_usd) : '—'));
+    meters.appendChild(meter(t('usage.spent24h'), k ? fmtUSD(k.daily_usd) : '—'));
+    meters.appendChild(meter(t('usage.spent7d'), k ? fmtUSD(k.weekly_usd) : '—'));
+    meters.appendChild(meter(t('usage.spent30d'), k ? fmtUSD(k.monthly_usd) : '—'));
     box.appendChild(meters);
     if (k && k.limit_usd !== undefined && k.limit_remaining_usd !== undefined) box.appendChild(capBlock(k));
     if (!k && d.key_error) box.appendChild(el('div', { class: 'usage-note danger-text', text: t('usage.keyError', { msg: d.key_error }) }));
