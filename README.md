@@ -33,7 +33,7 @@ plugins:
 ```bash
 curl -X POST -H "Authorization: Bearer $MANAGEMENT_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"version":"0.1.5"}' \
+  -d '{"version":"0.1.6"}' \
   http://127.0.0.1:8317/v0/management/plugin-store/wokey/install
 ```
 
@@ -161,6 +161,12 @@ plugins:
 - Chat Completions 流式请求会自动加上 `stream_options.include_usage`，让 CPA 能统计用量；
 - `anthropic-version` / `anthropic-beta` 只转发给 Messages 接口。
 
+流式响应：
+
+- 开头几帧（`message_start`、`response.created`、只带角色的 chunk、ping）先攒着，等到第一帧真正的输出再一起发给 CPA。这期间如果 Wokey 在流里报错（限流、过载等），这次调用按对应状态码失败，CPA 会和 HTTP 报错一样冷却 Key 或换 Key 重试；攒的内容超过 64KB 就不再等。
+- 已经开始输出以后的错误帧原样转给客户端。
+- 流没收到结束帧就断了（Chat 的 `[DONE]` 或 `finish_reason`、Responses 的 `response.completed`、Messages 的 `message_stop`），按失败处理，错误码 `stream_truncated`（502）。CPA 对这个错误码不冷却 Key。
+
 上游错误到 CPA 的映射：
 
 | Wokey 返回 | 交给 CPA | 效果 |
@@ -247,7 +253,7 @@ curl -X PATCH -H "Authorization: Bearer $MANAGEMENT_KEY" \
 ```bash
 go test ./...
 CGO_ENABLED=1 go build -buildmode=c-shared \
-  -ldflags '-X main.pluginVersion=0.1.5-dev' \
+  -ldflags '-X main.pluginVersion=0.1.6-dev' \
   -o wokey.dylib .
 ```
 

@@ -9,10 +9,10 @@ import (
 	"time"
 )
 
-func collectEvents(t *testing.T, body string, sse, dropDone bool) []string {
+func collectEvents(t *testing.T, body string, sse bool) []string {
 	t.Helper()
 	var events []string
-	errPump := pumpStream(strings.NewReader(body), sse, dropDone, func(payload []byte) error {
+	errPump := pumpStream(strings.NewReader(body), sse, func(payload []byte) error {
 		events = append(events, string(payload))
 		return nil
 	}, func() {})
@@ -29,24 +29,20 @@ func TestPumpStreamSSE(t *testing.T) {
 		"data: {\"b\":2}\n\n\n" +
 		"data: [DONE]\n\n" +
 		"data: {\"tail\":true}"
-	got := collectEvents(t, body, true, true)
+	got := collectEvents(t, body, true)
 	want := []string{
 		"event: message_start\ndata: {\"a\":1}\n\n",
 		"data: {\"b\":2}\n\n",
+		"data: [DONE]\n\n",
 		"data: {\"tail\":true}\n\n",
 	}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("events = %q", got)
 	}
-
-	kept := collectEvents(t, "data: {}\n\ndata: [DONE]\n\n", true, false)
-	if len(kept) != 2 || kept[1] != "data: [DONE]\n\n" {
-		t.Fatalf("chat completions keep [DONE]: %q", kept)
-	}
 }
 
 func TestPumpStreamRaw(t *testing.T) {
-	got := collectEvents(t, `{"not":"sse"}`, false, true)
+	got := collectEvents(t, `{"not":"sse"}`, false)
 	if strings.Join(got, "") != `{"not":"sse"}` {
 		t.Fatalf("raw = %q", got)
 	}
@@ -55,7 +51,7 @@ func TestPumpStreamRaw(t *testing.T) {
 func TestPumpStreamStopsOnEmitError(t *testing.T) {
 	stop := errors.New("client gone")
 	calls := 0
-	errPump := pumpStream(strings.NewReader("data: 1\n\ndata: 2\n\n"), true, false, func([]byte) error {
+	errPump := pumpStream(strings.NewReader("data: 1\n\ndata: 2\n\n"), true, func([]byte) error {
 		calls++
 		return stop
 	}, func() {})

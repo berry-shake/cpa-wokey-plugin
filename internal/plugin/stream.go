@@ -41,7 +41,9 @@ var errStreamIdle = errors.New("stream idle timeout")
 
 // executeStream opens the upstream stream synchronously, so HTTP errors still
 // reach CPA as a failed call it can retry on another credential, then pumps
-// the body to the host stream in the background.
+// the body to the host stream in the background. The pump goes through a
+// streamGate, which turns an error inside the stream before any output into
+// the same failed call and reports a stream that stops early as truncated.
 func (s *Service) executeStream(req rpcExecutorRequest) []byte {
 	endpoint, ok := endpointForFormat(req.Format)
 	if !ok {
@@ -74,19 +76,18 @@ func (s *Service) executeStream(req rpcExecutorRequest) []byte {
 	}
 	headers := filterHeaders(resp.Header, forwardedResponseHeaders)
 	sse := isEventStream(resp.Header.Get("Content-Type"))
-	dropDone := endpoint != endpointChat
 
 	if req.StreamID == "" {
 		// Hosts without a stream bridge: buffer the whole stream.
 		defer cancel(nil)
 		defer func() { _ = resp.Body.Close() }()
 		var chunks []pluginapi.ExecutorStreamChunk
-		errPump := pumpStream(resp.Body, sse, dropDone, func(payload []byte) error {
+		gate := newStreamGate(endpoint, sse, resp.Header, func(payload []byte) error {
 			chunks = append(chunks, pluginapi.ExecutorStreamChunk{Payload: payload})
 			return nil
-		}, func() {})
-		if errPump != nil && len(chunks) == 0 {
-			return errorEnvelopeFrom(transportError(errPump))
+		})
+		if failure := gate.finish(ctx, pumpStream(resp.Body, sse, gate.push, func() {})); failure != nil {
+			return errorEnvelopeFrom(failure)
 		}
 		return okEnvelope(rpcExecutorStreamResponse{Headers: headers, Chunks: chunks})
 	}
@@ -100,22 +101,20 @@ func (s *Service) executeStream(req rpcExecutorRequest) []byte {
 		idleTimer := time.AfterFunc(idle, func() { cancel(errStreamIdle) })
 		defer idleTimer.Stop()
 		var emitErr error
-		errPump := pumpStream(resp.Body, sse, dropDone, func(payload []byte) error {
+		gate := newStreamGate(endpoint, sse, resp.Header, func(payload []byte) error {
 			if errEmit := s.emitStream(req.StreamID, payload); errEmit != nil {
 				emitErr = errEmit
 				return errEmit
 			}
 			return nil
-		}, func() { idleTimer.Reset(idle) })
-		switch {
-		case emitErr != nil:
+		})
+		errPump := pumpStream(resp.Body, sse, gate.push, func() { idleTimer.Reset(idle) })
+		if emitErr != nil {
 			// The client is gone or CPA closed the stream; nothing to report.
 			s.closeStream(req.StreamID, nil)
-		case errPump == nil:
-			s.closeStream(req.StreamID, nil)
-		default:
-			s.closeStream(req.StreamID, streamFailure(ctx, errPump))
+			return
 		}
+		s.closeStream(req.StreamID, gate.finish(ctx, errPump))
 	}()
 	return okEnvelope(rpcExecutorStreamResponse{Headers: headers})
 }
@@ -140,7 +139,7 @@ func isEventStream(contentType string) bool {
 // pumpStream forwards an upstream body. SSE bodies are split into whole
 // events with keepalive comments removed; other bodies are forwarded in raw
 // chunks. progress is called whenever upstream bytes arrive.
-func pumpStream(body io.Reader, sse, dropDone bool, emit func([]byte) error, progress func()) error {
+func pumpStream(body io.Reader, sse bool, emit func([]byte) error, progress func()) error {
 	if !sse {
 		buf := make([]byte, 32<<10)
 		for {
@@ -162,7 +161,7 @@ func pumpStream(body io.Reader, sse, dropDone bool, emit func([]byte) error, pro
 	reader := newSSEReader(body)
 	for {
 		event, errRead := reader.next(progress)
-		if len(event) > 0 && !(dropDone && isDoneEvent(event)) {
+		if len(event) > 0 {
 			if errEmit := emit(event); errEmit != nil {
 				return errEmit
 			}
@@ -219,9 +218,7 @@ func (r *sseReader) next(progress func()) ([]byte, error) {
 	}
 }
 
-// isDoneEvent reports whether an event is the OpenAI "[DONE]" sentinel. It is
-// kept for chat completions (CPA handles it there) and dropped for the
-// Responses and Messages protocols, which do not define it.
+// isDoneEvent reports whether an event is the OpenAI "[DONE]" sentinel.
 func isDoneEvent(event []byte) bool {
 	for _, line := range bytes.Split(bytes.TrimSpace(event), []byte("\n")) {
 		line = bytes.TrimSpace(line)
