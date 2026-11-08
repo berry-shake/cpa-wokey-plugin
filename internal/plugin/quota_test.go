@@ -1,0 +1,168 @@
+package plugin
+
+import (
+	"encoding/json"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
+)
+
+func metricValues(resp pluginapi.QuotaFetchResponse) map[string]float64 {
+	out := map[string]float64{}
+	for _, metric := range resp.Summary {
+		out[metric.Key] = metric.Value
+	}
+	return out
+}
+
+func TestQuotaFromAccountWithCap(t *testing.T) {
+	limit, remaining := 10.0, 2.5
+	resp := quotaFromAccount(accountInfo{
+		Balance: &balanceInfo{AvailableUSD: 42.5, ReservedUSD: 0.75},
+		Key:     &keyInfo{Label: "main", UsageUSD: 7.5, DailyUSD: 0.5, WeeklyUSD: 3, MonthlyUSD: 7.5, LimitUSD: &limit, LimitRemaining: &remaining, LimitResetLabel: "monthly"},
+	})
+	got := metricValues(resp)
+	want := map[string]float64{"balance": 42.5, "reserved": 0.75, "spent_24h": 0.5, "spent_7d": 3, "spent_30d": 7.5, "cap_left": 2.5}
+	if len(got) != len(want) {
+		t.Fatalf("summary = %v", got)
+	}
+	for key, value := range want {
+		if got[key] != value {
+			t.Errorf("%s = %v, want %v", key, got[key], value)
+		}
+	}
+	for _, metric := range resp.Summary {
+		if metric.Format != "currency" || metric.Currency != "USD" {
+			t.Errorf("metric %s format = %s/%s", metric.Key, metric.Format, metric.Currency)
+		}
+	}
+	if len(resp.Groups) != 1 || len(resp.Groups[0].Buckets) != 1 {
+		t.Fatalf("groups = %+v", resp.Groups)
+	}
+	bucket := resp.Groups[0].Buckets[0]
+	if bucket.Window != "monthly" || bucket.RemainingFraction != 0.25 || !strings.Contains(bucket.Description, "$2.50 of $10.00") {
+		t.Fatalf("bucket = %+v", bucket)
+	}
+	if resp.Subscription == nil || resp.Subscription.TierName != "main" {
+		t.Fatalf("subscription = %+v", resp.Subscription)
+	}
+}
+
+func TestQuotaFromAccountWithoutCap(t *testing.T) {
+	resp := quotaFromAccount(accountInfo{Key: &keyInfo{UsageUSD: 12}})
+	got := metricValues(resp)
+	if got["spent_total"] != 12 || len(resp.Groups) != 0 || resp.Subscription != nil {
+		t.Fatalf("resp = %+v", resp)
+	}
+	if _, ok := got["balance"]; ok {
+		t.Fatal("no balance metric without balance info")
+	}
+
+	// A zero cap and an overspent key clamp to an empty bucket.
+	limit, remaining := 0.0, -1.0
+	resp = quotaFromAccount(accountInfo{Key: &keyInfo{LimitUSD: &limit, LimitRemaining: &remaining}})
+	if len(resp.Groups) != 1 || resp.Groups[0].Buckets[0].RemainingFraction != 0 || resp.Groups[0].Buckets[0].Window != "total" {
+		t.Fatalf("zero cap = %+v", resp.Groups)
+	}
+	if resp = quotaFromAccount(accountInfo{}); len(resp.Summary) != 0 || len(resp.Groups) != 0 {
+		t.Fatalf("empty info = %+v", resp)
+	}
+}
+
+func TestFetchAccountPartialFailure(t *testing.T) {
+	upstream := newFakeWokey(t)
+	upstream.handle(endpointBalance, func(rw http.ResponseWriter, _ *http.Request) {
+		writeJSON(rw, http.StatusForbidden, map[string]any{"error": map[string]any{"code": "forbidden", "message": "dashboard scope required"}})
+	})
+	svc, _ := newTestService(t, upstream)
+
+	info, perr := svc.fetchAccount(credential{APIKey: testGoodKey})
+	if perr != nil {
+		t.Fatalf("one failing endpoint must not fail the call: %+v", perr)
+	}
+	if info.Balance != nil || !strings.Contains(info.BalanceError, "dashboard scope required") {
+		t.Fatalf("balance = %+v %q", info.Balance, info.BalanceError)
+	}
+	if info.Key == nil || info.Key.Label != "test key" || info.Key.LimitUSD == nil || *info.Key.LimitUSD != 10 || info.Key.LimitResetLabel != "monthly" {
+		t.Fatalf("key = %+v", info.Key)
+	}
+
+	// Both failing returns the key endpoint's error.
+	_, perr = svc.fetchAccount(credential{APIKey: "sk-unknown-0000000"})
+	if perr == nil || perr.HTTPStatus != http.StatusUnauthorized || perr.Code != "invalid_api_key" {
+		t.Fatalf("both failing: %+v", perr)
+	}
+}
+
+func TestFetchAccountUsesCredentialEgress(t *testing.T) {
+	upstream := newFakeWokey(t)
+	svc, _ := newTestService(t, upstream)
+	_, perr := svc.fetchAccount(credential{APIKey: testGoodKey, ProxyURL: "ftp://bad"})
+	if perr == nil || perr.Code != "invalid_proxy" {
+		t.Fatalf("bad proxy: %+v", perr)
+	}
+	// A per-key base URL wins over the plugin base URL.
+	svc.cfg.BaseURL = "http://127.0.0.1:1"
+	if _, perr = svc.fetchAccount(credential{APIKey: testGoodKey, BaseURL: upstream.URL}); perr != nil {
+		t.Fatalf("base_url override: %+v", perr)
+	}
+}
+
+func TestQuotaFetch(t *testing.T) {
+	upstream := newFakeWokey(t)
+	svc, host := newTestService(t, upstream)
+	file := host.seed("wokey-q.json", ProviderID, map[string]any{"type": "wokey", "api_key": testGoodKey})
+
+	call := func(req pluginapi.QuotaFetchRequest) pluginabi.Envelope {
+		t.Helper()
+		raw, _ := json.Marshal(rpcQuotaFetchRequest{QuotaFetchRequest: req})
+		return decodeEnvelope(t, svc.Call(pluginabi.MethodQuotaFetch, raw))
+	}
+
+	envelope := call(pluginapi.QuotaFetchRequest{AuthIndex: file.index, StorageJSON: []byte(`{"type":"wokey","api_key":"` + testGoodKey + `"}`)})
+	if !envelope.OK {
+		t.Fatalf("quota: %+v", envelope.Error)
+	}
+	if got := metricValues(mustDecode[pluginapi.QuotaFetchResponse](t, envelope.Result)); got["balance"] != 42.5 || got["cap_left"] != 8.5 {
+		t.Fatalf("metrics = %v", got)
+	}
+
+	// Without storage the auth file on disk is used.
+	if envelope = call(pluginapi.QuotaFetchRequest{AuthIndex: file.index}); !envelope.OK {
+		t.Fatalf("file fallback: %+v", envelope.Error)
+	}
+	envelope = call(pluginapi.QuotaFetchRequest{AuthIndex: "idx-404"})
+	if envelope.OK || envelope.Error.HTTPStatus != http.StatusUnauthorized {
+		t.Fatalf("no credential: %+v", envelope)
+	}
+	envelope = call(pluginapi.QuotaFetchRequest{StorageJSON: []byte(`{"type":"wokey","api_key":"sk-unknown-0000000"}`)})
+	if envelope.OK || envelope.Error.HTTPStatus != http.StatusUnauthorized {
+		t.Fatalf("revoked key: %+v", envelope)
+	}
+}
+
+func TestOptionalNumber(t *testing.T) {
+	cases := []struct {
+		in   any
+		want float64
+		ok   bool
+	}{
+		{1.5, 1.5, true},
+		{" 0.75 ", 0.75, true},
+		{json.Number("3"), 3, true},
+		{nil, 0, false},
+		{"n/a", 0, false},
+		{true, 0, false},
+	}
+	for _, tc := range cases {
+		if got, ok := optionalNumber(tc.in); got != tc.want || ok != tc.ok {
+			t.Errorf("optionalNumber(%#v) = %v, %v", tc.in, got, ok)
+		}
+	}
+	if got := numberField(map[string]any{"available_usd": "4"}, "availableUsd", "available_usd"); got != 4 {
+		t.Fatalf("numberField fallback key = %v", got)
+	}
+}

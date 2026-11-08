@@ -1,0 +1,26 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <style>
+    .wokey-body { stroke: #2e3132; }
+    .wokey-keyhole { stroke: #0b7285; }
+
+    @media (prefers-color-scheme: dark) {
+      .wokey-body { stroke: #f2f7f7; }
+      .wokey-keyhole { stroke: #49b8c4; }
+    }
+  </style>
+  <path
+    class="wokey-body"
+    d="M7 16L15 42L24 22L33 42L41 16"
+    stroke-width="6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <circle class="wokey-keyhole" cx="24" cy="8" r="3" stroke-width="2" />
+  <path
+    class="wokey-keyhole"
+    d="M22.5 10.5L24 16L25.5 10.5"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

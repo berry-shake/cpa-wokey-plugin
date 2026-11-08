@@ -1,0 +1,1612 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title data-i18n="title">Wokey · CLI Proxy API</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg-base: #f5f4ef;
+      --bg-elevated: #ffffff;
+      --bg-muted: #eeece6;
+      --bg-inset: #f8f7f2;
+      --text-primary: #201f1c;
+      --text-secondary: #6b665f;
+      --text-muted: #96908a;
+      --border-subtle: #e3e1db;
+      --border-strong: #d1cec7;
+      --accent: #0b7285;
+      --accent-hover: #095c6b;
+      --accent-soft: rgba(11, 114, 133, 0.10);
+      --success: #10a37f;
+      --success-soft: rgba(16, 163, 127, 0.12);
+      --danger: #d0463b;
+      --danger-hover: #b93a30;
+      --danger-soft: rgba(208, 70, 59, 0.12);
+      --warning: #c9862c;
+      --warning-soft: rgba(201, 134, 44, 0.14);
+      --shadow-sm: 0 1px 2px rgba(24, 22, 20, 0.05);
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+    [data-theme='white'] {
+      --bg-base: #ffffff;
+      --bg-elevated: #ffffff;
+      --bg-muted: #f4f4f4;
+      --bg-inset: #fafafa;
+      --border-subtle: #ececec;
+      --border-strong: #d9d9d9;
+    }
+    [data-theme='dark'] {
+      --bg-base: #16151a;
+      --bg-elevated: #1e1d23;
+      --bg-muted: #262530;
+      --bg-inset: #1a1920;
+      --text-primary: #f2f1ee;
+      --text-secondary: #b6b1a8;
+      --text-muted: #7f7a70;
+      --border-subtle: #302f38;
+      --border-strong: #45434f;
+      --accent: #49b8c4;
+      --accent-hover: #6ccbd5;
+      --accent-soft: rgba(73, 184, 196, 0.16);
+      --success: #22c39a;
+      --success-soft: rgba(34, 195, 154, 0.18);
+      --danger: #ef6f60;
+      --danger-hover: #f38a7d;
+      --danger-soft: rgba(239, 111, 96, 0.18);
+      --warning: #e0a144;
+      --warning-soft: rgba(224, 161, 68, 0.18);
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 16px 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 100vh;
+    }
+    header.hero { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-mark {
+      width: 40px;
+      height: 40px;
+      border-radius: 11px;
+      background: var(--accent-soft);
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+    .brand-mark img { width: 26px; height: 26px; }
+    .brand h1 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+    .brand p { margin: 2px 0 0; color: var(--text-secondary); font-size: 13px; }
+    .hero-side { align-self: flex-start; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .lang-switch {
+      display: inline-flex;
+      background: var(--bg-muted);
+      border: 1px solid var(--border-subtle);
+      border-radius: 999px;
+      padding: 3px;
+    }
+    .lang-switch button {
+      appearance: none;
+      background: transparent;
+      color: var(--text-secondary);
+      border: none;
+      padding: 4px 12px;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background-color 0.15s, color 0.15s;
+    }
+    .lang-switch button:hover { color: var(--text-primary); }
+    .lang-switch button.active { background: var(--bg-elevated); color: var(--text-primary); box-shadow: var(--shadow-sm); }
+    .health {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: var(--bg-muted);
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid var(--border-subtle);
+    }
+    .health .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+    .health[data-state="ok"] { color: var(--success); background: var(--success-soft); border-color: transparent; }
+    .health[data-state="ok"] .dot { background: var(--success); box-shadow: 0 0 0 3px var(--success-soft); }
+    .health[data-state="warn"] { color: var(--warning); background: var(--warning-soft); border-color: transparent; }
+    .health[data-state="warn"] .dot { background: var(--warning); box-shadow: 0 0 0 3px var(--warning-soft); }
+    .health[data-state="error"] { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
+    .health[data-state="error"] .dot { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-soft); }
+    .card {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .card-header h2 {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+    }
+    .card-header .hint { font-size: 12px; color: var(--text-muted); }
+    .card-body { padding: 14px 18px; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: var(--radius-md);
+      font: inherit;
+      font-weight: 600;
+      font-size: 13.5px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: transform 0.06s, background-color 0.15s, border-color 0.15s, color 0.15s;
+      min-height: 36px;
+      white-space: nowrap;
+    }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn:not(:disabled):active { transform: translateY(1px); }
+    .btn-primary { background: var(--accent); color: #ffffff; border-color: var(--accent); }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn-secondary { background: var(--bg-elevated); color: var(--text-primary); border-color: var(--border-strong); }
+    .btn-secondary:hover:not(:disabled) { background: var(--bg-muted); }
+    .btn-danger { background: var(--bg-elevated); color: var(--danger); border-color: var(--danger); }
+    .btn-danger:hover:not(:disabled), .btn-danger.armed { background: var(--danger); color: #ffffff; }
+    .btn-sm { min-height: 28px; padding: 4px 10px; font-size: 12.5px; border-radius: var(--radius-sm); }
+    .btn-link {
+      appearance: none; background: none; border: none; padding: 0; font: inherit; font-size: 12px;
+      color: var(--accent); cursor: pointer; text-decoration: underline dotted;
+    }
+    .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-bottom: 12px; }
+    .stat { background: var(--bg-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 9px 12px; min-width: 0; }
+    .stat .k { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
+    .stat .v { font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
+    .stat .s { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-subtle); }
+    th {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      background: var(--bg-inset);
+      white-space: nowrap;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    .mono { font-family: var(--font-mono); font-size: 12.5px; overflow-wrap: anywhere; }
+    .nowrap { white-space: nowrap; }
+    .strong { font-weight: 650; }
+    .sub { font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+    .warn-text { color: var(--warning); }
+    .danger-text { color: var(--danger); }
+    .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .badge {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      background: var(--bg-muted);
+      color: var(--text-secondary);
+    }
+    .badge.ok { background: var(--success-soft); color: var(--success); }
+    .badge.warn { background: var(--warning-soft); color: var(--warning); }
+    .badge.danger { background: var(--danger-soft); color: var(--danger); }
+    .empty { padding: 22px 18px; text-align: center; color: var(--text-muted); }
+    .log {
+      margin: 0;
+      padding: 10px 18px;
+      background: var(--bg-inset);
+      border-top: 1px solid var(--border-subtle);
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .log[data-state="ok"] { color: var(--success); background: var(--success-soft); }
+    .log[data-state="warn"] { color: var(--warning); background: var(--warning-soft); }
+    .log[data-state="error"] { color: var(--danger); background: var(--danger-soft); }
+    .hidden { display: none !important; }
+    .input {
+      width: 100%; min-height: 36px; padding: 7px 11px;
+      border: 1px solid var(--border-strong); border-radius: var(--radius-md);
+      background: var(--bg-inset); color: var(--text-primary);
+      font: inherit; font-size: 13.5px;
+    }
+    .input.mono { font-family: var(--font-mono); font-size: 13px; }
+    .input:focus { outline: none; border-color: var(--accent); }
+    .input:disabled { opacity: 0.55; }
+    .input::placeholder { color: var(--text-muted); font-family: var(--font-sans); }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px 16px; }
+    .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .field > label, .field > .label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+    .field .help { font-size: 12px; color: var(--text-muted); }
+    .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
+    .models-mode { display: flex; gap: 18px; flex-wrap: wrap; margin: 14px 0 8px; }
+    .picker { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden; }
+    .picker.disabled .picker-list { opacity: 0.55; }
+    .picker-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px; background: var(--bg-inset); border-bottom: 1px solid var(--border-subtle); }
+    .picker-bar .input { flex: 1; min-width: 180px; width: auto; }
+    .picker-count { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+    .picker-list { max-height: 380px; overflow-y: auto; }
+    .pick-row {
+      display: grid; grid-template-columns: 20px minmax(180px, 1.3fr) minmax(120px, 1fr) auto;
+      gap: 10px; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--border-subtle); cursor: pointer;
+    }
+    .pick-row:last-child { border-bottom: none; }
+    .pick-row:hover { background: var(--bg-inset); }
+    .pick-row.missing .pick-name { color: var(--warning); }
+    .pick-name { font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pick-meta { font-size: 12px; color: var(--text-muted); white-space: nowrap; text-align: right; }
+    .editor-footer { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+    .form-error { color: var(--danger); font-size: 12.5px; overflow-wrap: anywhere; }
+    .login-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .login-form .input { flex: 1; min-width: 220px; width: auto; font-family: var(--font-mono); }
+    .login-hint { margin: 10px 0 0; color: var(--text-muted); font-size: 12px; }
+    .login-error { margin: 8px 0 0; color: var(--danger); font-size: 12.5px; overflow-wrap: anywhere; }
+    footer { margin-top: auto; padding-top: 8px; text-align: center; color: var(--text-muted); font-size: 11px; }
+    footer a { color: inherit; text-decoration: none; border-bottom: 1px dashed var(--border-strong); }
+    footer a:hover { color: var(--text-primary); }
+    @media (max-width: 720px) {
+      main { padding: 12px 12px 20px; }
+      .card-header { flex-direction: column; align-items: flex-start; }
+      .pick-row { grid-template-columns: 20px 1fr; }
+      .pick-name, .pick-meta { grid-column: 2; text-align: left; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header class="hero">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"><img src="logo.svg" alt=""></div>
+      <div>
+        <h1 data-i18n="hero.title">Wokey</h1>
+        <p data-i18n="hero.subtitle">Wokey API keys as CPA credentials: model selection, egress proxy, balance.</p>
+      </div>
+    </div>
+    <div class="hero-side">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" data-lang="en">EN</button>
+        <button type="button" data-lang="zh">中文</button>
+      </div>
+      <div class="health" id="health" data-state="unknown" role="status" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="health-label">Not checked</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="card hidden" id="login-card">
+    <div class="card-header">
+      <h2 data-i18n="login.title">Management key</h2>
+    </div>
+    <div class="card-body">
+      <form class="login-form" id="login-form">
+        <input class="input" id="login-key" type="password" autocomplete="off" spellcheck="false" placeholder="CPA management key">
+        <button id="login-button" class="btn btn-primary" type="submit" data-i18n="login.submit">Sign in</button>
+      </form>
+      <p class="login-hint" data-i18n="login.hint">Use the CPA management key. It stays in this page's memory only; inside the management panel the remembered key is reused automatically.</p>
+      <p class="login-error hidden" id="login-error" role="alert"></p>
+    </div>
+  </section>
+
+  <section class="card hidden" data-requires-auth>
+    <div class="card-header">
+      <h2 data-i18n="overview.title">Overview</h2>
+      <span class="hint" id="checked-at"></span>
+    </div>
+    <div class="card-body">
+      <div class="stats" id="stats"></div>
+      <div class="actions">
+        <button id="refresh-button" class="btn btn-secondary" type="button" data-i18n="actions.refresh">Refresh</button>
+        <button id="catalog-button" class="btn btn-secondary" type="button" data-i18n="actions.reloadCatalog">Reload model catalog</button>
+        <button id="add-button" class="btn btn-primary" type="button" data-i18n="actions.add">Add API key</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card hidden" id="editor-card">
+    <div class="card-header">
+      <h2 id="editor-title">Add API key</h2>
+      <span class="hint" id="editor-hint"></span>
+    </div>
+    <div class="card-body">
+      <form id="editor-form" autocomplete="off">
+        <div class="form-grid">
+          <div class="field" id="row-key">
+            <label for="f-key" data-i18n="form.key">Wokey API key</label>
+            <input class="input mono" id="f-key" type="password" spellcheck="false" placeholder="sk-wk-…">
+            <label class="check"><input type="checkbox" id="f-skip-verify"> <span data-i18n="form.skipVerify">Skip key check (save even if Wokey is unreachable)</span></label>
+          </div>
+          <div class="field">
+            <label for="f-label" data-i18n="form.label">Label</label>
+            <input class="input" id="f-label" type="text" maxlength="120">
+            <span class="help" data-i18n="form.labelHelp">Shown in CPA. Empty uses the key's Wokey label.</span>
+          </div>
+          <div class="field">
+            <label for="f-proxy" data-i18n="form.proxy">Egress proxy</label>
+            <input class="input mono" id="f-proxy" type="text" spellcheck="false" placeholder="socks5://user:pass@host:1080">
+            <span class="help" data-i18n="form.proxyHelp">Empty inherits CPA's proxy-url; "direct" forces a direct connection. http, https, socks5 and socks5h are supported.</span>
+          </div>
+          <div class="field">
+            <label for="f-prefix" data-i18n="form.prefix">Model prefix</label>
+            <input class="input mono" id="f-prefix" type="text" spellcheck="false">
+            <label class="check"><input type="checkbox" id="f-prefix-default"> <span id="f-prefix-default-label">Use plugin default</span></label>
+            <span class="help" data-i18n="form.prefixHelp">Saved as the auth file's standard prefix field; CPA adds it to the model names.</span>
+          </div>
+          <div class="field">
+            <label for="f-priority" data-i18n="form.priority">Priority</label>
+            <input class="input" id="f-priority" type="number" step="1" inputmode="numeric">
+            <span class="help" data-i18n="form.priorityHelp">CPA routing priority; higher is tried first. Empty = 0.</span>
+          </div>
+        </div>
+        <div class="models-mode" role="radiogroup">
+          <label class="check"><input type="radio" name="models-mode" id="f-models-all" value="all"> <span data-i18n="form.modelsAll">All models (new Wokey models are added automatically)</span></label>
+          <label class="check"><input type="radio" name="models-mode" id="f-models-pick" value="pick"> <span data-i18n="form.modelsPick">Only selected models</span></label>
+        </div>
+        <div class="picker" id="picker">
+          <div class="picker-bar">
+            <input class="input" id="picker-search" type="search" spellcheck="false" placeholder="Search models">
+            <button class="btn btn-secondary btn-sm" type="button" id="picker-select" data-i18n="picker.selectVisible">Select shown</button>
+            <button class="btn btn-secondary btn-sm" type="button" id="picker-clear" data-i18n="picker.clear">Clear</button>
+            <span class="picker-count" id="picker-count"></span>
+          </div>
+          <div class="picker-list" id="picker-list"></div>
+        </div>
+        <p class="sub" id="register-preview"></p>
+        <div class="editor-footer">
+          <button class="btn btn-primary" type="submit" id="editor-save">Save</button>
+          <button class="btn btn-secondary" type="button" id="editor-cancel" data-i18n="form.cancel">Cancel</button>
+          <span class="form-error hidden" id="editor-error" role="alert"></span>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="card hidden" data-requires-auth>
+    <div class="card-header">
+      <h2 data-i18n="keys.title">API keys</h2>
+      <span class="hint" data-i18n="keys.hint">Delete and enable/disable use CPA's auth file API</span>
+    </div>
+    <div id="keys-body">
+      <div class="empty" data-i18n="keys.notLoaded">Not loaded yet.</div>
+    </div>
+    <pre class="log hidden" id="log"></pre>
+  </section>
+
+  <footer>
+    <span data-i18n="footer.text">Powered by the Wokey plugin</span> ·
+    <a href="https://wokey.ai/docs/usage" target="_blank" rel="noopener noreferrer" data-i18n="footer.docs">Wokey docs</a> ·
+    <a href="https://github.com/berry-shake/cpa-wokey-plugin" target="_blank" rel="noopener noreferrer" data-i18n="footer.source">Source</a>
+  </footer>
+</main>
+<script>
+(() => {
+  'use strict';
+
+  const LANG_KEY = 'cliproxy-wokey-lang';
+  const messages = {
+    en: {
+      'title': 'Wokey · CLI Proxy API',
+      'hero.title': 'Wokey',
+      'hero.subtitle': 'Wokey API keys as CPA credentials: model selection, egress proxy, balance.',
+      'health.unknown': 'Not checked',
+      'health.locked': 'Sign in required',
+      'health.ok': '{enabled}/{total} keys enabled',
+      'health.noKeys': 'No API key yet',
+      'health.catalog': 'Model catalog unavailable',
+      'health.error': 'Load failed',
+      'login.title': 'Management key',
+      'login.submit': 'Sign in',
+      'login.placeholder': 'CPA management key',
+      'login.hint': 'Use the CPA management key. It stays in this page\'s memory only; inside the management panel the remembered key is reused automatically.',
+      'login.failed': 'Sign-in failed: {msg}',
+      'login.expired': 'The management key was rejected: {msg}',
+      'overview.title': 'Overview',
+      'overview.checkedAt': 'Updated {time}',
+      'stat.keys': 'API keys',
+      'stat.keysValue': '{enabled} / {total} enabled',
+      'stat.catalog': 'Model catalog',
+      'stat.catalogValue': '{count} models',
+      'stat.catalogEmpty': 'Not loaded',
+      'stat.catalogAt': 'Fetched {time}',
+      'stat.prefix': 'Default prefix',
+      'stat.baseURL': 'Upstream',
+      'stat.proxy': 'CPA proxy-url',
+      'stat.proxyNone': 'Not set (direct / env)',
+      'stat.version': 'Plugin version',
+      'actions.refresh': 'Refresh',
+      'actions.reloadCatalog': 'Reload model catalog',
+      'actions.add': 'Add API key',
+      'keys.title': 'API keys',
+      'keys.hint': 'Delete and enable/disable use CPA\'s auth file API',
+      'keys.notLoaded': 'Not loaded yet.',
+      'keys.empty': 'No Wokey key yet. Use "Add API key" or upload an auth file with "type": "wokey".',
+      'keys.listError': 'Cannot list credentials: {msg}',
+      'col.key': 'Key',
+      'col.state': 'State',
+      'col.models': 'Models',
+      'col.prefix': 'Prefix',
+      'col.proxy': 'Egress',
+      'col.balance': 'Balance',
+      'col.actions': '',
+      'state.enabled': 'Enabled',
+      'state.disabled': 'Disabled',
+      'state.unavailable': 'Cooling down',
+      'state.readError': 'Unreadable',
+      'models.all': 'All models',
+      'models.selected': '{count} selected',
+      'models.registered': '{count} registered in CPA',
+      'models.missing': 'Gone from catalog: {list}',
+      'prefix.none': 'none (bare IDs)',
+      'prefix.default': 'plugin default',
+      'prefix.custom': 'per key',
+      'proxy.inherit': 'inherit CPA',
+      'proxy.direct': 'direct',
+      'quota.load': 'Check',
+      'quota.loading': 'Loading…',
+      'quota.retry': 'Retry',
+      'quota.balance': 'Account balance',
+      'quota.reserved': 'reserved {v}',
+      'quota.spent24h': 'key 24h {v}',
+      'quota.capLeft': 'cap left {v} / {cap}',
+      'quota.balanceError': 'balance: {msg}',
+      'row.edit': 'Edit',
+      'row.enable': 'Enable',
+      'row.disable': 'Disable',
+      'row.delete': 'Delete',
+      'row.confirmDelete': 'Click again',
+      'form.addTitle': 'Add API key',
+      'form.editTitle': 'Edit · {name}',
+      'form.addHint': 'The key is checked against Wokey before it is saved.',
+      'form.editHint': 'Saving rewrites the auth file; CPA re-registers its models immediately.',
+      'form.key': 'Wokey API key',
+      'form.skipVerify': 'Skip key check (save even if Wokey is unreachable)',
+      'form.label': 'Label',
+      'form.labelHelp': 'Shown in CPA. Empty uses the key\'s Wokey label.',
+      'form.proxy': 'Egress proxy',
+      'form.proxyHelp': 'Empty inherits CPA\'s proxy-url; "direct" forces a direct connection. http, https, socks5 and socks5h are supported.',
+      'form.prefix': 'Model prefix',
+      'form.prefixDefault': 'Use plugin default ({prefix})',
+      'form.prefixDefaultNone': 'Use plugin default (no prefix)',
+      'form.prefixHelp': "Saved as the auth file's standard prefix field; CPA adds it to the model names.",
+      'form.priority': 'Priority',
+      'form.priorityHelp': 'CPA routing priority; higher is tried first. Empty = 0.',
+      'form.modelsAll': 'All models (new Wokey models are added automatically)',
+      'form.modelsPick': 'Only selected models',
+      'form.add': 'Check and add',
+      'form.save': 'Save',
+      'form.cancel': 'Cancel',
+      'form.needKey': 'Enter the Wokey API key.',
+      'form.needModels': 'Select at least one model, or choose "All models".',
+      'form.badPriority': 'Priority must be a whole number.',
+      'form.registerAs': 'Registered in CPA as {example}',
+      'form.registerAsBoth': 'Registered in CPA as {example} and {bare} (CPA routing.force-model-prefix is off)',
+      'picker.search': 'Search models',
+      'picker.selectVisible': 'Select shown',
+      'picker.clear': 'Clear',
+      'picker.count': '{selected} / {total} selected',
+      'picker.countAll': 'all {total}',
+      'picker.loading': 'Loading the model catalog…',
+      'picker.error': 'Model catalog unavailable: {msg}',
+      'picker.noMatch': 'No model matches.',
+      'picker.missing': 'not in the catalog any more',
+      'picker.ctx': '{ctx} ctx',
+      'picker.price': '${input} / ${output} per 1M',
+      'log.loadFailed': 'Load failed: {msg}',
+      'log.added': 'Added {name}.',
+      'log.updated': 'Saved {name}.',
+      'log.unknownModels': 'Saved {name}; not in the current catalog: {list}',
+      'log.enabled': 'Enabled {name}.',
+      'log.disabled': 'Disabled {name}.',
+      'log.deleted': 'Deleted {name}.',
+      'log.actionFailed': 'Failed: {msg}',
+      'log.catalogReloaded': 'Model catalog reloaded: {count} models.',
+      'footer.text': 'Powered by the Wokey plugin',
+      'footer.docs': 'Wokey docs',
+      'footer.source': 'Source',
+    },
+    zh: {
+      'title': 'Wokey · CLI Proxy API',
+      'hero.title': 'Wokey',
+      'hero.subtitle': '把 Wokey API Key 作为 CPA 认证文件：选择上游模型、配置出口代理、查看余额。',
+      'health.unknown': '未检查',
+      'health.locked': '需要登录',
+      'health.ok': '{enabled}/{total} 个 Key 启用',
+      'health.noKeys': '还没有 API Key',
+      'health.catalog': '模型目录不可用',
+      'health.error': '加载失败',
+      'login.title': '管理密钥',
+      'login.submit': '登录',
+      'login.placeholder': 'CPA 管理密钥',
+      'login.hint': '填写 CPA 管理密钥。密钥只保存在本页内存中；在管理面板内打开时会自动复用面板已记住的密钥。',
+      'login.failed': '登录失败：{msg}',
+      'login.expired': '管理密钥被拒绝：{msg}',
+      'overview.title': '概览',
+      'overview.checkedAt': '更新于 {time}',
+      'stat.keys': 'API Key',
+      'stat.keysValue': '{enabled} / {total} 启用',
+      'stat.catalog': '模型目录',
+      'stat.catalogValue': '{count} 个模型',
+      'stat.catalogEmpty': '未加载',
+      'stat.catalogAt': '拉取于 {time}',
+      'stat.prefix': '默认前缀',
+      'stat.baseURL': '上游地址',
+      'stat.proxy': 'CPA 全局代理',
+      'stat.proxyNone': '未设置（直连 / 环境变量）',
+      'stat.version': '插件版本',
+      'actions.refresh': '刷新',
+      'actions.reloadCatalog': '重新拉取模型目录',
+      'actions.add': '添加 API Key',
+      'keys.title': 'API Key',
+      'keys.hint': '删除和启用/停用走 CPA 原生认证文件接口',
+      'keys.notLoaded': '尚未加载。',
+      'keys.empty': '还没有 Wokey Key。点“添加 API Key”，或上传 "type": "wokey" 的认证文件。',
+      'keys.listError': '无法列出凭证：{msg}',
+      'col.key': 'Key',
+      'col.state': '状态',
+      'col.models': '模型',
+      'col.prefix': '前缀',
+      'col.proxy': '出口',
+      'col.balance': '余额',
+      'col.actions': '',
+      'state.enabled': '启用',
+      'state.disabled': '已停用',
+      'state.unavailable': '冷却中',
+      'state.readError': '读取失败',
+      'models.all': '全部模型',
+      'models.selected': '已选 {count} 个',
+      'models.registered': 'CPA 已注册 {count} 个',
+      'models.missing': '目录中已下架：{list}',
+      'prefix.none': '无（裸模型名）',
+      'prefix.default': '插件默认',
+      'prefix.custom': '单独设置',
+      'proxy.inherit': '继承 CPA',
+      'proxy.direct': '直连',
+      'quota.load': '查询',
+      'quota.loading': '查询中…',
+      'quota.retry': '重试',
+      'quota.balance': '账户余额',
+      'quota.reserved': '冻结 {v}',
+      'quota.spent24h': '本 Key 24h {v}',
+      'quota.capLeft': '限额剩余 {v} / {cap}',
+      'quota.balanceError': '余额：{msg}',
+      'row.edit': '编辑',
+      'row.enable': '启用',
+      'row.disable': '停用',
+      'row.delete': '删除',
+      'row.confirmDelete': '再点确认',
+      'form.addTitle': '添加 API Key',
+      'form.editTitle': '编辑 · {name}',
+      'form.addHint': '保存前会先向 Wokey 校验 Key。',
+      'form.editHint': '保存会重写认证文件，CPA 立即重新注册模型。',
+      'form.key': 'Wokey API Key',
+      'form.skipVerify': '跳过 Key 校验（Wokey 暂时连不上时也保存）',
+      'form.label': '名称',
+      'form.labelHelp': '显示在 CPA 中；留空使用 Key 在 Wokey 的名称。',
+      'form.proxy': '出口代理',
+      'form.proxyHelp': '留空继承 CPA 全局 proxy-url；填 direct 强制直连。支持 http、https、socks5、socks5h。',
+      'form.prefix': '模型前缀',
+      'form.prefixDefault': '使用插件默认（{prefix}）',
+      'form.prefixDefaultNone': '使用插件默认（无前缀）',
+      'form.prefixHelp': '保存为认证文件的通用 prefix 字段，由 CPA 给模型名加前缀。',
+      'form.priority': '优先级',
+      'form.priorityHelp': 'CPA 路由优先级，数值大的优先；留空为 0。',
+      'form.modelsAll': '全部模型（Wokey 新增模型自动加入）',
+      'form.modelsPick': '只用选中的模型',
+      'form.add': '校验并添加',
+      'form.save': '保存',
+      'form.cancel': '取消',
+      'form.needKey': '请填写 Wokey API Key。',
+      'form.needModels': '至少选择一个模型，或选择“全部模型”。',
+      'form.badPriority': '优先级必须是整数。',
+      'form.registerAs': '注册到 CPA 的模型名：{example}',
+      'form.registerAsBoth': '注册到 CPA 的模型名：{example} 和 {bare}（CPA 没有开启 routing.force-model-prefix）',
+      'picker.search': '搜索模型',
+      'picker.selectVisible': '全选当前结果',
+      'picker.clear': '清空',
+      'picker.count': '已选 {selected} / {total}',
+      'picker.countAll': '全部 {total} 个',
+      'picker.loading': '正在加载模型目录…',
+      'picker.error': '模型目录不可用：{msg}',
+      'picker.noMatch': '没有匹配的模型。',
+      'picker.missing': '已不在模型目录中',
+      'picker.ctx': '{ctx} 上下文',
+      'picker.price': '${input} / ${output} 每百万',
+      'log.loadFailed': '加载失败：{msg}',
+      'log.added': '已添加 {name}。',
+      'log.updated': '已保存 {name}。',
+      'log.unknownModels': '已保存 {name}；以下模型不在当前目录中：{list}',
+      'log.enabled': '已启用 {name}。',
+      'log.disabled': '已停用 {name}。',
+      'log.deleted': '已删除 {name}。',
+      'log.actionFailed': '操作失败：{msg}',
+      'log.catalogReloaded': '模型目录已重新拉取：{count} 个模型。',
+      'footer.text': '由 Wokey 插件驱动',
+      'footer.docs': 'Wokey 文档',
+      'footer.source': '源代码',
+    },
+  };
+
+  function detectDefaultLang() {
+    const list = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en'];
+    for (const raw of list) {
+      const tag = (raw || '').toLowerCase();
+      if (tag.startsWith('zh')) return 'zh';
+      if (tag.startsWith('en')) return 'en';
+    }
+    return 'en';
+  }
+
+  function initialLang() {
+    try {
+      const stored = localStorage.getItem(LANG_KEY);
+      if (stored && messages[stored]) return stored;
+    } catch (_) { /* ignore */ }
+    return detectDefaultLang();
+  }
+
+  let currentLang = initialLang();
+
+  function t(key, params) {
+    const bundle = messages[currentLang] || messages.en;
+    let template = bundle[key];
+    if (template === undefined) template = messages.en[key];
+    if (template === undefined) return key;
+    if (params) {
+      return template.replace(/\{(\w+)\}/g, (m, name) => (params[name] !== undefined ? String(params[name]) : m));
+    }
+    return template;
+  }
+
+  function applyPanelTheme() {
+    let theme = 'auto';
+    try {
+      const stored = JSON.parse(localStorage.getItem('cli-proxy-theme') || 'null');
+      if (stored && stored.state && typeof stored.state.theme === 'string') theme = stored.state.theme;
+    } catch (_) { /* keep auto */ }
+    if (theme === 'auto') {
+      const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      theme = dark ? 'dark' : 'white';
+    }
+    if (theme === 'dark' || theme === 'white') {
+      document.documentElement.setAttribute('data-theme', theme);
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+    }
+  }
+  applyPanelTheme();
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyPanelTheme);
+  }
+
+  const API_BASE = '/v0/management/plugins/wokey';
+  const CPA_BASE = '/v0/management';
+  const REFRESH_MS = 30000;
+  const QUOTA_CONCURRENCY = 3;
+
+  // Reuse the management key the CPA or CPAMP panel remembered. The panel
+  // and this page are same-origin, so they share localStorage
+  // "cli-proxy-auth": a zustand envelope XOR-obfuscated with a host-derived
+  // key. v2 payloads do not say which panel wrote them, so both derivations
+  // are tried; legacy v1 also mixes in the user agent. Read only when
+  // embedded, never written back, and only for this origin.
+  const PANEL_AUTH_KEY = 'cli-proxy-auth';
+  const PANEL_SECRET_SALT = 'cli-proxy-api-webui::secure-storage';
+
+  function xorDecode(payload, keyText) {
+    const binary = atob(payload);
+    const key = new TextEncoder().encode(keyText);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i) ^ key[i % key.length];
+    return new TextDecoder().decode(bytes);
+  }
+
+  function panelAuthCandidates(raw) {
+    const host = window.location.host;
+    try {
+      if (raw.startsWith('enc::v2::')) {
+        const body = raw.slice('enc::v2::'.length);
+        return [PANEL_SECRET_SALT + '|v2|' + host, PANEL_SECRET_SALT + '|' + host].map((key) => xorDecode(body, key));
+      }
+      if (raw.startsWith('enc::v1::')) {
+        return [xorDecode(raw.slice('enc::v1::'.length), PANEL_SECRET_SALT + '|' + host + '|' + navigator.userAgent)];
+      }
+    } catch (_) { return []; }
+    return [raw];
+  }
+
+  function isThisOrigin(apiBase) {
+    try {
+      const base = /^https?:\/\//i.test(apiBase.trim()) ? apiBase.trim() : 'http://' + apiBase.trim();
+      return new URL(base).origin === window.location.origin;
+    } catch (_) { return false; }
+  }
+
+  function readPanelKey() {
+    let embedded = false;
+    try { embedded = window.self !== window.top; } catch (_) { embedded = false; }
+    if (!embedded) return '';
+    let raw = null;
+    try { raw = localStorage.getItem(PANEL_AUTH_KEY); } catch (_) { return ''; }
+    if (!raw) return '';
+    for (const decoded of panelAuthCandidates(raw)) {
+      try {
+        const parsed = JSON.parse(decoded);
+        const saved = parsed && typeof parsed === 'object' ? (parsed.state || parsed) : null;
+        if (saved && typeof saved.managementKey === 'string' && saved.managementKey.trim() &&
+            typeof saved.apiBase === 'string' && isThisOrigin(saved.apiBase)) {
+          return saved.managementKey.trim();
+        }
+      } catch (_) { /* wrong panel key for this payload; try the next one */ }
+    }
+    return '';
+  }
+
+  // The management key lives only in this closure; a reload starts over.
+  let managementKey = '';
+  let refreshTimer = null;
+
+  const $ = (id) => document.getElementById(id);
+  const health = $('health');
+  const healthLabel = $('health-label');
+  const checkedAt = $('checked-at');
+  const stats = $('stats');
+  const keysBody = $('keys-body');
+  const log = $('log');
+  const refreshButton = $('refresh-button');
+  const catalogButton = $('catalog-button');
+  const addButton = $('add-button');
+  const loginCard = $('login-card');
+  const loginForm = $('login-form');
+  const loginKey = $('login-key');
+  const loginButton = $('login-button');
+  const loginError = $('login-error');
+  const authCards = document.querySelectorAll('[data-requires-auth]');
+  const editorCard = $('editor-card');
+  const editorForm = $('editor-form');
+  const editorTitle = $('editor-title');
+  const editorHint = $('editor-hint');
+  const editorSave = $('editor-save');
+  const editorCancel = $('editor-cancel');
+  const editorError = $('editor-error');
+  const rowKey = $('row-key');
+  const fKey = $('f-key');
+  const fSkipVerify = $('f-skip-verify');
+  const fLabel = $('f-label');
+  const fProxy = $('f-proxy');
+  const fPrefix = $('f-prefix');
+  const fPrefixDefault = $('f-prefix-default');
+  const fPrefixDefaultLabel = $('f-prefix-default-label');
+  const fPriority = $('f-priority');
+  const fModelsAll = $('f-models-all');
+  const fModelsPick = $('f-models-pick');
+  const picker = $('picker');
+  const pickerSearch = $('picker-search');
+  const pickerSelect = $('picker-select');
+  const pickerClear = $('picker-clear');
+  const pickerCount = $('picker-count');
+  const pickerList = $('picker-list');
+  const registerPreview = $('register-preview');
+
+  // Everything rendered from state, so a language switch can redraw it.
+  const ui = {
+    health: { state: 'unknown', key: 'health.unknown', params: null },
+    status: null,
+    loadedAt: null,
+    log: null,
+    loginError: null,
+    quota: {},
+    catalog: null,
+    catalogError: null,
+    editor: null,
+    editorError: null,
+  };
+  let armedDelete = { name: null, timer: null };
+
+  function el(tag, props, ...children) {
+    const node = document.createElement(tag);
+    if (props) {
+      for (const [k, v] of Object.entries(props)) {
+        if (v === undefined || v === null || v === false) continue;
+        if (k === 'class') node.className = v;
+        else if (k === 'text') node.textContent = v;
+        else if (k === 'title') node.title = v;
+        else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+        else node.setAttribute(k, v === true ? '' : String(v));
+      }
+    }
+    for (const child of children.flat()) {
+      if (child === null || child === undefined || child === false || child === '') continue;
+      node.appendChild(typeof child === 'string' ? document.createTextNode(child) : child);
+    }
+    return node;
+  }
+
+  function setHealth(state, key, params) {
+    ui.health = { state, key, params: params || null };
+    renderHealth();
+  }
+
+  function renderHealth() {
+    health.dataset.state = ui.health.state;
+    healthLabel.textContent = t(ui.health.key, ui.health.params);
+  }
+
+  function setLog(state, key, params) {
+    ui.log = state ? { state, key, params: params || null } : null;
+    renderLog();
+  }
+
+  function renderLog() {
+    if (!ui.log) {
+      log.classList.add('hidden');
+      log.textContent = '';
+      return;
+    }
+    log.classList.remove('hidden');
+    log.dataset.state = ui.log.state;
+    log.textContent = t(ui.log.key, ui.log.params);
+  }
+
+  function setBusy(button, busy) { button.disabled = busy; }
+
+  function localeTag() { return currentLang === 'zh' ? 'zh-CN' : 'en-US'; }
+
+  function formatWhen(iso) {
+    if (!iso) return '—';
+    const parsed = new Date(iso);
+    if (isNaN(parsed.valueOf())) return iso;
+    return parsed.toLocaleString(localeTag());
+  }
+
+  function fmtUSD(value) {
+    const n = Number(value);
+    if (!isFinite(n)) return '—';
+    const abs = Math.abs(n);
+    let text;
+    if (abs === 0) text = '0';
+    else if (abs >= 100) text = n.toFixed(0);
+    else if (abs >= 1) text = n.toFixed(2);
+    else if (abs >= 0.01) text = n.toFixed(2);
+    else text = n.toPrecision(2);
+    return '$' + text;
+  }
+
+  function fmtPrice(value) {
+    if (value === null || value === undefined) return '?';
+    const n = Number(value);
+    if (!isFinite(n)) return '?';
+    if (n === 0) return '0';
+    if (n >= 10) return String(Math.round(n * 100) / 100);
+    return String(Number(n.toPrecision(3)));
+  }
+
+  function fmtTokens(n) {
+    n = Number(n) || 0;
+    if (n >= 1000000) return (Math.round(n / 100000) / 10) + 'M';
+    if (n >= 1000) return Math.round(n / 1000) + 'K';
+    return String(n);
+  }
+
+  function displayName(cred) {
+    return cred.label || cred.key_masked || cred.name;
+  }
+
+  function isDirect(proxy) {
+    const value = String(proxy || '').trim().toLowerCase();
+    return value === 'direct' || value === 'none';
+  }
+
+  function defaultPrefix() {
+    return ui.status && ui.status.config ? (ui.status.config.default_prefix || '') : 'wokey';
+  }
+
+  // ---- overview ----
+
+  function stat(label, value, sub, subClass) {
+    return el('div', { class: 'stat' },
+      el('div', { class: 'k', text: label }),
+      el('div', { class: 'v', text: value }),
+      sub ? el('div', { class: 's' + (subClass ? ' ' + subClass : ''), text: sub }) : null);
+  }
+
+  function renderOverview() {
+    stats.textContent = '';
+    const data = ui.status;
+    checkedAt.textContent = ui.loadedAt ? t('overview.checkedAt', { time: ui.loadedAt.toLocaleTimeString(localeTag()) }) : '';
+    if (!data) return;
+    const creds = Array.isArray(data.credentials) ? data.credentials : [];
+    const enabled = creds.filter((c) => !c.disabled).length;
+    const cat = data.catalog || {};
+    const cfg = data.config || {};
+    stats.appendChild(stat(t('stat.keys'), t('stat.keysValue', { enabled, total: creds.length })));
+    stats.appendChild(stat(t('stat.catalog'),
+      cat.count ? t('stat.catalogValue', { count: cat.count }) : t('stat.catalogEmpty'),
+      cat.last_error ? cat.last_error : (cat.fetched_at ? t('stat.catalogAt', { time: formatWhen(cat.fetched_at) }) : ''),
+      cat.last_error ? 'danger-text' : ''));
+    stats.appendChild(stat(t('stat.prefix'), cfg.default_prefix ? cfg.default_prefix + '/' : t('prefix.none')));
+    stats.appendChild(stat(t('stat.baseURL'), cfg.base_url || '—'));
+    stats.appendChild(stat(t('stat.proxy'), cfg.global_proxy || t('stat.proxyNone')));
+    stats.appendChild(stat(t('stat.version'), data.version || '—'));
+  }
+
+  // ---- keys table ----
+
+  function quotaCell(cred) {
+    const td = el('td', { class: 'nowrap' });
+    if (cred.read_error) return td;
+    const q = ui.quota[cred.auth_index];
+    if (!q) {
+      td.appendChild(el('button', { type: 'button', class: 'btn-link', text: t('quota.load'), onclick: () => loadQuota(cred.auth_index) }));
+      return td;
+    }
+    if (q.state === 'loading') {
+      td.appendChild(el('span', { class: 'sub', text: t('quota.loading') }));
+      return td;
+    }
+    if (q.state === 'error') {
+      td.appendChild(el('div', { class: 'sub danger-text', text: q.error, title: q.error }));
+      td.appendChild(el('button', { type: 'button', class: 'btn-link', text: t('quota.retry'), onclick: () => loadQuota(cred.auth_index) }));
+      return td;
+    }
+    const d = q.data || {};
+    if (d.balance) {
+      td.appendChild(el('div', { class: 'strong', text: fmtUSD(d.balance.available_usd), title: t('quota.balance') }));
+      if (Number(d.balance.reserved_usd) > 0) td.appendChild(el('div', { class: 'sub', text: t('quota.reserved', { v: fmtUSD(d.balance.reserved_usd) }) }));
+    } else if (d.balance_error) {
+      td.appendChild(el('div', { class: 'sub danger-text', text: t('quota.balanceError', { msg: d.balance_error }) }));
+    }
+    if (d.key) {
+      td.appendChild(el('div', { class: 'sub', text: t('quota.spent24h', { v: fmtUSD(d.key.daily_usd) }) }));
+      if (d.key.limit_usd !== undefined && d.key.limit_remaining_usd !== undefined) {
+        td.appendChild(el('div', { class: 'sub', text: t('quota.capLeft', { v: fmtUSD(d.key.limit_remaining_usd), cap: fmtUSD(d.key.limit_usd) }) }));
+      }
+    } else if (d.key_error) {
+      td.appendChild(el('div', { class: 'sub danger-text', text: d.key_error }));
+    }
+    td.appendChild(el('button', { type: 'button', class: 'btn-link', text: t('actions.refresh'), onclick: () => loadQuota(cred.auth_index) }));
+    return td;
+  }
+
+  function renderKeys() {
+    keysBody.textContent = '';
+    const data = ui.status;
+    if (!data) {
+      keysBody.appendChild(el('div', { class: 'empty', text: t('keys.notLoaded') }));
+      return;
+    }
+    if (data.list_error) {
+      keysBody.appendChild(el('div', { class: 'empty danger-text', text: t('keys.listError', { msg: data.list_error }) }));
+      return;
+    }
+    const creds = Array.isArray(data.credentials) ? data.credentials : [];
+    if (creds.length === 0) {
+      keysBody.appendChild(el('div', { class: 'empty', text: t('keys.empty') }));
+      return;
+    }
+    const head = el('tr', null, ['col.key', 'col.state', 'col.models', 'col.prefix', 'col.proxy', 'col.balance', 'col.actions'].map((key) => el('th', { text: t(key) })));
+    const tbody = el('tbody');
+    for (const cred of creds) {
+      let badgeClass = 'ok';
+      let badgeKey = 'state.enabled';
+      if (cred.read_error) { badgeClass = 'danger'; badgeKey = 'state.readError'; }
+      else if (cred.disabled) { badgeClass = ''; badgeKey = 'state.disabled'; }
+      else if (cred.unavailable) { badgeClass = 'warn'; badgeKey = 'state.unavailable'; }
+      const stateNote = cred.read_error || cred.status_message || '';
+
+      const models = Array.isArray(cred.models) ? cred.models : [];
+      const missing = Array.isArray(cred.missing_models) ? cred.missing_models : [];
+      const prefixText = cred.read_error ? '—' : (cred.effective_prefix ? cred.effective_prefix + '/' : t('prefix.none'));
+      let proxyText = t('proxy.inherit');
+      if (cred.proxy_url) proxyText = isDirect(cred.proxy_url) ? t('proxy.direct') : cred.proxy_url;
+
+      const armed = armedDelete.name === cred.name;
+      const actions = el('div', { class: 'row-actions' },
+        el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: t('row.edit'), disabled: !!cred.read_error, onclick: () => openEditor('edit', cred) }),
+        el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: t(cred.disabled ? 'row.enable' : 'row.disable'), onclick: (ev) => toggleDisabled(cred, ev.currentTarget) }),
+        el('button', { type: 'button', class: 'btn btn-danger btn-sm' + (armed ? ' armed' : ''), text: t(armed ? 'row.confirmDelete' : 'row.delete'), onclick: (ev) => deleteCredential(cred, ev.currentTarget) }));
+
+      tbody.appendChild(el('tr', null,
+        el('td', null,
+          el('div', { class: 'strong', text: displayName(cred) }),
+          cred.label ? el('div', { class: 'sub mono', text: cred.key_masked }) : null,
+          el('div', { class: 'sub', text: cred.name })),
+        el('td', null,
+          el('span', { class: 'badge ' + badgeClass, text: t(badgeKey) }),
+          stateNote ? el('div', { class: 'sub', text: stateNote, title: stateNote }) : null),
+        el('td', null,
+          el('div', { text: cred.read_error ? '—' : (cred.all_models ? t('models.all') : t('models.selected', { count: models.length })) }),
+          cred.registered_known ? el('div', { class: 'sub', text: t('models.registered', { count: cred.registered_models }) }) : null,
+          missing.length ? el('div', { class: 'sub warn-text', text: t('models.missing', { list: missing.join(', ') }) }) : null),
+        el('td', null,
+          el('div', { class: 'mono', text: prefixText }),
+          cred.read_error ? null : el('div', { class: 'sub', text: t(cred.prefix === null || cred.prefix === undefined ? 'prefix.default' : 'prefix.custom') })),
+        el('td', { class: 'mono', text: proxyText }),
+        quotaCell(cred),
+        el('td', null, actions)));
+    }
+    keysBody.appendChild(el('div', { class: 'table-wrap' }, el('table', null, el('thead', null, head), tbody)));
+  }
+
+  function applyStatus(data) {
+    ui.status = data;
+    ui.loadedAt = new Date();
+    const creds = Array.isArray(data.credentials) ? data.credentials : [];
+    const enabled = creds.filter((c) => !c.disabled).length;
+    if (data.list_error) setHealth('error', 'health.error');
+    else if (!data.catalog || !data.catalog.count) setHealth('warn', 'health.catalog');
+    else if (creds.length === 0) setHealth('warn', 'health.noKeys');
+    else setHealth('ok', 'health.ok', { enabled, total: creds.length });
+    renderOverview();
+    renderKeys();
+    if (ui.editor) renderPrefixLabel();
+  }
+
+  // ---- requests ----
+
+  async function request(url, options) {
+    const init = {
+      method: (options && options.method) || 'GET',
+      cache: 'no-store',
+      headers: { Authorization: 'Bearer ' + managementKey },
+    };
+    if (options && options.body !== undefined) {
+      init.headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(options.body);
+    }
+    const response = await fetch(url, init);
+    const text = await response.text();
+    let data;
+    try { data = JSON.parse(text); } catch (_) { data = { message: text || `HTTP ${response.status}` }; }
+    if (!response.ok) {
+      const error = new Error((data && (data.message || data.error)) || `HTTP ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    return data;
+  }
+
+  const api = (path, options) => request(API_BASE + path, options);
+  const cpa = (path, options) => request(CPA_BASE + path, options);
+
+  // CPA rejects a missing, wrong or banned management key with 401/403 before
+  // the request reaches the plugin. The plugin itself never answers 401/403.
+  function isAuthError(error) {
+    return !!error && (error.status === 401 || error.status === 403);
+  }
+
+  function renderLoginError() {
+    loginError.classList.toggle('hidden', !ui.loginError);
+    loginError.textContent = ui.loginError ? t(ui.loginError.key, ui.loginError.params) : '';
+  }
+
+  function showLogin(errorKey, msg) {
+    managementKey = '';
+    stopAutoRefresh();
+    closeEditor();
+    authCards.forEach((card) => card.classList.add('hidden'));
+    loginCard.classList.remove('hidden');
+    ui.loginError = errorKey ? { key: errorKey, params: { msg } } : null;
+    renderLoginError();
+    setHealth('unknown', 'health.locked');
+  }
+
+  function showContent() {
+    loginCard.classList.add('hidden');
+    authCards.forEach((card) => card.classList.remove('hidden'));
+    ui.loginError = null;
+    renderLoginError();
+    startAutoRefresh();
+  }
+
+  function startAutoRefresh() {
+    stopAutoRefresh();
+    refreshTimer = setInterval(() => {
+      if (document.visibilityState === 'visible') refresh(true);
+    }, REFRESH_MS);
+  }
+
+  function stopAutoRefresh() {
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+
+  function handleError(error, logKey) {
+    if (isAuthError(error)) { showLogin('login.expired', error.message); return; }
+    setLog('error', logKey || 'log.actionFailed', { msg: error.message });
+  }
+
+  async function refresh(silent) {
+    if (!silent) setBusy(refreshButton, true);
+    try {
+      applyStatus(await api('/status'));
+      if (!silent) setLog(null);
+    } catch (error) {
+      if (isAuthError(error)) { showLogin('login.expired', error.message); return; }
+      setHealth('error', 'health.error');
+      setLog('error', 'log.loadFailed', { msg: error.message });
+    } finally {
+      if (!silent) setBusy(refreshButton, false);
+    }
+  }
+
+  async function loadQuota(authIndex) {
+    if (!authIndex) return;
+    ui.quota[authIndex] = { state: 'loading' };
+    renderKeys();
+    try {
+      const data = await api('/credentials/quota?auth_index=' + encodeURIComponent(authIndex));
+      ui.quota[authIndex] = { state: 'ok', data };
+    } catch (error) {
+      if (isAuthError(error)) { showLogin('login.expired', error.message); return; }
+      ui.quota[authIndex] = { state: 'error', error: error.message };
+    }
+    renderKeys();
+  }
+
+  // Load balances of enabled keys once, a few at a time.
+  async function loadAllQuotas() {
+    const creds = (ui.status && Array.isArray(ui.status.credentials)) ? ui.status.credentials : [];
+    const queue = creds.filter((c) => !c.disabled && !c.read_error && !ui.quota[c.auth_index]).map((c) => c.auth_index);
+    const workers = [];
+    for (let i = 0; i < QUOTA_CONCURRENCY; i++) {
+      workers.push((async () => {
+        while (queue.length && managementKey) await loadQuota(queue.shift());
+      })());
+    }
+    await Promise.all(workers);
+  }
+
+  async function loadCatalog(force) {
+    try {
+      ui.catalog = force ? await api('/models/refresh', { method: 'POST', body: {} }) : await api('/models');
+      ui.catalogError = null;
+    } catch (error) {
+      if (isAuthError(error)) { showLogin('login.expired', error.message); throw error; }
+      ui.catalogError = error.message;
+      if (force) throw error;
+    }
+    renderPicker();
+  }
+
+  async function reloadCatalog() {
+    setBusy(catalogButton, true);
+    try {
+      await loadCatalog(true);
+      setLog('ok', 'log.catalogReloaded', { count: ui.catalog && ui.catalog.models ? ui.catalog.models.length : 0 });
+      await refresh(true);
+    } catch (error) {
+      handleError(error, 'log.loadFailed');
+    } finally {
+      setBusy(catalogButton, false);
+    }
+  }
+
+  async function toggleDisabled(cred, button) {
+    if (!cred.name) return;
+    setBusy(button, true);
+    try {
+      await cpa('/auth-files/status', { method: 'PATCH', body: { name: cred.name, auth_index: cred.auth_index, disabled: !cred.disabled } });
+      setLog('ok', cred.disabled ? 'log.enabled' : 'log.disabled', { name: displayName(cred) });
+      await refresh(true);
+    } catch (error) {
+      handleError(error);
+      setBusy(button, false);
+    }
+  }
+
+  function disarmDelete() {
+    if (armedDelete.timer) clearTimeout(armedDelete.timer);
+    armedDelete = { name: null, timer: null };
+  }
+
+  // Deleting is a two-click action: confirm() may be blocked inside the
+  // management panel's iframe.
+  async function deleteCredential(cred, button) {
+    if (!cred.name) return;
+    if (armedDelete.name !== cred.name) {
+      disarmDelete();
+      armedDelete = { name: cred.name, timer: setTimeout(() => { disarmDelete(); renderKeys(); }, 4000) };
+      renderKeys();
+      return;
+    }
+    disarmDelete();
+    setBusy(button, true);
+    try {
+      await cpa('/auth-files?name=' + encodeURIComponent(cred.name), { method: 'DELETE' });
+      delete ui.quota[cred.auth_index];
+      if (ui.editor && ui.editor.authIndex === cred.auth_index) closeEditor();
+      setLog('ok', 'log.deleted', { name: displayName(cred) });
+      await refresh(true);
+    } catch (error) {
+      handleError(error);
+      renderKeys();
+    }
+  }
+
+  // ---- editor ----
+
+  function openEditor(mode, cred) {
+    const editing = mode === 'edit' && cred;
+    ui.editor = {
+      mode: editing ? 'edit' : 'add',
+      authIndex: editing ? cred.auth_index : '',
+      name: editing ? cred.name : '',
+      title: editing ? displayName(cred) : '',
+      original: editing ? {
+        label: cred.label || '',
+        proxy: cred.proxy_url || '',
+        prefix: cred.prefix,
+        priority: cred.priority ? String(cred.priority) : '',
+        all: !!cred.all_models,
+        models: Array.isArray(cred.models) ? cred.models.slice() : [],
+      } : null,
+      selected: new Set(editing && !cred.all_models && Array.isArray(cred.models) ? cred.models : []),
+      filter: '',
+    };
+    ui.editorError = null;
+    fKey.value = '';
+    fSkipVerify.checked = false;
+    fLabel.value = editing ? (cred.label || '') : '';
+    fProxy.value = editing ? (cred.proxy_url || '') : '';
+    const usesDefault = !editing || cred.prefix === null || cred.prefix === undefined;
+    fPrefixDefault.checked = usesDefault;
+    fPrefix.value = usesDefault ? defaultPrefix() : (cred.prefix || '');
+    fPriority.value = editing && cred.priority ? String(cred.priority) : '';
+    const all = !editing || !!cred.all_models;
+    fModelsAll.checked = all;
+    fModelsPick.checked = !all;
+    pickerSearch.value = '';
+    editorCard.classList.remove('hidden');
+    renderEditorStatic();
+    renderPrefixLabel();
+    renderPicker();
+    if (!ui.catalog) loadCatalog(false).catch(() => {});
+    editorCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    (editing ? fLabel : fKey).focus({ preventScroll: true });
+  }
+
+  function closeEditor() {
+    ui.editor = null;
+    ui.editorError = null;
+    editorCard.classList.add('hidden');
+    fKey.value = '';
+  }
+
+  function renderEditorStatic() {
+    const ed = ui.editor;
+    if (!ed) return;
+    const adding = ed.mode === 'add';
+    rowKey.classList.toggle('hidden', !adding);
+    editorTitle.textContent = adding ? t('form.addTitle') : t('form.editTitle', { name: ed.title });
+    editorHint.textContent = adding ? t('form.addHint') : t('form.editHint');
+    editorSave.textContent = adding ? t('form.add') : t('form.save');
+    editorError.classList.toggle('hidden', !ui.editorError);
+    editorError.textContent = ui.editorError ? t(ui.editorError.key, ui.editorError.params) : '';
+  }
+
+  function currentPrefix() {
+    const raw = fPrefixDefault.checked ? defaultPrefix() : fPrefix.value;
+    return String(raw || '').trim().replace(/^\/+|\/+$/g, '');
+  }
+
+  function renderPrefixLabel() {
+    const prefix = defaultPrefix();
+    fPrefixDefaultLabel.textContent = prefix ? t('form.prefixDefault', { prefix: prefix + '/' }) : t('form.prefixDefaultNone');
+    if (fPrefixDefault.checked) fPrefix.value = prefix;
+    fPrefix.disabled = fPrefixDefault.checked;
+    const models = ui.catalog && Array.isArray(ui.catalog.models) ? ui.catalog.models : [];
+    const sample = (ui.editor && ui.editor.selected.size ? [...ui.editor.selected][0] : (models[0] && models[0].id)) || 'model-id';
+    const p = currentPrefix();
+    // Unless CPA forces the prefix it also registers the bare model ID.
+    const forced = !!(ui.status && ui.status.config && ui.status.config.force_model_prefix);
+    registerPreview.textContent = p && !forced
+      ? t('form.registerAsBoth', { example: p + '/' + sample, bare: sample })
+      : t('form.registerAs', { example: (p ? p + '/' : '') + sample });
+  }
+
+  function modelMeta(model) {
+    const parts = [];
+    if (model.context_length) parts.push(t('picker.ctx', { ctx: fmtTokens(model.context_length) }));
+    const price = model.pricing || {};
+    if (price.input !== undefined || price.output !== undefined) {
+      parts.push(t('picker.price', { input: fmtPrice(price.input), output: fmtPrice(price.output) }));
+    }
+    return parts.join(' · ');
+  }
+
+  function updatePickerCount() {
+    const ed = ui.editor;
+    if (!ed) return;
+    const total = ui.catalog && Array.isArray(ui.catalog.models) ? ui.catalog.models.length : 0;
+    pickerCount.textContent = fModelsAll.checked ? t('picker.countAll', { total }) : t('picker.count', { selected: ed.selected.size, total });
+  }
+
+  function renderPicker() {
+    const ed = ui.editor;
+    if (!ed) return;
+    const all = fModelsAll.checked;
+    picker.classList.toggle('disabled', all);
+    pickerSelect.disabled = all;
+    pickerClear.disabled = all;
+    pickerList.textContent = '';
+    if (!ui.catalog) {
+      pickerList.appendChild(el('div', { class: 'empty' + (ui.catalogError ? ' danger-text' : ''), text: ui.catalogError ? t('picker.error', { msg: ui.catalogError }) : t('picker.loading') }));
+      ed.visible = [];
+      updatePickerCount();
+      return;
+    }
+    const models = Array.isArray(ui.catalog.models) ? ui.catalog.models : [];
+    const known = new Set(models.map((m) => m.id));
+    const rows = [...ed.selected].filter((id) => !known.has(id)).sort().map((id) => ({ id, missing: true }));
+    rows.push(...models);
+    const filter = ed.filter.trim().toLowerCase();
+    const visible = rows.filter((r) => !filter ||
+      r.id.toLowerCase().includes(filter) ||
+      String(r.name || '').toLowerCase().includes(filter) ||
+      String(r.owned_by || '').toLowerCase().includes(filter));
+    ed.visible = visible.map((r) => r.id);
+    if (visible.length === 0) {
+      pickerList.appendChild(el('div', { class: 'empty', text: t('picker.noMatch') }));
+    }
+    for (const r of visible) {
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.checked = all || ed.selected.has(r.id);
+      box.disabled = all;
+      box.addEventListener('change', () => {
+        if (box.checked) ed.selected.add(r.id); else ed.selected.delete(r.id);
+        updatePickerCount();
+        renderPrefixLabel();
+      });
+      pickerList.appendChild(el('label', { class: 'pick-row' + (r.missing ? ' missing' : '') },
+        box,
+        el('span', { class: 'mono', text: r.id }),
+        el('span', { class: 'pick-name', text: r.missing ? t('picker.missing') : (r.name || ''), title: r.name || '' }),
+        el('span', { class: 'pick-meta', text: r.missing ? '' : modelMeta(r) })));
+    }
+    updatePickerCount();
+  }
+
+  function editorFail(key, params) {
+    ui.editorError = { key, params: params || null };
+    renderEditorStatic();
+  }
+
+  async function saveEditor() {
+    const ed = ui.editor;
+    if (!ed) return;
+    const adding = ed.mode === 'add';
+    const body = {};
+    if (adding) {
+      const key = fKey.value.trim();
+      if (!key) { editorFail('form.needKey'); return; }
+      body.api_key = key;
+      if (fSkipVerify.checked) body.skip_verify = true;
+    } else {
+      body.auth_index = ed.authIndex;
+      body.name = ed.name;
+    }
+    const orig = ed.original || { label: '', proxy: '', prefix: null, priority: '', all: true, models: [] };
+
+    const label = fLabel.value.trim();
+    if (adding ? label !== '' : label !== orig.label) body.label = label;
+
+    // The proxy field shows the stored value with its password redacted;
+    // only send it when the user changed it.
+    const proxy = fProxy.value.trim();
+    if (adding ? proxy !== '' : proxy !== orig.proxy) body.proxy_url = proxy;
+
+    if (fPrefixDefault.checked) {
+      if (!adding && orig.prefix !== null && orig.prefix !== undefined) body.prefix = null;
+    } else {
+      const prefix = fPrefix.value.trim().replace(/^\/+|\/+$/g, '');
+      if (adding || prefix !== orig.prefix) body.prefix = prefix;
+    }
+
+    const priorityText = fPriority.value.trim();
+    if (priorityText !== '' && !/^-?\d+$/.test(priorityText)) { editorFail('form.badPriority'); return; }
+    if (adding ? priorityText !== '' : priorityText !== orig.priority) body.priority = priorityText === '' ? null : Number(priorityText);
+
+    if (fModelsAll.checked) {
+      if (!adding && !orig.all) body.models = null;
+    } else {
+      if (ed.selected.size === 0) { editorFail('form.needModels'); return; }
+      const selected = [...ed.selected].sort();
+      const before = orig.models.slice().sort();
+      if (adding || orig.all || selected.join('\n') !== before.join('\n')) body.models = selected;
+    }
+
+    ui.editorError = null;
+    renderEditorStatic();
+    setBusy(editorSave, true);
+    try {
+      const data = await api('/credentials', { method: adding ? 'POST' : 'PATCH', body });
+      const cred = data && data.credential;
+      const name = cred ? displayName(cred) : (ed.title || '');
+      closeEditor();
+      if (data && Array.isArray(data.unknown_models) && data.unknown_models.length) {
+        setLog('warn', 'log.unknownModels', { name, list: data.unknown_models.join(', ') });
+      } else {
+        setLog('ok', adding ? 'log.added' : 'log.updated', { name });
+      }
+      await refresh(true);
+      if (cred && cred.auth_index && adding) loadQuota(cred.auth_index);
+    } catch (error) {
+      if (isAuthError(error)) { showLogin('login.expired', error.message); return; }
+      ui.editorError = { key: 'log.actionFailed', params: { msg: error.message } };
+      renderEditorStatic();
+    } finally {
+      setBusy(editorSave, false);
+    }
+  }
+
+  // ---- i18n and wiring ----
+
+  function applyStaticI18n() {
+    document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
+    document.title = t('title');
+    document.querySelectorAll('[data-i18n]').forEach((node) => {
+      node.textContent = t(node.dataset.i18n);
+    });
+    loginKey.placeholder = t('login.placeholder');
+    pickerSearch.placeholder = t('picker.search');
+    renderHealth();
+    renderLoginError();
+    renderLog();
+    renderOverview();
+    renderKeys();
+    if (ui.editor) {
+      renderEditorStatic();
+      renderPrefixLabel();
+      renderPicker();
+    }
+    document.querySelectorAll('.lang-switch button').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.lang === currentLang);
+      btn.setAttribute('aria-pressed', btn.dataset.lang === currentLang ? 'true' : 'false');
+    });
+  }
+
+  function setLang(lang) {
+    if (!messages[lang]) return;
+    currentLang = lang;
+    try { localStorage.setItem(LANG_KEY, lang); } catch (_) { /* ignore */ }
+    applyStaticI18n();
+  }
+
+  document.querySelectorAll('.lang-switch button').forEach((btn) => {
+    btn.addEventListener('click', () => setLang(btn.dataset.lang));
+  });
+
+  applyStaticI18n();
+
+  refreshButton.addEventListener('click', () => refresh(false));
+  catalogButton.addEventListener('click', reloadCatalog);
+  addButton.addEventListener('click', () => openEditor('add'));
+  editorCancel.addEventListener('click', closeEditor);
+  editorForm.addEventListener('submit', (event) => { event.preventDefault(); saveEditor(); });
+  fPrefixDefault.addEventListener('change', () => {
+    if (!fPrefixDefault.checked && ui.editor && ui.editor.original && ui.editor.original.prefix !== null && ui.editor.original.prefix !== undefined) {
+      fPrefix.value = ui.editor.original.prefix;
+    }
+    renderPrefixLabel();
+  });
+  fPrefix.addEventListener('input', renderPrefixLabel);
+  fModelsAll.addEventListener('change', renderPicker);
+  fModelsPick.addEventListener('change', renderPicker);
+  pickerSearch.addEventListener('input', () => {
+    if (!ui.editor) return;
+    ui.editor.filter = pickerSearch.value;
+    renderPicker();
+  });
+  pickerSelect.addEventListener('click', () => {
+    if (!ui.editor) return;
+    for (const id of ui.editor.visible || []) ui.editor.selected.add(id);
+    renderPicker();
+    renderPrefixLabel();
+  });
+  pickerClear.addEventListener('click', () => {
+    if (!ui.editor) return;
+    ui.editor.selected.clear();
+    renderPicker();
+    renderPrefixLabel();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && managementKey && refreshTimer) refresh(true);
+  });
+
+  async function enter(data) {
+    showContent();
+    applyStatus(data);
+    if (!data.credentials || data.credentials.length === 0) openEditor('add');
+    loadAllQuotas();
+  }
+
+  loginForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const key = loginKey.value.trim();
+    if (!key) return;
+    managementKey = key;
+    setBusy(loginButton, true);
+    try {
+      const data = await api('/status');
+      loginKey.value = '';
+      await enter(data);
+    } catch (error) {
+      if (isAuthError(error) || !error.status) {
+        showLogin('login.failed', error.message);
+      } else {
+        // CPA accepted the key; only the plugin failed, so show the error in place.
+        loginKey.value = '';
+        showContent();
+        setHealth('error', 'health.error');
+        setLog('error', 'log.loadFailed', { msg: error.message });
+      }
+    } finally {
+      setBusy(loginButton, false);
+    }
+  });
+
+  // Load once on open. Without a remembered panel key, or when CPA rejects
+  // it, ask for the key instead.
+  async function start() {
+    managementKey = readPanelKey();
+    if (!managementKey) { showLogin(); return; }
+    try {
+      await enter(await api('/status'));
+    } catch (error) {
+      if (isAuthError(error)) { showLogin(); return; }
+      showContent();
+      setHealth('error', 'health.error');
+      setLog('error', 'log.loadFailed', { msg: error.message });
+    }
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>
