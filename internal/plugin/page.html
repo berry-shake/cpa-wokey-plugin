@@ -259,27 +259,40 @@
     .summary { box-shadow: var(--shadow-sm); }
     .summary .strip-value { font-size: 16px; }
     .summary .strip-note { font-size: 12px; }
+    .meters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .meters .strip-item { padding: 6px 14px; }
-    .cred-list { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; }
+    .meters .strip-item:nth-child(odd) { border-left: none; }
+    .meters .strip-item:nth-child(n+3) { border-top: 1px solid var(--border-subtle); }
+    .cred-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; padding: 14px 18px; }
+    .cred-list > .empty, .cred-list > .empty-state { grid-column: 1 / -1; }
     .cred {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
       min-width: 0;
-      padding: 12px 16px;
+      padding: 14px 16px 12px;
       background: var(--bg-inset);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-md);
     }
-    .cred-head { display: flex; align-items: center; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; }
-    .cred-title { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 260px; }
-    .cred-name { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 650; }
+    .cred-head { min-width: 0; }
+    .cred-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .cred-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 650; }
     .cred.off .cred-name { color: var(--text-secondary); }
-    .cred-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); }
-    .cred-tools { display: flex; align-items: center; justify-content: flex-end; gap: 6px 14px; flex-wrap: wrap; margin-left: auto; }
-    .cred-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 10px 24px; align-items: start; margin-top: 10px; }
-    .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 4px 20px; margin: 0; font-size: 12.5px; }
-    .fact { display: flex; gap: 8px; min-width: 0; }
-    .fact.wide { grid-column: 1 / -1; }
-    .fact dt { flex: none; color: var(--text-muted); }
-    .fact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+    .cred-file { margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); }
+    .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 12.5px; }
+    .facts dt { color: var(--text-muted); }
+    .facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+    .cred-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 12px;
+      flex-wrap: wrap;
+      margin-top: auto;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-subtle);
+    }
     .cred-usage { min-width: 0; display: grid; gap: 8px; }
     .cap-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-muted); }
     .cap-head strong { color: var(--success); font-variant-numeric: tabular-nums; }
@@ -478,7 +491,6 @@
       .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .summary .strip-item:nth-child(odd) { border-left: none; }
       .summary .strip-item:nth-child(n+3) { border-top: 1px solid var(--border-subtle); }
-      .cred-body { grid-template-columns: 1fr; }
       .config-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 720px) {
@@ -488,9 +500,6 @@
       .tabbar-side { width: 100%; justify-content: flex-end; padding-top: 4px; }
       .input.search { flex-basis: 100%; width: 100%; }
       .count { margin-left: 0; }
-      .meters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .meters .strip-item:nth-child(odd) { border-left: none; }
-      .meters .strip-item:nth-child(n+3) { border-top: 1px solid var(--border-subtle); }
       .modal-head, .modal-body { padding-left: 16px; padding-right: 16px; }
       .modal-foot { padding: 12px 16px; }
       .pick-row { grid-template-columns: 20px 1fr; }
@@ -873,12 +882,8 @@
       'auth.panel': 'Reusing the key remembered by the CPA panel',
       'auth.manual': 'Entered on this page, kept in memory only',
       'auth.switch': 'Use another key',
-      'summary.keys': 'Keys enabled',
-      'summary.cooling': '{n} cooling down',
-      'summary.disabled': '{n} disabled',
       'summary.balance': 'Available balance',
       'summary.accounts': '{n} accounts',
-      'summary.week': '7d {v}',
       'summary.pending': '{n} key(s) not checked',
       'summary.failed': '{n} key(s) failed',
       'usage.balance': 'Balance',
@@ -1065,12 +1070,8 @@
       'auth.panel': '正在复用 CPA 面板记住的密钥',
       'auth.manual': '在本页输入，只保存在页面内存中',
       'auth.switch': '换一个密钥',
-      'summary.keys': '启用的 Key',
-      'summary.cooling': '{n} 个冷却中',
-      'summary.disabled': '{n} 个已停用',
       'summary.balance': '可用余额',
       'summary.accounts': '{n} 个账户',
-      'summary.week': '7 天 {v}',
       'summary.pending': '{n} 个 Key 未查询',
       'summary.failed': '{n} 个 Key 查询失败',
       'usage.balance': '余额',
@@ -1690,8 +1691,6 @@
     const creds = credentials();
     keySummary.hidden = creds.length === 0;
     if (!creds.length) return;
-    const enabled = creds.filter((c) => !c.disabled).length;
-    const cooling = creds.filter((c) => !c.disabled && c.unavailable).length;
     const accounts = new Map();
     let daily = 0, weekly = 0, monthly = 0, loaded = 0, pending = 0, failed = 0, loading = false;
     for (const cred of creds) {
@@ -1720,15 +1719,12 @@
     const blank = loading ? '…' : '—';
     const item = (label, value, note) => keySummary.appendChild(statItem(label, value, note));
 
-    let keysNote = '';
-    if (cooling) keysNote = t('summary.cooling', { n: cooling });
-    else if (enabled < creds.length) keysNote = t('summary.disabled', { n: creds.length - enabled });
-    item(t('summary.keys'), enabled + ' / ' + creds.length, keysNote);
     const balanceNote = [];
     if (accounts.size > 1) balanceNote.push(t('summary.accounts', { n: accounts.size }));
     if (reserved > 0) balanceNote.push(t('usage.reserved', { v: fmtUSD(reserved) }));
     item(t('summary.balance'), accounts.size ? fmtUSD(available) : blank, balanceNote.join(' · '));
-    item(t('usage.spent24h'), loaded ? fmtUSD(daily) : blank, loaded ? t('summary.week', { v: fmtUSD(weekly) }) : '');
+    item(t('usage.spent24h'), loaded ? fmtUSD(daily) : blank);
+    item(t('usage.spent7d'), loaded ? fmtUSD(weekly) : blank);
     const missingNote = [];
     if (failed) missingNote.push(t('summary.failed', { n: failed }));
     if (pending) missingNote.push(t('summary.pending', { n: pending }));
@@ -1814,11 +1810,10 @@
     const models = Array.isArray(cred.models) ? cred.models : [];
     const missing = Array.isArray(cred.missing_models) ? cred.missing_models : [];
     const facts = el('dl', { class: 'facts' });
-    const addFact = (wide, label, value) => facts.appendChild(el('div', { class: 'fact' + (wide ? ' wide' : '') },
-      el('dt', { text: label }), el('dd', null, ...value)));
-    const fact = (label, ...value) => addFact(false, label, value);
-    // Free text (notes, error messages) can be long, so it gets a full row.
-    const wideFact = (label, ...value) => addFact(true, label, value);
+    const fact = (label, ...value) => {
+      facts.appendChild(el('dt', { text: label }));
+      facts.appendChild(el('dd', null, ...value));
+    };
     if (cred.label) fact(t('card.key'), el('span', { class: 'mono', text: cred.key_masked }));
     if (!cred.read_error) {
       fact(t('card.models'),
@@ -1831,12 +1826,12 @@
       let proxyText = t('proxy.inherit');
       if (cred.proxy_url) proxyText = isDirect(cred.proxy_url) ? t('proxy.direct') : cred.proxy_url;
       const proxyURL = !!cred.proxy_url && !isDirect(cred.proxy_url);
-      (proxyURL ? wideFact : fact)(t('card.proxy'), el('span', { class: proxyURL ? 'mono' : null, text: proxyText }));
+      fact(t('card.proxy'), el('span', { class: proxyURL ? 'mono' : null, text: proxyText }));
       if (cred.priority) fact(t('card.priority'), String(cred.priority));
-      if (cred.note) wideFact(t('card.note'), cred.note);
+      if (cred.note) fact(t('card.note'), cred.note);
     }
     const stateNote = cred.read_error || cred.status_message || '';
-    if (stateNote) wideFact(t('card.status'), el('span', { class: cred.read_error ? 'danger-text' : 'warn-text', text: stateNote }));
+    if (stateNote) fact(t('card.status'), el('span', { class: cred.read_error ? 'danger-text' : 'warn-text', text: stateNote }));
 
     const q = ui.quota[cred.auth_index];
     const meta = el('div', { class: 'cred-meta' },
@@ -1854,10 +1849,11 @@
       el('div', { class: 'cred-head' },
         el('div', { class: 'cred-title' },
           el('span', { class: 'cred-name', text: displayName(cred), title: displayName(cred) }),
-          el('span', { class: 'badge ' + badgeClass, text: t(badgeKey) }),
-          el('span', { class: 'cred-file', text: cred.name, title: cred.name })),
-        el('div', { class: 'cred-tools' }, meta, actions)),
-      el('div', { class: 'cred-body' }, facts, usageBlock(cred)));
+          el('span', { class: 'badge ' + badgeClass, text: t(badgeKey) })),
+        el('div', { class: 'cred-file', text: cred.name, title: cred.name })),
+      facts,
+      usageBlock(cred),
+      el('div', { class: 'cred-foot' }, meta, actions));
   }
 
   function renderKeys() {
