@@ -15,6 +15,8 @@ const (
 	defaultModelsRefreshMinutes  = 60
 	defaultRequestTimeoutSeconds = 600
 	defaultStreamIdleSeconds     = 300
+	defaultDataDir               = "plugins/wokey-data"
+	defaultLogRetention          = 1000
 )
 
 // Config is the plugin-owned subtree under plugins.configs.wokey in the CPA
@@ -34,6 +36,11 @@ type Config struct {
 	RequestTimeout time.Duration
 	// StreamIdleTimeout aborts a stream that has produced no bytes for this long.
 	StreamIdleTimeout time.Duration
+	// DataDir holds plugin data (the request log). Relative paths resolve
+	// against CPA's working directory.
+	DataDir string
+	// LogRetention is how many requests the request log keeps; 0 disables it.
+	LogRetention int
 }
 
 type rawConfig struct {
@@ -42,6 +49,8 @@ type rawConfig struct {
 	ModelsRefreshMinutes  *int    `yaml:"models-refresh-minutes"`
 	RequestTimeoutSeconds *int    `yaml:"request-timeout-seconds"`
 	StreamIdleSeconds     *int    `yaml:"stream-idle-timeout-seconds"`
+	DataDir               string  `yaml:"data-dir"`
+	LogRetention          *int    `yaml:"log-retention"`
 }
 
 func defaultConfig() Config {
@@ -51,6 +60,8 @@ func defaultConfig() Config {
 		ModelsRefreshInterval: defaultModelsRefreshMinutes * time.Minute,
 		RequestTimeout:        defaultRequestTimeoutSeconds * time.Second,
 		StreamIdleTimeout:     defaultStreamIdleSeconds * time.Second,
+		DataDir:               defaultDataDir,
+		LogRetention:          defaultLogRetention,
 	}
 }
 
@@ -96,6 +107,16 @@ func parseConfig(raw []byte) (Config, []string) {
 			cfg.StreamIdleTimeout = time.Duration(seconds) * time.Second
 		} else {
 			warnings = append(warnings, "ignoring non-positive stream-idle-timeout-seconds")
+		}
+	}
+	if dir := strings.TrimSpace(parsed.DataDir); dir != "" {
+		cfg.DataDir = dir
+	}
+	if parsed.LogRetention != nil {
+		if n := *parsed.LogRetention; n >= 0 {
+			cfg.LogRetention = min(n, 100000)
+		} else {
+			warnings = append(warnings, "ignoring negative log-retention")
 		}
 	}
 	return cfg, warnings

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -20,6 +21,7 @@ const (
 	modelsRefresh   = managementBase + "/models/refresh"
 	credentialsPath = managementBase + "/credentials"
 	quotaPath       = managementBase + "/credentials/quota"
+	logsPath        = managementBase + "/logs"
 
 	// maxManagementBody bounds request bodies of the management routes.
 	maxManagementBody = 1 << 20
@@ -54,6 +56,8 @@ func managementRoutes() managementRegistration {
 			{Method: http.MethodPost, Path: credentialsPath, Description: `Add a Wokey API key. Body: {"api_key","label","models","prefix","proxy_url","issuer_token"}.`},
 			{Method: http.MethodPatch, Path: credentialsPath, Description: `Edit a Wokey credential. Body: {"auth_index","label","models","prefix","proxy_url","priority","issuer_token"}.`},
 			{Method: http.MethodGet, Path: quotaPath, Description: "Balance and key usage of one Wokey credential (?auth_index=), plus Provider earnings when it has an issuing token."},
+			{Method: http.MethodGet, Path: logsPath, Description: "Request log, newest first (?search=&status=all|success|error&limit=&offset=), with a summary."},
+			{Method: http.MethodDelete, Path: logsPath, Description: "Clear the request log."},
 		},
 		Resources: []resourceDeclaration{
 			{Path: "/manage", Menu: displayName, Description: "Manage Wokey API keys, model selection and egress proxies."},
@@ -109,6 +113,23 @@ func (s *Service) handleManagement(req pluginapi.ManagementRequest) pluginapi.Ma
 	case quotaPath:
 		if method == http.MethodGet {
 			return s.credentialQuota(req.Query.Get("auth_index"))
+		}
+	case logsPath:
+		switch method {
+		case http.MethodGet:
+			limit, _ := strconv.Atoi(req.Query.Get("limit"))
+			offset, _ := strconv.Atoi(req.Query.Get("offset"))
+			return jsonResponse(http.StatusOK, s.reqlog.query(logQuery{
+				Search: req.Query.Get("search"),
+				Status: req.Query.Get("status"),
+				Limit:  limit,
+				Offset: offset,
+			}))
+		case http.MethodDelete:
+			if errClear := s.reqlog.clear(); errClear != nil {
+				return jsonResponse(http.StatusInternalServerError, errorBody{Error: "clear_failed", Message: errClear.Error()})
+			}
+			return jsonResponse(http.StatusOK, map[string]bool{"ok": true})
 		}
 	default:
 		return jsonResponse(http.StatusNotFound, errorBody{Error: "not_found", Message: "plugin route not found"})

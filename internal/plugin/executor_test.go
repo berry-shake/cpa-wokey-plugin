@@ -322,7 +322,7 @@ func TestRegisterCapabilities(t *testing.T) {
 	if !caps.AuthProvider || !caps.ModelProvider || !caps.Executor || !caps.ManagementAPI || !caps.QuotaProvider {
 		t.Errorf("capabilities = %+v", caps)
 	}
-	if reg.Metadata.Logo != logoPath || len(reg.Metadata.ConfigFields) != 5 {
+	if reg.Metadata.Logo != logoPath || len(reg.Metadata.ConfigFields) != 7 {
 		t.Errorf("metadata = %+v", reg.Metadata)
 	}
 	if negotiateSchemaVersion(0) != 1 || negotiateSchemaVersion(2) != 2 {

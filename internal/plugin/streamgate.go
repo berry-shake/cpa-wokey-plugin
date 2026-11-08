@@ -53,6 +53,8 @@ type streamGate struct {
 	open      bool
 	done      bool
 	failure   *pluginabi.Error
+	// tap, when set, sees every event with its classification.
+	tap func(streamEventKind, []byte)
 }
 
 func newStreamGate(endpoint string, sse bool, header http.Header, emit func([]byte) error) *streamGate {
@@ -63,9 +65,15 @@ func newStreamGate(endpoint string, sse bool, header http.Header, emit func([]by
 func (g *streamGate) push(event []byte) error {
 	if !g.sse {
 		g.open = true
+		if g.tap != nil {
+			g.tap(streamContent, nil)
+		}
 		return g.emit(event)
 	}
 	kind, detail := classifyStreamEvent(g.endpoint, event)
+	if g.tap != nil {
+		g.tap(kind, event)
+	}
 	switch kind {
 	case streamFailed:
 		if !g.open {
@@ -292,4 +300,12 @@ func nonEmpty(value any) bool {
 	default:
 		return true
 	}
+}
+
+// phase tells the request log whether output had reached the client.
+func (g *streamGate) phase() string {
+	if g.open {
+		return "stream"
+	}
+	return "request"
 }

@@ -465,6 +465,27 @@
     .badge.ok { background: var(--success-soft); color: var(--success); }
     .badge.warn { background: var(--warning-soft); color: var(--warning); }
     .badge.danger { background: var(--danger-soft); color: var(--danger); }
+    .log-grid { font-size: 12.5px; }
+    .log-head, .log-row > summary { display: grid; grid-template-columns: 150px minmax(140px,1.4fr) 90px 80px minmax(90px,0.7fr) minmax(140px,1.3fr) 110px 150px; gap: 10px; padding: 8px 18px; align-items: center; }
+    .log-head { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: var(--bg-inset); border-bottom: 1px solid var(--border-subtle); }
+    .log-row { border-bottom: 1px solid var(--border-subtle); }
+    .log-row > summary { cursor: pointer; list-style: none; }
+    .log-row > summary::-webkit-details-marker { display: none; }
+    .log-row > summary:hover { background: var(--bg-inset); }
+    .log-row > summary > div { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .log-detail { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 16px; padding: 10px 18px 14px; background: var(--bg-inset); }
+    .log-detail .sub { display: block; }
+    .log-detail .err { grid-column: 1 / -1; }
+    .log-row > summary > .clip { white-space: nowrap; }
+    .toolbar select.input { width: auto; flex: 0 0 auto; }
+    .pager { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 10px 18px; }
+    .pager:empty { display: none; }
+    @media (max-width: 1100px) {
+      .log-head { display: none; }
+      .log-row > summary { grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px 16px; padding: 10px 18px; align-items: start; }
+      .log-row > summary > [data-label]::before { content: attr(data-label); display: block; font-family: var(--font-sans); font-size: 11px; font-weight: 400; color: var(--text-muted); margin-bottom: 2px; }
+    }
+    @media (max-width: 720px) { .log-row > summary { grid-template-columns: repeat(2, minmax(0,1fr)); } }
     .empty { padding: 28px 18px; text-align: center; color: var(--text-muted); }
     .hidden { display: none !important; }
     .input {
@@ -571,6 +592,7 @@
         <button class="tab" type="button" role="tab" id="tab-keys" data-tab="keys" aria-controls="panel-keys" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 8.65-8.65M15.5 7.5l3 3M13 10l2 2"/></svg><span data-i18n="tab.keys">Credentials</span><span class="tab-count" id="tab-count-keys"></span></button>
         <button class="tab" type="button" role="tab" id="tab-models" data-tab="models" aria-controls="panel-models" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 4.5-9 4.5-9-4.5L12 3Z"/><path d="m3 12 9 4.5 9-4.5M3 16.5 12 21l9-4.5"/></svg><span data-i18n="tab.models">Model catalog</span><span class="tab-count" id="tab-count-models"></span></button>
         <button class="tab" type="button" role="tab" id="tab-config" data-tab="config" aria-controls="panel-config" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg><span data-i18n="tab.config">Configuration</span></button>
+        <button class="tab" type="button" role="tab" id="tab-logs" data-tab="logs" aria-controls="panel-logs" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span data-i18n="tab.logs">Request log</span></button>
       </div>
       <div class="tabbar-side">
         <span class="hint" id="checked-at"></span>
@@ -624,6 +646,33 @@
         <div id="catalog-body">
           <div class="empty" data-i18n="keys.notLoaded">Not loaded yet.</div>
         </div>
+      </section>
+    </section>
+
+    <section class="panel" role="tabpanel" id="panel-logs" aria-labelledby="tab-logs" hidden>
+      <div class="summary strip" id="logs-summary"></div>
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <h2 data-i18n="logs.title">Request log</h2>
+            <span class="hint" id="logs-hint"></span>
+          </div>
+          <div class="actions">
+            <button id="logs-refresh" class="btn btn-secondary btn-sm" type="button" data-i18n="logs.refresh">Refresh</button>
+            <button id="logs-clear" class="btn btn-danger btn-sm" type="button" data-i18n="logs.clear">Clear</button>
+          </div>
+        </div>
+        <div class="toolbar">
+          <input class="input input-sm search" id="logs-search" type="search" spellcheck="false">
+          <select class="input input-sm" id="logs-status">
+            <option value="all" data-i18n="logs.all">All</option>
+            <option value="success" data-i18n="logs.success">Success</option>
+            <option value="error" data-i18n="logs.error">Error</option>
+          </select>
+          <span class="count" id="logs-count"></span>
+        </div>
+        <div class="log-grid" id="logs-body"><div class="empty" data-i18n="keys.notLoaded">Not loaded yet.</div></div>
+        <div class="pager" id="logs-pager"></div>
       </section>
     </section>
 
@@ -783,6 +832,50 @@
       'tab.keys': 'Credentials',
       'tab.models': 'Model catalog',
       'tab.config': 'Configuration',
+      'tab.logs': 'Request log',
+      'logs.title': 'Request log',
+      'logs.refresh': 'Refresh',
+      'logs.clear': 'Clear',
+      'logs.confirmClear': 'Click again to clear',
+      'logs.all': 'All',
+      'logs.success': 'Success',
+      'logs.error': 'Error',
+      'logs.search': 'Search model, key, error',
+      'logs.hint': 'Keeps the latest {n} requests on disk',
+      'logs.count': '{n} requests',
+      'logs.empty': 'No requests yet.',
+      'logs.col.time': 'Time',
+      'logs.col.model': 'Model / upstream',
+      'logs.col.effort': 'Effort',
+      'logs.col.result': 'Result',
+      'logs.col.cred': 'Credential',
+      'logs.col.served': 'Served model',
+      'logs.col.timing': 'TTFT / total',
+      'logs.col.usage': 'Usage',
+      'logs.sum.requests': 'Requests',
+      'logs.sum.tokens': 'Tokens',
+      'logs.sum.cache': 'Cache hit rate',
+      'logs.sum.speed': 'Avg output speed',
+      'logs.sum.split': '{ok} ok · {bad} failed',
+      'logs.sum.io': 'in {i} · out {o} · cached {c}',
+      'logs.d.endpoint': 'Endpoint',
+      'logs.d.stream': 'Stream',
+      'logs.d.status': 'HTTP status',
+      'logs.d.code': 'Error code',
+      'logs.d.phase': 'Error phase',
+      'logs.d.cacheWrite': 'Cache write',
+      'logs.d.reasoning': 'Reasoning tokens',
+      'logs.d.speed': 'Output speed',
+      'logs.d.auth': 'Auth ID',
+      'logs.d.error': 'Error',
+      'logs.phase.request': 'before output',
+      'logs.phase.stream': 'during stream',
+      'logs.yes': 'yes',
+      'logs.no': 'no',
+      'logs.prev': 'Previous',
+      'logs.next': 'Next',
+      'logs.page': '{from}–{to} of {total}',
+      'logs.cleared': 'Request log cleared.',
       'checkedAt': 'Updated {time}',
       'log.dismiss': 'Dismiss',
       'config.title': 'Plugin configuration',
@@ -982,6 +1075,50 @@
       'tab.keys': '凭据管理',
       'tab.models': '模型目录',
       'tab.config': '配置概览',
+      'tab.logs': '请求日志',
+      'logs.title': '请求日志',
+      'logs.refresh': '刷新',
+      'logs.clear': '清空',
+      'logs.confirmClear': '再点一次确认清空',
+      'logs.all': '全部',
+      'logs.success': '成功',
+      'logs.error': '失败',
+      'logs.search': '搜索模型、凭据、错误',
+      'logs.hint': '磁盘上保留最近 {n} 条请求',
+      'logs.count': '{n} 条请求',
+      'logs.empty': '还没有请求。',
+      'logs.col.time': '时间',
+      'logs.col.model': '模型 / 上游',
+      'logs.col.effort': '思考强度',
+      'logs.col.result': '结果',
+      'logs.col.cred': '凭据',
+      'logs.col.served': '实际模型',
+      'logs.col.timing': '首字 / 耗时',
+      'logs.col.usage': '用量',
+      'logs.sum.requests': '请求数',
+      'logs.sum.tokens': 'Token',
+      'logs.sum.cache': '缓存命中率',
+      'logs.sum.speed': '平均输出速度',
+      'logs.sum.split': '成功 {ok} · 失败 {bad}',
+      'logs.sum.io': '输入 {i} · 输出 {o} · 缓存 {c}',
+      'logs.d.endpoint': '接口',
+      'logs.d.stream': '流式',
+      'logs.d.status': 'HTTP 状态',
+      'logs.d.code': '错误码',
+      'logs.d.phase': '出错阶段',
+      'logs.d.cacheWrite': '缓存写入',
+      'logs.d.reasoning': '思考 Token',
+      'logs.d.speed': '输出速度',
+      'logs.d.auth': 'Auth ID',
+      'logs.d.error': '错误信息',
+      'logs.phase.request': '输出前',
+      'logs.phase.stream': '流式中途',
+      'logs.yes': '是',
+      'logs.no': '否',
+      'logs.prev': '上一页',
+      'logs.next': '下一页',
+      'logs.page': '第 {from}–{to} 条，共 {total} 条',
+      'logs.cleared': '请求日志已清空。',
       'checkedAt': '更新于 {time}',
       'log.dismiss': '关闭',
       'config.title': '插件配置',
@@ -1474,6 +1611,7 @@
 
   // The model tab loads the full catalog lazily, and only once signed in.
   function ensureTabData() {
+    if (managementKey && currentTab === 'logs') loadLogs(true).catch(() => {});
     if (managementKey && currentTab === 'models' && !ui.catalog && !ui.catalogLoading) {
       loadCatalog(false).catch(() => {});
     }
@@ -2113,7 +2251,10 @@
   function startAutoRefresh() {
     stopAutoRefresh();
     refreshTimer = setInterval(() => {
-      if (document.visibilityState === 'visible') refresh(true);
+      if (document.visibilityState === 'visible') {
+        refresh(true);
+        if (currentTab === 'logs') loadLogs(true).catch(() => {});
+      }
     }, REFRESH_MS);
   }
 
@@ -2516,6 +2657,8 @@
     renderToast();
     renderCheckedAt();
     renderConfig();
+    logsSearch.placeholder = t('logs.search');
+    renderLogs();
     renderSummary();
     renderKeys();
     renderModels();
@@ -2529,6 +2672,137 @@
       btn.setAttribute('aria-pressed', btn.dataset.lang === currentLang ? 'true' : 'false');
     });
   }
+
+
+  // ---- Request log tab ----
+  const logsBody = $('logs-body');
+  const logsPager = $('logs-pager');
+  const logsSummary = $('logs-summary');
+  const logsSearch = $('logs-search');
+  const logsStatus = $('logs-status');
+  const logsCount = $('logs-count');
+  const logsHint = $('logs-hint');
+  const logsRefresh = $('logs-refresh');
+  const logsClear = $('logs-clear');
+  const LOG_PAGE = 50;
+  const logState = { page: null, offset: 0, seq: 0, armed: null };
+
+  async function loadLogs(silent) {
+    const seq = ++logState.seq;
+    const params = new URLSearchParams({ limit: LOG_PAGE, offset: logState.offset, status: logsStatus.value, search: logsSearch.value.trim() });
+    if (!silent) setBusy(logsRefresh, true);
+    try {
+      const page = await api('/logs?' + params.toString());
+      if (seq !== logState.seq) return;
+      logState.page = page;
+      renderLogs();
+    } catch (error) {
+      handleError(error, 'log.loadFailed');
+    } finally {
+      if (!silent) setBusy(logsRefresh, false);
+    }
+  }
+
+  function fmtMS(ms) {
+    if (ms === null || ms === undefined) return '—';
+    return ms >= 1000 ? (ms / 1000).toFixed(ms >= 10000 ? 0 : 1) + 's' : ms + 'ms';
+  }
+  function fmtRate(v) { return v === null || v === undefined ? '—' : (v >= 100 ? Math.round(v) : v.toFixed(1)) + ' tok/s'; }
+  function fmtPct(v) { return v === null || v === undefined ? '—' : (v * 100).toFixed(1) + '%'; }
+
+  function stripItem(label, value, note) {
+    return el('div', { class: 'strip-item' },
+      el('div', { class: 'strip-label', text: label }),
+      el('div', { class: 'strip-line' }, el('span', { class: 'strip-value', text: value })),
+      note ? el('div', { class: 'strip-note', text: note }) : null);
+  }
+
+  function detailItem(label, value, extra) {
+    return el('div', { class: extra || '' }, el('span', { class: 'sub', text: label }), el('span', { class: 'mono', text: value }));
+  }
+
+  function renderLogs() {
+    const page = logState.page;
+    logsSummary.replaceChildren();
+    logsPager.replaceChildren();
+    if (!page) return;
+    const sum = page.summary || {};
+    logsSummary.append(
+      stripItem(t('logs.sum.requests'), String(sum.requests || 0), t('logs.sum.split', { ok: sum.success || 0, bad: sum.failed || 0 })),
+      stripItem(t('logs.sum.tokens'), fmtTokens((sum.input_tokens || 0) + (sum.output_tokens || 0)), t('logs.sum.io', { i: fmtTokens(sum.input_tokens), o: fmtTokens(sum.output_tokens), c: fmtTokens(sum.cached_tokens) })),
+      stripItem(t('logs.sum.cache'), fmtPct(sum.cache_hit_rate)),
+      stripItem(t('logs.sum.speed'), fmtRate(sum.output_tokens_per_second)));
+    logsHint.textContent = t('logs.hint', { n: page.retention });
+    logsCount.textContent = t('logs.count', { n: page.total });
+    const items = page.items || [];
+    if (!items.length) {
+      logsBody.replaceChildren(el('div', { class: 'empty', text: t('logs.empty') }));
+      return;
+    }
+    const cols = ['time', 'model', 'effort', 'result', 'cred', 'served', 'timing', 'usage'];
+    const head = el('div', { class: 'log-head' }, cols.map((c) => el('div', { text: t('logs.col.' + c) })));
+    const rows = items.map((e) => {
+      const ok = e.status === 'success';
+      const result = el('span', { class: 'badge ' + (ok ? 'ok' : 'danger'), text: ok ? String(e.http_status || 200) : String(e.http_status || t('logs.error')), title: e.error || '' });
+      const usage = t('logs.sum.io', { i: fmtTokens(e.input_tokens), o: fmtTokens(e.output_tokens), c: fmtTokens(e.cached_tokens) });
+      const summary = el('summary', null,
+        el('div', { class: 'nowrap', text: formatWhen(e.time), 'data-label': t('logs.col.time') }),
+        el('div', { 'data-label': t('logs.col.model') }, el('div', { class: 'strong', text: e.model || '—' }), e.upstream_model && e.upstream_model !== e.model ? el('div', { class: 'sub', text: e.upstream_model }) : null),
+        el('div', { text: e.reasoning_effort || '—', 'data-label': t('logs.col.effort') }),
+        el('div', { 'data-label': t('logs.col.result') }, result),
+        el('div', { class: 'clip', text: e.credential || e.auth_id || '—', title: e.auth_id || '', 'data-label': t('logs.col.cred') }),
+        el('div', { class: 'mono clip', text: e.served_model || '—', title: e.served_model || '', 'data-label': t('logs.col.served') }),
+        el('div', { class: 'nowrap', text: fmtMS(e.ttft_ms) + ' / ' + fmtMS(e.duration_ms), 'data-label': t('logs.col.timing') }),
+        el('div', { class: 'sub', text: usage, 'data-label': t('logs.col.usage') }));
+      const detail = el('div', { class: 'log-detail' },
+        detailItem('ID', e.id),
+        detailItem(t('logs.d.endpoint'), e.endpoint || '—'),
+        detailItem(t('logs.d.stream'), e.stream ? t('logs.yes') : t('logs.no')),
+        detailItem(t('logs.d.status'), String(e.http_status || '—')),
+        detailItem(t('logs.d.auth'), e.auth_id || '—'),
+        detailItem(t('logs.d.cacheWrite'), String(e.cache_write_tokens || 0)),
+        detailItem(t('logs.d.reasoning'), String(e.reasoning_tokens || 0)),
+        detailItem(t('logs.d.speed'), fmtRate(e.output_tokens_per_second)),
+        e.error_code ? detailItem(t('logs.d.code'), e.error_code) : null,
+        e.error_phase ? detailItem(t('logs.d.phase'), t('logs.phase.' + e.error_phase)) : null,
+        e.error ? detailItem(t('logs.d.error'), e.error, 'err danger-text') : null);
+      return el('details', { class: 'log-row' }, summary, detail);
+    });
+    logsBody.replaceChildren(head, ...rows);
+    if (page.total > LOG_PAGE) {
+      const from = page.offset + 1, to = page.offset + items.length;
+      logsPager.append(
+        el('span', { class: 'sub', text: t('logs.page', { from, to, total: page.total }) }),
+        el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: t('logs.prev'), disabled: page.offset <= 0, onclick: () => { logState.offset = Math.max(0, page.offset - LOG_PAGE); loadLogs(true); } }),
+        el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: t('logs.next'), disabled: to >= page.total, onclick: () => { logState.offset = page.offset + LOG_PAGE; loadLogs(true); } }));
+    }
+  }
+
+  let logsSearchTimer = null;
+  logsSearch.addEventListener('input', () => {
+    clearTimeout(logsSearchTimer);
+    logsSearchTimer = setTimeout(() => { logState.offset = 0; loadLogs(true); }, 250);
+  });
+  logsStatus.addEventListener('change', () => { logState.offset = 0; loadLogs(true); });
+  logsRefresh.addEventListener('click', () => loadLogs(false));
+  logsClear.addEventListener('click', async () => {
+    if (!logState.armed) {
+      logsClear.classList.add('armed');
+      logsClear.textContent = t('logs.confirmClear');
+      logState.armed = setTimeout(() => { logState.armed = null; logsClear.classList.remove('armed'); logsClear.textContent = t('logs.clear'); }, 3000);
+      return;
+    }
+    clearTimeout(logState.armed);
+    logState.armed = null;
+    logsClear.classList.remove('armed');
+    logsClear.textContent = t('logs.clear');
+    try {
+      await api('/logs', { method: 'DELETE' });
+      logState.offset = 0;
+      setLog('ok', 'logs.cleared');
+      await loadLogs(true);
+    } catch (error) { handleError(error); }
+  });
 
   function setLang(lang) {
     if (!messages[lang]) return;

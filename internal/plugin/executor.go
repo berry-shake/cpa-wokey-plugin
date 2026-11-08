@@ -58,6 +58,10 @@ type upstreamCall struct {
 	header   http.Header
 	client   *http.Client
 	authID   string
+	// model, upstreamModel and label describe the call for the request log.
+	model         string
+	upstreamModel string
+	label         string
 }
 
 // prepareCall resolves the credential, egress and upstream model for one
@@ -120,6 +124,10 @@ func (s *Service) prepareCall(req pluginapi.ExecutorRequest, endpoint string) (*
 		header:   header,
 		client:   s.clients.client(setting),
 		authID:   req.AuthID,
+
+		model:         model,
+		upstreamModel: upstream,
+		label:         firstNonEmpty(cred.Label, req.AuthID),
 	}, nil
 }
 
@@ -158,25 +166,38 @@ func (s *Service) countTokens(req pluginapi.ExecutorRequest) []byte {
 func (s *Service) executeBuffered(req pluginapi.ExecutorRequest, endpoint string) []byte {
 	call, perr := s.prepareCall(req, endpoint)
 	if perr != nil {
+		s.recordFailure(req.Model, endpoint, false, req.AuthID, perr)
+		return errorEnvelopeFrom(perr)
+	}
+	var rec *callRecord
+	if endpoint != endpointCountTokens {
+		rec = s.startRecord(call, false)
+	}
+	fail := func(perr *pluginabi.Error) []byte {
+		rec.finish(perr, "request")
 		return errorEnvelopeFrom(perr)
 	}
 	ctx, cancel := context.WithTimeout(s.ctx, s.config().RequestTimeout)
 	defer cancel()
 	httpReq, errReq := call.newRequest(ctx)
 	if errReq != nil {
-		return errorEnvelopeFrom(transportError(errReq))
+		return fail(transportError(errReq))
 	}
 	resp, errDo := call.client.Do(httpReq)
 	if errDo != nil {
-		return errorEnvelopeFrom(transportError(errDo))
+		return fail(transportError(errDo))
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, errRead := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if errRead != nil {
-		return errorEnvelopeFrom(transportError(fmt.Errorf("read response: %w", errRead)))
+		return fail(transportError(fmt.Errorf("read response: %w", errRead)))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return errorEnvelopeFrom(upstreamError(resp.StatusCode, resp.Header, body, endpoint))
+		return fail(upstreamError(resp.StatusCode, resp.Header, body, endpoint))
+	}
+	if rec != nil {
+		rec.observeJSON(body)
+		rec.finish(nil, "")
 	}
 	return okEnvelope(pluginapi.ExecutorResponse{
 		Payload: body,

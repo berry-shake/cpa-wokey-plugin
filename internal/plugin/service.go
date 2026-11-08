@@ -76,6 +76,7 @@ type Service struct {
 	// ("" when built without a catalog), so catalog changes can be pushed to
 	// CPA by re-saving only the affected auth files.
 	registered sync.Map
+	reqlog     *requestLog
 }
 
 // New builds a service. host may be nil in tests.
@@ -84,7 +85,7 @@ func New(version string, host HostCaller) *Service {
 		version = "0.0.0-dev"
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Service{
+	svc := &Service{
 		version:    version,
 		host:       host,
 		now:        time.Now,
@@ -96,6 +97,8 @@ func New(version string, host HostCaller) *Service {
 		issuerBase: defaultIssuerBaseURL,
 		kick:       make(chan struct{}, 1),
 	}
+	svc.reqlog = newRequestLog(func(message string) { svc.logf("warn", message, nil) })
+	return svc
 }
 
 // Close stops background work and in-flight streams.
@@ -251,6 +254,7 @@ func (s *Service) register(request []byte) rpcRegistration {
 	for _, warning := range warnings {
 		s.logf("warn", "wokey: "+warning, nil)
 	}
+	s.reqlog.configure(cfg.DataDir, cfg.LogRetention)
 	s.loopOnce.Do(func() { go s.refreshLoop() })
 	if previous.ModelPrefix != cfg.ModelPrefix || previous.BaseURL != cfg.BaseURL {
 		// The default auth prefix is applied when CPA parses an auth file,
@@ -291,6 +295,8 @@ func configFields() []pluginapi.ConfigField {
 		{Name: "models-refresh-minutes", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultModelsRefreshMinutes, Description: "How often to poll Wokey's model catalog; 0 disables polling."},
 		{Name: "request-timeout-seconds", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultRequestTimeoutSeconds, Description: "Timeout for non-streaming requests and for stream response headers."},
 		{Name: "stream-idle-timeout-seconds", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultStreamIdleSeconds, Description: "Abort a stream after this long without upstream bytes."},
+		{Name: "data-dir", Type: pluginapi.ConfigFieldTypeString, Default: defaultDataDir, Description: "Directory for plugin data such as the request log, relative to CPA's working directory."},
+		{Name: "log-retention", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultLogRetention, Description: "How many requests the request log keeps; 0 disables it."},
 	}
 }
 

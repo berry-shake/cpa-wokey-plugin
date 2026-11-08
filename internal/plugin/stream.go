@@ -52,13 +52,19 @@ func (s *Service) executeStream(req rpcExecutorRequest) []byte {
 	req.Stream = true
 	call, perr := s.prepareCall(req.ExecutorRequest, endpoint)
 	if perr != nil {
+		s.recordFailure(req.Model, endpoint, true, req.AuthID, perr)
+		return errorEnvelopeFrom(perr)
+	}
+	rec := s.startRecord(call, true)
+	fail := func(perr *pluginabi.Error) []byte {
+		rec.finish(perr, "request")
 		return errorEnvelopeFrom(perr)
 	}
 	ctx, cancel := context.WithCancelCause(s.ctx)
 	httpReq, errReq := call.newRequest(ctx)
 	if errReq != nil {
 		cancel(nil)
-		return errorEnvelopeFrom(transportError(errReq))
+		return fail(transportError(errReq))
 	}
 	// Bound the wait for response headers; the body is bounded by the idle timer.
 	headerTimer := time.AfterFunc(s.config().RequestTimeout, func() { cancel(errStreamIdle) })
@@ -66,13 +72,13 @@ func (s *Service) executeStream(req rpcExecutorRequest) []byte {
 	headerTimer.Stop()
 	if errDo != nil {
 		cancel(nil)
-		return errorEnvelopeFrom(transportError(errDo))
+		return fail(transportError(errDo))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes*4))
 		_ = resp.Body.Close()
 		cancel(nil)
-		return errorEnvelopeFrom(upstreamError(resp.StatusCode, resp.Header, body, endpoint))
+		return fail(upstreamError(resp.StatusCode, resp.Header, body, endpoint))
 	}
 	headers := filterHeaders(resp.Header, forwardedResponseHeaders)
 	sse := isEventStream(resp.Header.Get("Content-Type"))
@@ -86,9 +92,11 @@ func (s *Service) executeStream(req rpcExecutorRequest) []byte {
 			chunks = append(chunks, pluginapi.ExecutorStreamChunk{Payload: payload})
 			return nil
 		})
+		gate.tap = rec.observe
 		if failure := gate.finish(ctx, pumpStream(resp.Body, sse, gate.push, func() {})); failure != nil {
-			return errorEnvelopeFrom(failure)
+			return fail(failure)
 		}
+		rec.finish(nil, "")
 		return okEnvelope(rpcExecutorStreamResponse{Headers: headers, Chunks: chunks})
 	}
 
@@ -108,13 +116,17 @@ func (s *Service) executeStream(req rpcExecutorRequest) []byte {
 			}
 			return nil
 		})
+		gate.tap = rec.observe
 		errPump := pumpStream(resp.Body, sse, gate.push, func() { idleTimer.Reset(idle) })
 		if emitErr != nil {
 			// The client is gone or CPA closed the stream; nothing to report.
 			s.closeStream(req.StreamID, nil)
+			rec.finish(&pluginabi.Error{Code: "client_closed", Message: "client closed the stream: " + emitErr.Error()}, gate.phase())
 			return
 		}
-		s.closeStream(req.StreamID, gate.finish(ctx, errPump))
+		failure := gate.finish(ctx, errPump)
+		s.closeStream(req.StreamID, failure)
+		rec.finish(failure, gate.phase())
 	}()
 	return okEnvelope(rpcExecutorStreamResponse{Headers: headers})
 }
