@@ -5,9 +5,9 @@
 - 每个 Wokey API Key 是一个认证文件（`{"type":"wokey","api_key":"..."}`），和其他凭证一样参与 CPA 的选号、冷却和故障转移；
 - 自动拉取 Wokey 公开模型目录并注册到 CPA，前缀走 CPA 通用的 `prefix` 机制，默认 `wokey/<模型 ID>`；每个 Key 可以只注册选中的模型；
 - 请求按客户端格式原样转发到 Wokey 对应的接口，不做协议转换；
-- 余额、Key 用量和 Key 限额显示在 CPA 的额度面板里；
+- CPA 的额度面板显示每个 Key 近 24 小时 / 7 天 / 30 天的消费，设置了限额的 Key 另有限额进度条；
 - 每个 Key 可以单独配置出口代理（CPA 通用认证文件字段 `proxy_url`）；
-- 自带管理页：添加、编辑、启停、删除 Key，选择上游模型，查看余额。
+- 自带管理页：添加、编辑、启停、删除 Key，选择上游模型，查看账户余额和消费。
 
 ## 环境要求
 
@@ -33,7 +33,7 @@ plugins:
 ```bash
 curl -X POST -H "Authorization: Bearer $MANAGEMENT_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"version":"0.1.0"}' \
+  -d '{"version":"0.1.1"}' \
   http://127.0.0.1:8317/v0/management/plugin-store/wokey/install
 ```
 
@@ -179,10 +179,14 @@ plugins:
 ```
 
 - 从管理面板里打开时复用面板"记住密码"保存的管理密钥；直接打开时手动输入，只保存在页面内存里。
-- 概览：模型目录数量和更新时间、Key 数量；可以刷新、重新拉取模型目录、添加 Key。
-- Key 列表：状态、注册的模型数、前缀、出口代理、余额和 Key 用量；每行可以编辑、启用/停用、删除（删除需要 4 秒内再点一次确认）。
-- 编辑：名称、出口代理、模型前缀、优先级，以及"全部模型 / 只注册选中的模型"，选模型时可以搜索、按价格和上下文长度对比。
-- 添加 Key 时默认先调用 Wokey 校验 Key 是否有效，Key 的名称默认用 Wokey 那边的 label。
+- **API Key** 页：
+  - 顶部汇总启用的 Key 数、可用余额、近 24 小时和 30 天消费。余额按账户去重，同一账户的多个 Key 只算一次。
+  - 每个 Key 一张卡片，显示状态、注册的模型数、前缀、出口代理，以及余额、24h / 7d / 30d 消费和限额进度条。
+  - 卡片上可以编辑、启用/停用、删除（删除需要 4 秒内再点一次确认）；可以按名称、Key 或文件名搜索。
+  - 打开页面时自动查询启用的 Key 的余额，"刷新余额"重新查询全部。
+- 添加和编辑在弹窗里进行：名称、出口代理、模型前缀、优先级，以及"全部模型 / 只注册选中的模型"，选模型时可以搜索、按价格和上下文长度对比。添加 Key 时默认先调用 Wokey 校验 Key 是否有效，名称默认用 Wokey 那边的 label。
+- **模型目录** 页：Wokey 公开模型的提供方、上下文长度、价格，以及每个模型在 CPA 里注册的名字和服务它的 Key 数。
+- **配置概览** 页：插件配置的当前生效值（可以展开成 YAML）、CPA 的强制前缀开关和全局代理。强制前缀没开时会提示同名模型会进入公共号池。
 - 支持 English / 中文。
 
 启用、停用和删除走 CPA 原生的认证文件接口（`PATCH /v0/management/auth-files/status`、`DELETE /v0/management/auth-files?name=...`），和在 CPA 面板里操作效果相同。
@@ -197,7 +201,7 @@ GET   /v0/management/plugins/wokey/models           模型目录（价格为每�
 POST  /v0/management/plugins/wokey/models/refresh   强制重新拉取模型目录
 POST  /v0/management/plugins/wokey/credentials      添加 Key
 PATCH /v0/management/plugins/wokey/credentials      编辑 Key
-GET   /v0/management/plugins/wokey/credentials/quota?auth_index=...   余额和 Key 用量
+GET   /v0/management/plugins/wokey/credentials/quota?auth_index=...   账户余额和 Key 消费
 ```
 
 `/v0/management` 路由由 CPA 宿主先校验管理密钥，通过后才转发给插件。
@@ -229,7 +233,7 @@ curl -X PATCH -H "Authorization: Bearer $MANAGEMENT_KEY" \
 ```bash
 go test ./...
 CGO_ENABLED=1 go build -buildmode=c-shared \
-  -ldflags '-X main.pluginVersion=0.1.0-dev' \
+  -ldflags '-X main.pluginVersion=0.1.1-dev' \
   -o wokey.dylib .
 ```
 

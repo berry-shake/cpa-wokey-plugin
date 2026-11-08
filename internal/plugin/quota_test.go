@@ -25,7 +25,7 @@ func TestQuotaFromAccountWithCap(t *testing.T) {
 		Key:     &keyInfo{Label: "main", UsageUSD: 7.5, DailyUSD: 0.5, WeeklyUSD: 3, MonthlyUSD: 7.5, LimitUSD: &limit, LimitRemaining: &remaining, LimitResetLabel: "monthly"},
 	})
 	got := metricValues(resp)
-	want := map[string]float64{"balance": 42.5, "reserved": 0.75, "spent_24h": 0.5, "spent_7d": 3, "spent_30d": 7.5, "cap_left": 2.5}
+	want := map[string]float64{"spent_24h": 0.5, "spent_7d": 3, "spent_30d": 7.5}
 	if len(got) != len(want) {
 		t.Fatalf("summary = %v", got)
 	}
@@ -46,19 +46,20 @@ func TestQuotaFromAccountWithCap(t *testing.T) {
 	if bucket.Window != "monthly" || bucket.RemainingFraction != 0.25 || !strings.Contains(bucket.Description, "$2.50 of $10.00") {
 		t.Fatalf("bucket = %+v", bucket)
 	}
-	if resp.Subscription == nil || resp.Subscription.TierName != "main" {
+	if resp.Subscription != nil {
 		t.Fatalf("subscription = %+v", resp.Subscription)
 	}
 }
 
 func TestQuotaFromAccountWithoutCap(t *testing.T) {
-	resp := quotaFromAccount(accountInfo{Key: &keyInfo{UsageUSD: 12}})
+	resp := quotaFromAccount(accountInfo{Key: &keyInfo{UsageUSD: 12, DailyUSD: 1, WeeklyUSD: 2, MonthlyUSD: 3}})
 	got := metricValues(resp)
-	if got["spent_total"] != 12 || len(resp.Groups) != 0 || resp.Subscription != nil {
+	if len(got) != 3 || got["spent_24h"] != 1 || got["spent_7d"] != 2 || got["spent_30d"] != 3 || len(resp.Groups) != 0 {
 		t.Fatalf("resp = %+v", resp)
 	}
-	if _, ok := got["balance"]; ok {
-		t.Fatal("no balance metric without balance info")
+	// The balance alone renders nothing in CPA's quota panel.
+	if resp = quotaFromAccount(accountInfo{Balance: &balanceInfo{AvailableUSD: 5}}); len(resp.Summary) != 0 {
+		t.Fatalf("balance only = %+v", resp)
 	}
 
 	// A zero cap and an overspent key clamp to an empty bucket.
@@ -126,8 +127,9 @@ func TestQuotaFetch(t *testing.T) {
 	if !envelope.OK {
 		t.Fatalf("quota: %+v", envelope.Error)
 	}
-	if got := metricValues(mustDecode[pluginapi.QuotaFetchResponse](t, envelope.Result)); got["balance"] != 42.5 || got["cap_left"] != 8.5 {
-		t.Fatalf("metrics = %v", got)
+	resp := mustDecode[pluginapi.QuotaFetchResponse](t, envelope.Result)
+	if got := metricValues(resp); len(got) != 3 || got["spent_24h"] != 0.25 || got["spent_30d"] != 1.5 || len(resp.Groups) != 1 {
+		t.Fatalf("quota = %+v", resp)
 	}
 
 	// Without storage the auth file on disk is used.
@@ -164,5 +166,22 @@ func TestOptionalNumber(t *testing.T) {
 	}
 	if got := numberField(map[string]any{"available_usd": "4"}, "availableUsd", "available_usd"); got != 4 {
 		t.Fatalf("numberField fallback key = %v", got)
+	}
+}
+
+func TestBalanceAccount(t *testing.T) {
+	cases := []struct {
+		fields map[string]any
+		want   string
+	}{
+		{map[string]any{"userId": "1234"}, "user:1234"},
+		{map[string]any{"userId": float64(1234)}, "user:1234"},
+		{map[string]any{"userId": "1234", "source": "market_order", "marketOrderId": "mo-9"}, "order:mo-9"},
+		{map[string]any{}, ""},
+	}
+	for _, c := range cases {
+		if got := balanceAccount(c.fields); got != c.want {
+			t.Errorf("balanceAccount(%v) = %q, want %q", c.fields, got, c.want)
+		}
 	}
 }

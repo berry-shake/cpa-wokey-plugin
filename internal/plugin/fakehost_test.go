@@ -367,7 +367,7 @@ func (w *fakeWokey) serve(rw http.ResponseWriter, r *http.Request) {
 			writeJSON(rw, http.StatusOK, info)
 			return
 		}
-		writeJSON(rw, http.StatusOK, map[string]any{"availableUsd": 42.5, "reservedUsd": "0.75"})
+		writeJSON(rw, http.StatusOK, map[string]any{"userId": "1234", "availableUsd": 42.5, "reservedUsd": "0.75"})
 	default:
 		writeJSON(rw, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "not_found", "message": "no route " + r.URL.Path}})
 	}

@@ -155,16 +155,226 @@
       gap: 12px;
       flex-wrap: wrap;
     }
-    .card-header h2 {
-      margin: 0;
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-secondary);
-    }
+    .card-header h2 { margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary); }
     .card-header .hint { font-size: 12px; color: var(--text-muted); }
+    .card-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
     .card-body { padding: 14px 18px; }
+    [hidden] { display: none !important; }
+    .app { display: flex; flex-direction: column; gap: 12px; }
+    .tabbar {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 8px 16px;
+      flex-wrap: wrap;
+      border-bottom: 1px solid var(--border-strong);
+    }
+    .tabs { display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+    .tab {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+      min-height: 42px;
+      padding: 10px 16px;
+      border: 0;
+      border-radius: var(--radius-md) var(--radius-md) 0 0;
+      background: transparent;
+      color: var(--text-secondary);
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background-color 0.15s, color 0.15s;
+    }
+    .tab svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .tab:hover { color: var(--text-primary); background: var(--bg-muted); }
+    .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .tab[aria-selected="true"] { color: var(--text-primary); }
+    .tab[aria-selected="true"]::after {
+      content: '';
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 0;
+      height: 2px;
+      border-radius: 2px;
+      background: var(--accent);
+    }
+    .tab-count {
+      min-width: 20px;
+      padding: 0 7px;
+      border-radius: 999px;
+      background: var(--bg-muted);
+      color: var(--text-muted);
+      font-size: 11px;
+      line-height: 18px;
+      text-align: center;
+    }
+    .tab-count:empty { display: none; }
+    .tab[aria-selected="true"] .tab-count { background: var(--accent-soft); color: var(--accent); }
+    .tabbar-side { display: flex; align-items: center; gap: 10px; padding-bottom: 7px; margin-left: auto; }
+    .tabbar-side .hint { font-size: 12px; color: var(--text-muted); }
+    .panel { display: flex; flex-direction: column; gap: 12px; }
+    .notice {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 9px 14px;
+      border: 1px solid var(--border-subtle);
+      border-left: 3px solid var(--border-strong);
+      border-radius: var(--radius-sm);
+      background: var(--bg-inset);
+      color: var(--text-primary);
+      font-size: 13px;
+    }
+    .notice.stack { flex-direction: column; align-items: stretch; gap: 6px; }
+    .notice-text { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .notice-close {
+      appearance: none; background: none; border: none; padding: 0 2px; font: inherit; font-size: 16px; line-height: 1;
+      color: inherit; opacity: 0.7; cursor: pointer;
+    }
+    .notice-close:hover { opacity: 1; }
+    .notice[data-state="ok"] { background: var(--success-soft); border-color: transparent; border-left-color: var(--success); }
+    .notice[data-state="warn"] { background: var(--warning-soft); border-color: transparent; border-left-color: var(--warning); }
+    .notice[data-state="error"] { background: var(--danger-soft); border-color: transparent; border-left-color: var(--danger); }
+    .config-note { margin: 12px 0 0; font-size: 12px; color: var(--text-muted); }
+    .catalog-notice { margin: 12px 18px 0; }
+    .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 18px; border-bottom: 1px solid var(--border-subtle); }
+    .count { margin-left: auto; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .summary-item {
+      min-width: 0;
+      padding: 12px 16px;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+    }
+    .summary-label { font-size: 12px; color: var(--text-muted); }
+    .summary-value { margin-top: 2px; font-size: 20px; font-weight: 700; line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .summary-note { margin-top: 2px; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+    .cred-list { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; }
+    .cred {
+      display: grid;
+      grid-template-columns: minmax(220px, 0.9fr) minmax(0, 2fr);
+      gap: 12px 28px;
+      min-width: 0;
+      padding: 14px 18px 12px;
+      background: var(--bg-inset);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+    .cred-main { min-width: 0; }
+    .cred-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .cred-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 650; }
+    .cred.off .cred-name { color: var(--text-secondary); }
+    .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 10px 0 0; font-size: 12.5px; }
+    .facts dt { color: var(--text-muted); }
+    .facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+    .cred-usage { min-width: 0; }
+    .meters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; }
+    .meter { min-width: 0; }
+    .meter-label { font-size: 12px; color: var(--text-muted); }
+    .meter-value { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .meter-note { font-size: 11.5px; color: var(--text-muted); overflow-wrap: anywhere; }
+    .cap { grid-column: 1 / -1; }
+    .cap-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-muted); }
+    .cap-head strong { color: var(--success); font-variant-numeric: tabular-nums; }
+    .cap.warn .cap-head strong { color: var(--warning); }
+    .cap.bad .cap-head strong { color: var(--danger); }
+    .track { height: 6px; margin-top: 6px; border-radius: 4px; background: var(--border-subtle); overflow: hidden; }
+    .fill { display: block; height: 100%; border-radius: inherit; background: var(--success); }
+    .cap.warn .fill { background: var(--warning); }
+    .cap.bad .fill { background: var(--danger); }
+    .usage-state { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 44px; color: var(--text-muted); font-size: 13px; }
+    .cred-bottom {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px 12px;
+      flex-wrap: wrap;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-subtle);
+    }
+    .cred-meta { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; min-width: 0; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+    .empty-state { padding: 40px 20px; text-align: center; color: var(--text-muted); }
+    .empty-state strong { display: block; margin-bottom: 4px; color: var(--text-primary); font-size: 15px; }
+    .empty-state .btn { margin-top: 16px; }
+    .config-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+    .config-side { display: grid; gap: 16px; min-width: 0; }
+    .kv { display: grid; grid-template-columns: minmax(120px, auto) minmax(0, 1fr); margin: 0; }
+    .kv dt, .kv dd { margin: 0; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); }
+    .kv dt { padding-right: 16px; color: var(--text-secondary); font-size: 13px; }
+    .kv dd { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+    .kv dd .sub { font-weight: 400; }
+    .kv > :nth-last-child(-n+2) { border-bottom: none; }
+    .head-side { display: flex; align-items: center; gap: 8px; }
+    details.help { margin-top: 12px; font-size: 12.5px; color: var(--text-secondary); }
+    details.help summary { display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 600; cursor: pointer; list-style: none; }
+    details.help summary::-webkit-details-marker { display: none; }
+    details.help summary::before {
+      content: ''; width: 5px; height: 5px; margin: 0 2px;
+      border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor;
+      transform: rotate(-45deg); transition: transform 0.15s;
+    }
+    details.help[open] summary::before { transform: rotate(45deg); }
+    details.help p { margin: 8px 0 0; }
+    pre.code {
+      margin: 8px 0 0;
+      padding: 10px 12px;
+      overflow-x: auto;
+      background: var(--bg-inset);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .notice pre.code { background: var(--bg-elevated); }
+    dialog.modal {
+      width: min(780px, calc(100vw - 32px));
+      max-width: none;
+      max-height: calc(100dvh - 32px);
+      padding: 0;
+      overflow: hidden;
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+    }
+    dialog.modal[open] { display: flex; flex-direction: column; }
+    dialog.modal::backdrop { background: rgba(18, 20, 24, 0.45); }
+    .modal-form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+    .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 22px 14px; border-bottom: 1px solid var(--border-subtle); }
+    .modal-head h2 { margin: 0; font-size: 16px; }
+    .modal-head .sub { margin-top: 2px; }
+    .modal-body { flex: 1; min-height: 0; padding: 16px 22px; overflow-y: auto; }
+    .modal-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; padding: 12px 22px; border-top: 1px solid var(--border-subtle); background: var(--bg-inset); }
+    .modal-foot .form-error { margin-right: auto; }
+    .icon-btn {
+      appearance: none; display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0;
+      padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted);
+      font: inherit; font-size: 20px; line-height: 1; cursor: pointer;
+    }
+    .icon-btn:hover { background: var(--bg-muted); color: var(--text-primary); }
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 10;
+      max-width: min(420px, calc(100vw - 36px));
+      padding: 10px 14px;
+      border-radius: var(--radius-md);
+      background: var(--text-primary);
+      color: var(--bg-elevated);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
     .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .btn {
       display: inline-flex;
@@ -194,11 +404,6 @@
       appearance: none; background: none; border: none; padding: 0; font: inherit; font-size: 12px;
       color: var(--accent); cursor: pointer; text-decoration: underline dotted;
     }
-    .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin-bottom: 12px; }
-    .stat { background: var(--bg-inset); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 9px 12px; min-width: 0; }
-    .stat .k { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }
-    .stat .v { font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
-    .stat .s { font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-subtle); }
@@ -232,21 +437,7 @@
     .badge.ok { background: var(--success-soft); color: var(--success); }
     .badge.warn { background: var(--warning-soft); color: var(--warning); }
     .badge.danger { background: var(--danger-soft); color: var(--danger); }
-    .empty { padding: 22px 18px; text-align: center; color: var(--text-muted); }
-    .log {
-      margin: 0;
-      padding: 10px 18px;
-      background: var(--bg-inset);
-      border-top: 1px solid var(--border-subtle);
-      font-family: var(--font-mono);
-      font-size: 12.5px;
-      color: var(--text-secondary);
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-    .log[data-state="ok"] { color: var(--success); background: var(--success-soft); }
-    .log[data-state="warn"] { color: var(--warning); background: var(--warning-soft); }
-    .log[data-state="error"] { color: var(--danger); background: var(--danger-soft); }
+    .empty { padding: 28px 18px; text-align: center; color: var(--text-muted); }
     .hidden { display: none !important; }
     .input {
       width: 100%; min-height: 36px; padding: 7px 11px;
@@ -258,6 +449,8 @@
     .input:focus { outline: none; border-color: var(--accent); }
     .input:disabled { opacity: 0.55; }
     .input::placeholder { color: var(--text-muted); font-family: var(--font-sans); }
+    .input.input-sm { min-height: 30px; padding: 4px 10px; font-size: 12.5px; border-radius: var(--radius-sm); }
+    .input.search { flex: 0 1 320px; width: 320px; }
     .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px 16px; }
     .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
     .field > label, .field > .label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
@@ -269,7 +462,7 @@
     .picker-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 10px; background: var(--bg-inset); border-bottom: 1px solid var(--border-subtle); }
     .picker-bar .input { flex: 1; min-width: 180px; width: auto; }
     .picker-count { font-size: 12px; color: var(--text-muted); margin-left: auto; }
-    .picker-list { max-height: 380px; overflow-y: auto; }
+    .picker-list { max-height: min(42vh, 380px); overflow-y: auto; }
     .pick-row {
       display: grid; grid-template-columns: 20px minmax(180px, 1.3fr) minmax(120px, 1fr) auto;
       gap: 10px; align-items: center; padding: 6px 12px; border-bottom: 1px solid var(--border-subtle); cursor: pointer;
@@ -279,7 +472,6 @@
     .pick-row.missing .pick-name { color: var(--warning); }
     .pick-name { font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .pick-meta { font-size: 12px; color: var(--text-muted); white-space: nowrap; text-align: right; }
-    .editor-footer { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
     .form-error { color: var(--danger); font-size: 12.5px; overflow-wrap: anywhere; }
     .login-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .login-form .input { flex: 1; min-width: 220px; width: auto; font-family: var(--font-mono); }
@@ -288,9 +480,21 @@
     footer { margin-top: auto; padding-top: 8px; text-align: center; color: var(--text-muted); font-size: 11px; }
     footer a { color: inherit; text-decoration: none; border-bottom: 1px dashed var(--border-strong); }
     footer a:hover { color: var(--text-primary); }
+    @media (max-width: 860px) {
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .cred { grid-template-columns: 1fr; }
+      .config-grid { grid-template-columns: 1fr; }
+    }
     @media (max-width: 720px) {
       main { padding: 12px 12px 20px; }
       .card-header { flex-direction: column; align-items: flex-start; }
+      .tab { padding: 8px 12px; }
+      .tabbar-side { width: 100%; justify-content: flex-end; padding-top: 4px; }
+      .input.search { flex-basis: 100%; width: 100%; }
+      .count { margin-left: 0; }
+      .meters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .modal-head, .modal-body { padding-left: 16px; padding-right: 16px; }
+      .modal-foot { padding: 12px 16px; }
       .pick-row { grid-template-columns: 20px 1fr; }
       .pick-name, .pick-meta { grid-column: 2; text-align: left; }
     }
@@ -332,28 +536,134 @@
     </div>
   </section>
 
-  <section class="card hidden" data-requires-auth>
-    <div class="card-header">
-      <h2 data-i18n="overview.title">Overview</h2>
-      <span class="hint" id="checked-at"></span>
-    </div>
-    <div class="card-body">
-      <div class="stats" id="stats"></div>
-      <div class="actions">
-        <button id="refresh-button" class="btn btn-secondary" type="button" data-i18n="actions.refresh">Refresh</button>
-        <button id="catalog-button" class="btn btn-secondary" type="button" data-i18n="actions.reloadCatalog">Reload model catalog</button>
-        <button id="add-button" class="btn btn-primary" type="button" data-i18n="actions.add">Add API key</button>
+  <div class="app hidden" data-requires-auth>
+    <div class="tabbar">
+      <div class="tabs" role="tablist" id="tabs" aria-label="Views">
+        <button class="tab" type="button" role="tab" id="tab-keys" data-tab="keys" aria-controls="panel-keys" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 8.65-8.65M15.5 7.5l3 3M13 10l2 2"/></svg><span data-i18n="tab.keys">API keys</span><span class="tab-count" id="tab-count-keys"></span></button>
+        <button class="tab" type="button" role="tab" id="tab-models" data-tab="models" aria-controls="panel-models" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 4.5-9 4.5-9-4.5L12 3Z"/><path d="m3 12 9 4.5 9-4.5M3 16.5 12 21l9-4.5"/></svg><span data-i18n="tab.models">Model catalog</span><span class="tab-count" id="tab-count-models"></span></button>
+        <button class="tab" type="button" role="tab" id="tab-config" data-tab="config" aria-controls="panel-config" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg><span data-i18n="tab.config">Configuration</span></button>
+      </div>
+      <div class="tabbar-side">
+        <span class="hint" id="checked-at"></span>
+        <button id="refresh-button" class="btn btn-secondary btn-sm" type="button" data-i18n="actions.refresh">Refresh</button>
       </div>
     </div>
-  </section>
 
-  <section class="card hidden" id="editor-card">
-    <div class="card-header">
-      <h2 id="editor-title">Add API key</h2>
-      <span class="hint" id="editor-hint"></span>
+    <div class="notice hidden" id="log" role="status" aria-live="polite">
+      <span class="notice-text" id="log-text"></span>
+      <button class="notice-close" type="button" id="log-close" aria-label="Dismiss">×</button>
     </div>
-    <div class="card-body">
-      <form id="editor-form" autocomplete="off">
+
+    <section class="panel" role="tabpanel" id="panel-keys" aria-labelledby="tab-keys">
+      <div class="summary" id="key-summary" hidden></div>
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <h2 data-i18n="keys.title">API keys</h2>
+            <span class="hint" data-i18n="keys.hint">Delete and enable/disable use CPA's auth file API</span>
+          </div>
+          <div class="actions">
+            <button id="quota-button" class="btn btn-secondary btn-sm" type="button" data-i18n="actions.reloadQuota">Refresh balances</button>
+            <button id="add-button" class="btn btn-primary btn-sm" type="button" data-i18n="actions.add">Add API key</button>
+          </div>
+        </div>
+        <div class="toolbar" id="keys-toolbar" hidden>
+          <input class="input input-sm search" id="keys-search" type="search" spellcheck="false" placeholder="Search keys">
+          <span class="count" id="keys-count"></span>
+        </div>
+        <div class="cred-list" id="keys-body">
+          <div class="empty" data-i18n="keys.notLoaded">Not loaded yet.</div>
+        </div>
+      </section>
+    </section>
+
+    <section class="panel" role="tabpanel" id="panel-models" aria-labelledby="tab-models" hidden>
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <h2 data-i18n="catalog.title">Model catalog</h2>
+            <span class="hint" id="catalog-hint"></span>
+          </div>
+          <div class="actions">
+            <button id="catalog-button" class="btn btn-secondary btn-sm" type="button" data-i18n="actions.reloadCatalog">Reload model catalog</button>
+          </div>
+        </div>
+        <div class="toolbar">
+          <input class="input input-sm search" id="catalog-search" type="search" spellcheck="false" placeholder="Search models">
+          <span class="count" id="catalog-count"></span>
+        </div>
+        <div id="catalog-body">
+          <div class="empty" data-i18n="keys.notLoaded">Not loaded yet.</div>
+        </div>
+      </section>
+    </section>
+
+    <section class="panel" role="tabpanel" id="panel-config" aria-labelledby="tab-config" hidden>
+      <div class="config-grid">
+        <section class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <h2 data-i18n="config.title">Plugin configuration</h2>
+              <span class="hint mono">plugins.configs.wokey</span>
+            </div>
+          </div>
+          <div class="card-body">
+            <dl class="kv" id="config-list"></dl>
+            <details class="help">
+              <summary data-i18n="config.yaml">Show as YAML</summary>
+              <pre class="code" id="config-yaml"></pre>
+            </details>
+            <p class="config-note" data-i18n="config.note">Change these under plugins.configs.wokey in the CPA config file.</p>
+          </div>
+        </section>
+        <div class="config-side">
+          <section class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <h2 data-i18n="routing.title">CPA routing</h2>
+                <span class="hint" data-i18n="routing.hint">CPA settings that change how Wokey models are registered</span>
+              </div>
+              <span class="badge" id="force-badge"></span>
+            </div>
+            <div class="card-body">
+              <dl class="kv" id="routing-list"></dl>
+              <div class="notice stack" id="force-notice" data-state="warn" hidden>
+                <span class="notice-text" id="force-notice-text"></span>
+                <pre class="code">routing:
+  force-model-prefix: true</pre>
+              </div>
+              <details class="help">
+                <summary data-i18n="routing.helpTitle">How the prefix works</summary>
+                <p data-i18n="routing.help1">The prefix is the auth file's standard prefix field. CPA adds it to the registered model names and strips it before forwarding, so Wokey still receives the bare model ID.</p>
+                <p data-i18n="routing.help2">An auth file without prefix uses the plugin's model-prefix; an empty prefix registers bare names for that key.</p>
+                <p data-i18n="routing.help3">force-model-prefix is global: when it is on, every credential that has a prefix is registered only under the prefixed names.</p>
+              </details>
+            </div>
+          </section>
+          <section class="card">
+            <div class="card-header">
+              <div class="card-title">
+                <h2 data-i18n="auth.title">Management key</h2>
+                <span class="hint" id="auth-source"></span>
+              </div>
+              <button id="switch-key" class="btn btn-secondary btn-sm" type="button" data-i18n="auth.switch">Use another key</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <dialog class="modal" id="editor-dialog" aria-labelledby="editor-title">
+    <form class="modal-form" id="editor-form" autocomplete="off">
+      <div class="modal-head">
+        <div>
+          <h2 id="editor-title">Add API key</h2>
+          <p class="sub" id="editor-hint"></p>
+        </div>
+        <button class="icon-btn" type="button" id="editor-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="modal-body">
         <div class="form-grid">
           <div class="field" id="row-key">
             <label for="f-key" data-i18n="form.key">Wokey API key</label>
@@ -396,25 +706,16 @@
           <div class="picker-list" id="picker-list"></div>
         </div>
         <p class="sub" id="register-preview"></p>
-        <div class="editor-footer">
-          <button class="btn btn-primary" type="submit" id="editor-save">Save</button>
-          <button class="btn btn-secondary" type="button" id="editor-cancel" data-i18n="form.cancel">Cancel</button>
-          <span class="form-error hidden" id="editor-error" role="alert"></span>
-        </div>
-      </form>
-    </div>
-  </section>
+      </div>
+      <div class="modal-foot">
+        <span class="form-error hidden" id="editor-error" role="alert"></span>
+        <button class="btn btn-secondary" type="button" id="editor-cancel" data-i18n="form.cancel">Cancel</button>
+        <button class="btn btn-primary" type="submit" id="editor-save">Save</button>
+      </div>
+    </form>
+  </dialog>
 
-  <section class="card hidden" data-requires-auth>
-    <div class="card-header">
-      <h2 data-i18n="keys.title">API keys</h2>
-      <span class="hint" data-i18n="keys.hint">Delete and enable/disable use CPA's auth file API</span>
-    </div>
-    <div id="keys-body">
-      <div class="empty" data-i18n="keys.notLoaded">Not loaded yet.</div>
-    </div>
-    <pre class="log hidden" id="log"></pre>
-  </section>
+  <div class="toast hidden" id="toast" role="status" aria-live="polite"></div>
 
   <footer>
     <span data-i18n="footer.text">Powered by the Wokey plugin</span> ·
@@ -444,34 +745,38 @@
       'login.hint': 'Use the CPA management key. It stays in this page\'s memory only; inside the management panel the remembered key is reused automatically.',
       'login.failed': 'Sign-in failed: {msg}',
       'login.expired': 'The management key was rejected: {msg}',
-      'overview.title': 'Overview',
-      'overview.checkedAt': 'Updated {time}',
-      'stat.keys': 'API keys',
-      'stat.keysValue': '{enabled} / {total} enabled',
-      'stat.catalog': 'Model catalog',
-      'stat.catalogValue': '{count} models',
-      'stat.catalogEmpty': 'Not loaded',
-      'stat.catalogAt': 'Fetched {time}',
-      'stat.prefix': 'Default prefix',
-      'stat.baseURL': 'Upstream',
-      'stat.proxy': 'CPA proxy-url',
-      'stat.proxyNone': 'Not set (direct / env)',
-      'stat.version': 'Plugin version',
+      'tabs.label': 'Views',
+      'tab.keys': 'API keys',
+      'tab.models': 'Model catalog',
+      'tab.config': 'Configuration',
+      'checkedAt': 'Updated {time}',
+      'log.dismiss': 'Dismiss',
+      'config.title': 'Plugin configuration',
+      'catalog.title': 'Model catalog',
+      'catalog.search': 'Search ID, name or provider',
+      'catalog.summary': '{count} models · fetched {time}',
+      'catalog.checked': 'checked {time}',
+      'catalog.shown': '{shown} of {total} shown',
+      'catalog.empty': 'The catalog is empty.',
+      'catalog.syncError': 'Last sync failed: {msg}',
+      'catalog.unused': 'not registered',
+      'catalog.usedBy': '{count} key(s)',
+      'catalog.maxOut': 'max out {n}',
+      'catalog.priceIO': 'in {input} · out {output}',
+      'catalog.priceCacheRead': 'cache read {v}',
+      'catalog.priceCacheWrite': 'cache write {v}',
+      'col.model': 'Model',
+      'col.owner': 'Provider',
+      'col.context': 'Context',
+      'col.pricePer1M': 'Price ($ / 1M tokens)',
+      'col.cpaName': 'Name in CPA',
       'actions.refresh': 'Refresh',
       'actions.reloadCatalog': 'Reload model catalog',
       'actions.add': 'Add API key',
       'keys.title': 'API keys',
       'keys.hint': 'Delete and enable/disable use CPA\'s auth file API',
       'keys.notLoaded': 'Not loaded yet.',
-      'keys.empty': 'No Wokey key yet. Use "Add API key" or upload an auth file with "type": "wokey".',
       'keys.listError': 'Cannot list credentials: {msg}',
-      'col.key': 'Key',
-      'col.state': 'State',
-      'col.models': 'Models',
-      'col.prefix': 'Prefix',
-      'col.proxy': 'Egress',
-      'col.balance': 'Balance',
-      'col.actions': '',
       'state.enabled': 'Enabled',
       'state.disabled': 'Disabled',
       'state.unavailable': 'Cooling down',
@@ -485,14 +790,6 @@
       'prefix.custom': 'per key',
       'proxy.inherit': 'inherit CPA',
       'proxy.direct': 'direct',
-      'quota.load': 'Check',
-      'quota.loading': 'Loading…',
-      'quota.retry': 'Retry',
-      'quota.balance': 'Account balance',
-      'quota.reserved': 'reserved {v}',
-      'quota.spent24h': 'key 24h {v}',
-      'quota.capLeft': 'cap left {v} / {cap}',
-      'quota.balanceError': 'balance: {msg}',
       'row.edit': 'Edit',
       'row.enable': 'Enable',
       'row.disable': 'Disable',
@@ -544,6 +841,83 @@
       'log.deleted': 'Deleted {name}.',
       'log.actionFailed': 'Failed: {msg}',
       'log.catalogReloaded': 'Model catalog reloaded: {count} models.',
+      'config.note': 'Change these under plugins.configs.wokey in the CPA config file.',
+      'config.yaml': 'Effective values as YAML',
+      'cfg.version': 'Plugin version',
+      'cfg.baseURL': 'Upstream',
+      'cfg.prefix': 'Default prefix',
+      'cfg.prefixSub': 'Used when an auth file has no prefix',
+      'cfg.refresh': 'Catalog polling',
+      'cfg.refreshValue': 'Every {n} min',
+      'cfg.refreshOff': 'Off (on demand)',
+      'cfg.timeout': 'Request timeout',
+      'cfg.streamIdle': 'Stream idle timeout',
+      'cfg.seconds': '{n} s',
+      'routing.title': 'CPA settings',
+      'routing.hint': 'Global CPA settings that affect Wokey keys',
+      'routing.force': 'Force model prefix',
+      'routing.forceOn': 'On',
+      'routing.forceOnSub': 'Only prefixed names are registered',
+      'routing.forceOff': 'Off',
+      'routing.forceOffSub': 'Bare model names are registered too',
+      'routing.forceUnknown': 'Unknown',
+      'routing.forceUnknownSub': 'CPA has not reported it yet',
+      'routing.names': 'Model names in CPA',
+      'routing.namesBoth': 'and {bare}',
+      'routing.namesBare': 'No default prefix',
+      'routing.proxy': 'CPA proxy-url',
+      'routing.proxyNone': 'Not set (direct / environment)',
+      'routing.offNotice': 'Wokey keys also join the shared pool of every model with the same bare name. To reach Wokey only through the prefix, set this in the CPA config (it applies to every credential with a prefix):',
+      'routing.helpTitle': 'How the prefix works',
+      'routing.help1': 'The prefix is the auth file\'s standard prefix field. CPA adds it to the registered model names and strips it before forwarding, so Wokey still receives the bare model ID.',
+      'routing.help2': 'An auth file without prefix uses the plugin\'s model-prefix; an empty prefix registers bare names for that key.',
+      'routing.help3': 'force-model-prefix is global: when it is on, every credential that has a prefix is registered only under the prefixed names.',
+      'auth.title': 'Management key',
+      'auth.panel': 'Reusing the key remembered by the CPA panel',
+      'auth.manual': 'Entered on this page, kept in memory only',
+      'auth.switch': 'Use another key',
+      'summary.keys': 'Keys enabled',
+      'summary.cooling': '{n} cooling down',
+      'summary.disabled': '{n} disabled',
+      'summary.balance': 'Available balance',
+      'summary.accounts': '{n} accounts',
+      'summary.week': '7d {v}',
+      'summary.pending': '{n} key(s) not checked',
+      'summary.failed': '{n} key(s) failed',
+      'usage.balance': 'Balance',
+      'usage.balanceNote': 'account-wide',
+      'usage.reserved': 'reserved {v}',
+      'usage.spent24h': 'Spent 24h',
+      'usage.spent7d': 'Spent 7d',
+      'usage.spent30d': 'Spent 30d',
+      'usage.cap': 'Key spend cap',
+      'usage.capLeft': '{left} of {limit} left',
+      'usage.keyError': 'Key usage: {msg}',
+      'usage.notLoaded': 'Balance not checked yet.',
+      'usage.disabled': 'Disabled; balance not checked.',
+      'usage.loading': 'Loading…',
+      'usage.failed': 'Query failed: {msg}',
+      'usage.check': 'Check balance',
+      'usage.retry': 'Retry',
+      'usage.refresh': 'Refresh',
+      'usage.fetched': 'checked {time}',
+      'card.key': 'Key',
+      'card.models': 'Models',
+      'card.prefix': 'Prefix',
+      'card.proxy': 'Egress',
+      'card.priority': 'Priority',
+      'card.note': 'Note',
+      'card.status': 'Status',
+      'card.requests': '{ok} ok · {failed} failed',
+      'keys.search': 'Search name, key or file',
+      'keys.count': '{count} keys',
+      'keys.shown': '{shown} of {total} shown',
+      'keys.noMatch': 'No key matches.',
+      'keys.emptyTitle': 'No Wokey key yet',
+      'keys.empty': 'Add a key here, or upload an auth file with "type": "wokey" in CPA.',
+      'catalog.count': '{count} models',
+      'actions.reloadQuota': 'Refresh balances',
+      'form.close': 'Close',
       'footer.text': 'Powered by the Wokey plugin',
       'footer.docs': 'Wokey docs',
       'footer.source': 'Source',
@@ -564,34 +938,38 @@
       'login.hint': '填写 CPA 管理密钥。密钥只保存在本页内存中；在管理面板内打开时会自动复用面板已记住的密钥。',
       'login.failed': '登录失败：{msg}',
       'login.expired': '管理密钥被拒绝：{msg}',
-      'overview.title': '概览',
-      'overview.checkedAt': '更新于 {time}',
-      'stat.keys': 'API Key',
-      'stat.keysValue': '{enabled} / {total} 启用',
-      'stat.catalog': '模型目录',
-      'stat.catalogValue': '{count} 个模型',
-      'stat.catalogEmpty': '未加载',
-      'stat.catalogAt': '拉取于 {time}',
-      'stat.prefix': '默认前缀',
-      'stat.baseURL': '上游地址',
-      'stat.proxy': 'CPA 全局代理',
-      'stat.proxyNone': '未设置（直连 / 环境变量）',
-      'stat.version': '插件版本',
+      'tabs.label': '管理视图',
+      'tab.keys': 'API Key',
+      'tab.models': '模型目录',
+      'tab.config': '配置概览',
+      'checkedAt': '更新于 {time}',
+      'log.dismiss': '关闭',
+      'config.title': '插件配置',
+      'catalog.title': '模型目录',
+      'catalog.search': '搜索 ID、名称或提供方',
+      'catalog.summary': '{count} 个模型 · 拉取于 {time}',
+      'catalog.checked': '检查于 {time}',
+      'catalog.shown': '显示 {shown} / {total}',
+      'catalog.empty': '模型目录为空。',
+      'catalog.syncError': '上次同步失败：{msg}',
+      'catalog.unused': '未注册',
+      'catalog.usedBy': '{count} 个 Key',
+      'catalog.maxOut': '最大输出 {n}',
+      'catalog.priceIO': '输入 {input} · 输出 {output}',
+      'catalog.priceCacheRead': '缓存读 {v}',
+      'catalog.priceCacheWrite': '缓存写 {v}',
+      'col.model': '模型',
+      'col.owner': '提供方',
+      'col.context': '上下文',
+      'col.pricePer1M': '价格（$ / 百万 token）',
+      'col.cpaName': 'CPA 模型名',
       'actions.refresh': '刷新',
       'actions.reloadCatalog': '重新拉取模型目录',
       'actions.add': '添加 API Key',
       'keys.title': 'API Key',
       'keys.hint': '删除和启用/停用走 CPA 原生认证文件接口',
       'keys.notLoaded': '尚未加载。',
-      'keys.empty': '还没有 Wokey Key。点“添加 API Key”，或上传 "type": "wokey" 的认证文件。',
       'keys.listError': '无法列出凭证：{msg}',
-      'col.key': 'Key',
-      'col.state': '状态',
-      'col.models': '模型',
-      'col.prefix': '前缀',
-      'col.proxy': '出口',
-      'col.balance': '余额',
-      'col.actions': '',
       'state.enabled': '启用',
       'state.disabled': '已停用',
       'state.unavailable': '冷却中',
@@ -605,14 +983,6 @@
       'prefix.custom': '单独设置',
       'proxy.inherit': '继承 CPA',
       'proxy.direct': '直连',
-      'quota.load': '查询',
-      'quota.loading': '查询中…',
-      'quota.retry': '重试',
-      'quota.balance': '账户余额',
-      'quota.reserved': '冻结 {v}',
-      'quota.spent24h': '本 Key 24h {v}',
-      'quota.capLeft': '限额剩余 {v} / {cap}',
-      'quota.balanceError': '余额：{msg}',
       'row.edit': '编辑',
       'row.enable': '启用',
       'row.disable': '停用',
@@ -664,6 +1034,83 @@
       'log.deleted': '已删除 {name}。',
       'log.actionFailed': '操作失败：{msg}',
       'log.catalogReloaded': '模型目录已重新拉取：{count} 个模型。',
+      'config.note': '在 CPA 配置文件的 plugins.configs.wokey 下修改。',
+      'config.yaml': '以 YAML 查看当前生效值',
+      'cfg.version': '插件版本',
+      'cfg.baseURL': '上游地址',
+      'cfg.prefix': '默认前缀',
+      'cfg.prefixSub': '认证文件没写 prefix 时使用',
+      'cfg.refresh': '目录轮询',
+      'cfg.refreshValue': '每 {n} 分钟',
+      'cfg.refreshOff': '关闭（按需加载）',
+      'cfg.timeout': '请求超时',
+      'cfg.streamIdle': '流式空闲超时',
+      'cfg.seconds': '{n} 秒',
+      'routing.title': 'CPA 设置',
+      'routing.hint': '影响 Wokey Key 的 CPA 全局设置',
+      'routing.force': '强制前缀',
+      'routing.forceOn': '已开启',
+      'routing.forceOnSub': '只注册带前缀的模型名',
+      'routing.forceOff': '未开启',
+      'routing.forceOffSub': '同时注册不带前缀的模型名',
+      'routing.forceUnknown': '未知',
+      'routing.forceUnknownSub': 'CPA 还没有上报',
+      'routing.names': 'CPA 模型名',
+      'routing.namesBoth': '以及 {bare}',
+      'routing.namesBare': '没有默认前缀',
+      'routing.proxy': 'CPA 全局代理',
+      'routing.proxyNone': '未设置（直连 / 环境变量）',
+      'routing.offNotice': 'Wokey 的 Key 也会进入同名裸模型的公共号池，和其他渠道一起轮询。如果只想通过前缀访问 Wokey，在 CPA 配置里打开（全局生效，所有配置了 prefix 的凭证都只注册带前缀的名字）：',
+      'routing.helpTitle': '前缀是怎么生效的',
+      'routing.help1': '前缀就是认证文件的通用 prefix 字段。CPA 把它加到注册的模型名上，转发前再去掉，Wokey 收到的仍是原始模型 ID。',
+      'routing.help2': '认证文件没写 prefix 时使用插件配置的 model-prefix；prefix 写成空字符串表示这个 Key 不加前缀。',
+      'routing.help3': 'force-model-prefix 是全局开关：开启后，所有配置了 prefix 的凭证都只注册带前缀的模型名。',
+      'auth.title': '管理密钥',
+      'auth.panel': '正在复用 CPA 面板记住的密钥',
+      'auth.manual': '在本页输入，只保存在页面内存中',
+      'auth.switch': '换一个密钥',
+      'summary.keys': '启用的 Key',
+      'summary.cooling': '{n} 个冷却中',
+      'summary.disabled': '{n} 个已停用',
+      'summary.balance': '可用余额',
+      'summary.accounts': '{n} 个账户',
+      'summary.week': '7 天 {v}',
+      'summary.pending': '{n} 个 Key 未查询',
+      'summary.failed': '{n} 个 Key 查询失败',
+      'usage.balance': '余额',
+      'usage.balanceNote': '账户共用',
+      'usage.reserved': '冻结 {v}',
+      'usage.spent24h': '24h 消费',
+      'usage.spent7d': '7 天消费',
+      'usage.spent30d': '30 天消费',
+      'usage.cap': 'Key 消费限额',
+      'usage.capLeft': '剩余 {left} / {limit}',
+      'usage.keyError': 'Key 用量：{msg}',
+      'usage.notLoaded': '还没有查询余额。',
+      'usage.disabled': '已停用，未查询余额。',
+      'usage.loading': '查询中…',
+      'usage.failed': '查询失败：{msg}',
+      'usage.check': '查询余额',
+      'usage.retry': '重试',
+      'usage.refresh': '刷新',
+      'usage.fetched': '查询于 {time}',
+      'card.key': 'Key',
+      'card.models': '模型',
+      'card.prefix': '前缀',
+      'card.proxy': '出口',
+      'card.priority': '优先级',
+      'card.note': '备注',
+      'card.status': '状态',
+      'card.requests': '成功 {ok} · 失败 {failed}',
+      'keys.search': '搜索名称、Key 或文件名',
+      'keys.count': '{count} 个 Key',
+      'keys.shown': '显示 {shown} / {total}',
+      'keys.noMatch': '没有匹配的 Key。',
+      'keys.emptyTitle': '还没有 Wokey Key',
+      'keys.empty': '在这里添加 Key，或在 CPA 里上传 "type": "wokey" 的认证文件。',
+      'catalog.count': '{count} 个模型',
+      'actions.reloadQuota': '刷新余额',
+      'form.close': '关闭',
       'footer.text': '由 Wokey 插件驱动',
       'footer.docs': 'Wokey 文档',
       'footer.source': '源代码',
@@ -793,9 +1240,33 @@
   const health = $('health');
   const healthLabel = $('health-label');
   const checkedAt = $('checked-at');
-  const stats = $('stats');
+  const configList = $('config-list');
+  const configYaml = $('config-yaml');
+  const routingList = $('routing-list');
+  const forceBadge = $('force-badge');
+  const forceNotice = $('force-notice');
+  const forceNoticeText = $('force-notice-text');
+  const authSource = $('auth-source');
+  const switchKey = $('switch-key');
+  const keySummary = $('key-summary');
+  const keysToolbar = $('keys-toolbar');
+  const keysSearch = $('keys-search');
+  const keysCount = $('keys-count');
   const keysBody = $('keys-body');
+  const quotaButton = $('quota-button');
+  const toast = $('toast');
+  const catalogBody = $('catalog-body');
+  const catalogHint = $('catalog-hint');
+  const catalogSearch = $('catalog-search');
+  const catalogCount = $('catalog-count');
   const log = $('log');
+  const logText = $('log-text');
+  const logClose = $('log-close');
+  const tabList = $('tabs');
+  const tabButtons = Array.from(document.querySelectorAll('[role="tab"]'));
+  const tabPanels = Array.from(document.querySelectorAll('[role="tabpanel"]'));
+  const tabCountKeys = $('tab-count-keys');
+  const tabCountModels = $('tab-count-models');
   const refreshButton = $('refresh-button');
   const catalogButton = $('catalog-button');
   const addButton = $('add-button');
@@ -805,7 +1276,8 @@
   const loginButton = $('login-button');
   const loginError = $('login-error');
   const authCards = document.querySelectorAll('[data-requires-auth]');
-  const editorCard = $('editor-card');
+  const editorDialog = $('editor-dialog');
+  const editorClose = $('editor-close');
   const editorForm = $('editor-form');
   const editorTitle = $('editor-title');
   const editorHint = $('editor-hint');
@@ -837,10 +1309,15 @@
     status: null,
     loadedAt: null,
     log: null,
+    toast: null,
     loginError: null,
+    keySource: '',
+    keysFilter: '',
     quota: {},
     catalog: null,
     catalogError: null,
+    catalogLoading: false,
+    catalogFilter: '',
     editor: null,
     editorError: null,
   };
@@ -883,12 +1360,81 @@
   function renderLog() {
     if (!ui.log) {
       log.classList.add('hidden');
-      log.textContent = '';
+      logText.textContent = '';
       return;
     }
     log.classList.remove('hidden');
     log.dataset.state = ui.log.state;
-    log.textContent = t(ui.log.key, ui.log.params);
+    logText.textContent = t(ui.log.key, ui.log.params);
+  }
+
+  let toastTimer = null;
+
+  function showToast(key, params) {
+    ui.toast = { key, params: params || null };
+    renderToast();
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { ui.toast = null; toastTimer = null; renderToast(); }, 3500);
+  }
+
+  function renderToast() {
+    toast.classList.toggle('hidden', !ui.toast);
+    toast.textContent = ui.toast ? t(ui.toast.key, ui.toast.params) : '';
+  }
+
+  // Successes are a short toast; warnings and errors stay in the notice bar
+  // until dismissed.
+  function notify(state, key, params) {
+    if (state === 'ok') {
+      setLog(null);
+      showToast(key, params);
+    } else {
+      setLog(state, key, params);
+    }
+  }
+
+  // ---- tabs ----
+
+  const TAB_KEY = 'cliproxy-wokey-tab';
+  const TABS = tabButtons.map((btn) => btn.dataset.tab);
+
+  function initialTab() {
+    try {
+      const stored = localStorage.getItem(TAB_KEY);
+      if (stored && TABS.includes(stored)) return stored;
+    } catch (_) { /* ignore */ }
+    return TABS[0];
+  }
+
+  let currentTab = initialTab();
+
+  function selectTab(name, focus) {
+    if (!TABS.includes(name)) name = TABS[0];
+    currentTab = name;
+    try { localStorage.setItem(TAB_KEY, name); } catch (_) { /* ignore */ }
+    for (const btn of tabButtons) {
+      const active = btn.dataset.tab === name;
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+      btn.tabIndex = active ? 0 : -1;
+      if (active && focus) btn.focus();
+    }
+    for (const panel of tabPanels) panel.hidden = panel.id !== 'panel-' + name;
+    ensureTabData();
+  }
+
+  // The model tab loads the full catalog lazily, and only once signed in.
+  function ensureTabData() {
+    if (managementKey && currentTab === 'models' && !ui.catalog && !ui.catalogLoading) {
+      loadCatalog(false).catch(() => {});
+    }
+  }
+
+  function renderTabCounts() {
+    const data = ui.status;
+    const creds = data && Array.isArray(data.credentials) ? data.credentials : null;
+    tabCountKeys.textContent = creds && !data.list_error ? String(creds.length) : '';
+    const count = data && data.catalog ? data.catalog.count : 0;
+    tabCountModels.textContent = count ? String(count) : '';
   }
 
   function setBusy(button, busy) { button.disabled = busy; }
@@ -944,76 +1490,392 @@
     return ui.status && ui.status.config ? (ui.status.config.default_prefix || '') : 'wokey';
   }
 
-  // ---- overview ----
-
-  function stat(label, value, sub, subClass) {
-    return el('div', { class: 'stat' },
-      el('div', { class: 'k', text: label }),
-      el('div', { class: 'v', text: value }),
-      sub ? el('div', { class: 's' + (subClass ? ' ' + subClass : ''), text: sub }) : null);
+  function formatTime(iso) {
+    const parsed = new Date(iso);
+    return isNaN(parsed.valueOf()) ? String(iso || '') : parsed.toLocaleTimeString(localeTag());
   }
 
-  function renderOverview() {
-    stats.textContent = '';
+  function renderCheckedAt() {
+    checkedAt.textContent = ui.loadedAt ? t('checkedAt', { time: ui.loadedAt.toLocaleTimeString(localeTag()) }) : '';
+  }
+
+  // ---- configuration tab ----
+
+  function kvRow(list, label, value, opts) {
+    const o = opts || {};
+    list.appendChild(el('dt', { text: label }));
+    list.appendChild(el('dd', null,
+      el('span', { class: o.mono ? 'mono' : null, text: value }),
+      o.sub ? el('div', { class: 'sub' + (o.subClass ? ' ' + o.subClass : ''), text: o.sub }) : null));
+  }
+
+  // Plain YAML scalar unless it needs quoting; JSON strings are valid YAML.
+  function yamlScalar(value) {
+    const text = String(value);
+    return text === '' || /^[\s'"{}\[\],&*!|>%@`#?:-]|: | #|\s$/.test(text) ? JSON.stringify(text) : text;
+  }
+
+  function forceState() {
+    const cfg = (ui.status && ui.status.config) || {};
+    if (cfg.force_model_prefix === true) return 'On';
+    if (cfg.force_model_prefix === false) return 'Off';
+    return 'Unknown';
+  }
+
+  function renderConfig() {
+    configList.textContent = '';
+    routingList.textContent = '';
+    configYaml.textContent = '';
+    forceBadge.hidden = true;
+    forceNotice.hidden = true;
+    authSource.textContent = ui.keySource ? t(ui.keySource === 'panel' ? 'auth.panel' : 'auth.manual') : '';
     const data = ui.status;
-    checkedAt.textContent = ui.loadedAt ? t('overview.checkedAt', { time: ui.loadedAt.toLocaleTimeString(localeTag()) }) : '';
     if (!data) return;
-    const creds = Array.isArray(data.credentials) ? data.credentials : [];
-    const enabled = creds.filter((c) => !c.disabled).length;
-    const cat = data.catalog || {};
     const cfg = data.config || {};
-    stats.appendChild(stat(t('stat.keys'), t('stat.keysValue', { enabled, total: creds.length })));
-    stats.appendChild(stat(t('stat.catalog'),
-      cat.count ? t('stat.catalogValue', { count: cat.count }) : t('stat.catalogEmpty'),
-      cat.last_error ? cat.last_error : (cat.fetched_at ? t('stat.catalogAt', { time: formatWhen(cat.fetched_at) }) : ''),
-      cat.last_error ? 'danger-text' : ''));
-    stats.appendChild(stat(t('stat.prefix'), cfg.default_prefix ? cfg.default_prefix + '/' : t('prefix.none')));
-    stats.appendChild(stat(t('stat.baseURL'), cfg.base_url || '—'));
-    stats.appendChild(stat(t('stat.proxy'), cfg.global_proxy || t('stat.proxyNone')));
-    stats.appendChild(stat(t('stat.version'), data.version || '—'));
+    const minutes = Number(cfg.models_refresh_minutes) || 0;
+    const prefix = cfg.default_prefix || '';
+    kvRow(configList, t('cfg.version'), data.version || '—');
+    kvRow(configList, t('cfg.baseURL'), cfg.base_url || '—', { mono: true });
+    kvRow(configList, t('cfg.prefix'), prefix ? prefix + '/' : t('prefix.none'), { mono: !!prefix, sub: t('cfg.prefixSub') });
+    kvRow(configList, t('cfg.refresh'), minutes > 0 ? t('cfg.refreshValue', { n: minutes }) : t('cfg.refreshOff'));
+    kvRow(configList, t('cfg.timeout'), cfg.request_timeout_seconds ? t('cfg.seconds', { n: cfg.request_timeout_seconds }) : '—');
+    kvRow(configList, t('cfg.streamIdle'), cfg.stream_idle_timeout_seconds ? t('cfg.seconds', { n: cfg.stream_idle_timeout_seconds }) : '—');
+    configYaml.textContent = [
+      'plugins:',
+      '  configs:',
+      '    wokey:',
+      '      base-url: ' + yamlScalar(cfg.base_url || ''),
+      '      model-prefix: ' + yamlScalar(prefix),
+      '      models-refresh-minutes: ' + minutes,
+      '      request-timeout-seconds: ' + (Number(cfg.request_timeout_seconds) || 0),
+      '      stream-idle-timeout-seconds: ' + (Number(cfg.stream_idle_timeout_seconds) || 0),
+    ].join('\n');
+
+    const force = forceState();
+    forceBadge.hidden = force === 'Unknown';
+    forceBadge.className = 'badge ' + (force === 'On' ? 'ok' : 'warn');
+    forceBadge.textContent = t('routing.force' + force);
+    kvRow(routingList, t('routing.force'), t('routing.force' + force), { sub: t('routing.force' + force + 'Sub'), subClass: force === 'Off' ? 'warn-text' : '' });
+    if (prefix) {
+      const sample = prefix + '/<model>';
+      kvRow(routingList, t('routing.names'), sample, { mono: true, sub: force === 'On' ? '' : t('routing.namesBoth', { bare: '<model>' }) });
+    } else {
+      kvRow(routingList, t('routing.names'), '<model>', { mono: true, sub: t('routing.namesBare') });
+    }
+    kvRow(routingList, t('routing.proxy'), cfg.global_proxy || t('routing.proxyNone'), { mono: !!cfg.global_proxy });
+    // The warning matters only while some Wokey key registers a prefix.
+    const creds = Array.isArray(data.credentials) ? data.credentials : [];
+    const prefixed = !!prefix || creds.some((c) => c.effective_prefix);
+    forceNotice.hidden = !(force === 'Off' && prefixed);
+    forceNoticeText.textContent = t('routing.offNotice');
   }
 
-  // ---- keys table ----
+  // ---- model catalog tab ----
 
-  function quotaCell(cred) {
+  function catalogMeta() {
+    if (ui.status && ui.status.catalog) return ui.status.catalog;
+    return ui.catalog && ui.catalog.catalog ? ui.catalog.catalog : null;
+  }
+
+  function renderCatalogHint() {
+    const meta = catalogMeta();
+    const parts = [];
+    if (meta && meta.fetched_at) {
+      parts.push(t('catalog.summary', { count: meta.count || 0, time: formatWhen(meta.fetched_at) }));
+      if (meta.checked_at && meta.checked_at !== meta.fetched_at) parts.push(t('catalog.checked', { time: formatWhen(meta.checked_at) }));
+    }
+    catalogHint.textContent = parts.join(' · ');
+  }
+
+  // For each model ID: the names it is registered under in CPA and how many
+  // enabled keys serve it.
+  function modelUsage() {
+    const usage = new Map();
+    const creds = ui.status && Array.isArray(ui.status.credentials) ? ui.status.credentials : [];
+    const models = ui.catalog && Array.isArray(ui.catalog.models) ? ui.catalog.models : [];
+    for (const cred of creds) {
+      if (cred.disabled || cred.read_error) continue;
+      const ids = cred.all_models ? models.map((m) => m.id) : (Array.isArray(cred.models) ? cred.models : []);
+      const prefix = cred.effective_prefix || '';
+      for (const id of ids) {
+        let entry = usage.get(id);
+        if (!entry) { entry = { keys: 0, names: new Set() }; usage.set(id, entry); }
+        entry.keys++;
+        entry.names.add(prefix ? prefix + '/' + id : id);
+      }
+    }
+    return usage;
+  }
+
+  function priceCell(pricing) {
+    const p = pricing || {};
     const td = el('td', { class: 'nowrap' });
-    if (cred.read_error) return td;
+    if (p.input === undefined && p.output === undefined) {
+      td.appendChild(el('span', { class: 'sub', text: '—' }));
+      return td;
+    }
+    td.appendChild(el('div', { text: t('catalog.priceIO', { input: fmtPrice(p.input), output: fmtPrice(p.output) }) }));
+    const cache = [];
+    if (p.cache_read !== undefined) cache.push(t('catalog.priceCacheRead', { v: fmtPrice(p.cache_read) }));
+    if (p.cache_write !== undefined) cache.push(t('catalog.priceCacheWrite', { v: fmtPrice(p.cache_write) }));
+    if (cache.length) td.appendChild(el('div', { class: 'sub', text: cache.join(' · ') }));
+    return td;
+  }
+
+  function renderModels() {
+    renderCatalogHint();
+    catalogBody.textContent = '';
+    catalogCount.textContent = '';
+    const meta = catalogMeta();
+    if (meta && meta.last_error) {
+      catalogBody.appendChild(el('div', { class: 'notice catalog-notice', 'data-state': 'error' },
+        el('span', { class: 'notice-text', text: t('catalog.syncError', { msg: meta.last_error }) })));
+    }
+    if (!ui.catalog) {
+      const failed = !!ui.catalogError && !ui.catalogLoading;
+      catalogBody.appendChild(el('div', { class: 'empty' + (failed ? ' danger-text' : ''),
+        text: failed ? t('picker.error', { msg: ui.catalogError }) : (ui.catalogLoading ? t('picker.loading') : t('keys.notLoaded')) }));
+      return;
+    }
+    const models = Array.isArray(ui.catalog.models) ? ui.catalog.models : [];
+    if (models.length === 0) {
+      catalogBody.appendChild(el('div', { class: 'empty', text: t('catalog.empty') }));
+      return;
+    }
+    const filter = ui.catalogFilter.trim().toLowerCase();
+    const visible = models.filter((m) => !filter ||
+      m.id.toLowerCase().includes(filter) ||
+      String(m.name || '').toLowerCase().includes(filter) ||
+      String(m.owned_by || '').toLowerCase().includes(filter));
+    catalogCount.textContent = filter
+      ? t('catalog.shown', { shown: visible.length, total: models.length })
+      : t('catalog.count', { count: models.length });
+    if (visible.length === 0) {
+      catalogBody.appendChild(el('div', { class: 'empty', text: t('picker.noMatch') }));
+      return;
+    }
+    const usage = modelUsage();
+    const head = el('tr', null, ['col.model', 'col.owner', 'col.context', 'col.pricePer1M', 'col.cpaName'].map((key) => el('th', { text: t(key) })));
+    const tbody = el('tbody');
+    for (const m of visible) {
+      const used = usage.get(m.id);
+      const nameCell = el('td');
+      if (used) {
+        for (const name of [...used.names].sort()) nameCell.appendChild(el('div', { class: 'mono', text: name }));
+        nameCell.appendChild(el('div', { class: 'sub', text: t('catalog.usedBy', { count: used.keys }) }));
+      } else {
+        nameCell.appendChild(el('span', { class: 'sub', text: t('catalog.unused') }));
+      }
+      tbody.appendChild(el('tr', null,
+        el('td', null,
+          el('div', { class: 'mono strong', text: m.id }),
+          m.name && m.name !== m.id ? el('div', { class: 'sub', text: m.name }) : null),
+        el('td', { class: 'nowrap', text: m.owned_by || '—' }),
+        el('td', { class: 'nowrap' },
+          el('div', { text: m.context_length ? fmtTokens(m.context_length) : '—' }),
+          m.max_completion_tokens ? el('div', { class: 'sub', text: t('catalog.maxOut', { n: fmtTokens(m.max_completion_tokens) }) }) : null),
+        priceCell(m.pricing),
+        nameCell));
+    }
+    catalogBody.appendChild(el('div', { class: 'table-wrap' }, el('table', null, el('thead', null, head), tbody)));
+  }
+
+  // ---- keys ----
+
+  function credentials() {
+    const data = ui.status;
+    return data && !data.list_error && Array.isArray(data.credentials) ? data.credentials : [];
+  }
+
+  // Totals over the keys whose balance has been loaded. Balance belongs to
+  // the account, so keys of the same account are counted once; spend is per
+  // key and simply adds up.
+  function renderSummary() {
+    keySummary.textContent = '';
+    const creds = credentials();
+    keySummary.hidden = creds.length === 0;
+    if (!creds.length) return;
+    const enabled = creds.filter((c) => !c.disabled).length;
+    const cooling = creds.filter((c) => !c.disabled && c.unavailable).length;
+    const accounts = new Map();
+    let daily = 0, weekly = 0, monthly = 0, loaded = 0, pending = 0, failed = 0, loading = false;
+    for (const cred of creds) {
+      if (cred.read_error) continue;
+      const q = ui.quota[cred.auth_index];
+      if (q && q.state === 'loading') loading = true;
+      const d = q && q.data;
+      if (!d) {
+        if (q && q.state === 'error') failed++;
+        else if (!cred.disabled) pending++;
+        continue;
+      }
+      loaded++;
+      if (d.balance) accounts.set(d.balance.account || 'auth:' + cred.auth_index, d.balance);
+      if (d.key) {
+        daily += Number(d.key.daily_usd) || 0;
+        weekly += Number(d.key.weekly_usd) || 0;
+        monthly += Number(d.key.monthly_usd) || 0;
+      }
+    }
+    let available = 0, reserved = 0;
+    for (const b of accounts.values()) {
+      available += Number(b.available_usd) || 0;
+      reserved += Number(b.reserved_usd) || 0;
+    }
+    const blank = loading ? '…' : '—';
+    const item = (label, value, note) => keySummary.appendChild(el('div', { class: 'summary-item' },
+      el('div', { class: 'summary-label', text: label }),
+      el('div', { class: 'summary-value', text: value }),
+      note ? el('div', { class: 'summary-note', text: note }) : null));
+
+    let keysNote = '';
+    if (cooling) keysNote = t('summary.cooling', { n: cooling });
+    else if (enabled < creds.length) keysNote = t('summary.disabled', { n: creds.length - enabled });
+    item(t('summary.keys'), enabled + ' / ' + creds.length, keysNote);
+    const balanceNote = [];
+    if (accounts.size > 1) balanceNote.push(t('summary.accounts', { n: accounts.size }));
+    if (reserved > 0) balanceNote.push(t('usage.reserved', { v: fmtUSD(reserved) }));
+    item(t('summary.balance'), accounts.size ? fmtUSD(available) : blank, balanceNote.join(' · '));
+    item(t('usage.spent24h'), loaded ? fmtUSD(daily) : blank, loaded ? t('summary.week', { v: fmtUSD(weekly) }) : '');
+    const missingNote = [];
+    if (failed) missingNote.push(t('summary.failed', { n: failed }));
+    if (pending) missingNote.push(t('summary.pending', { n: pending }));
+    item(t('usage.spent30d'), loaded ? fmtUSD(monthly) : blank, missingNote.join(' · '));
+  }
+
+  function credState(cred) {
+    if (cred.read_error) return ['danger', 'state.readError'];
+    if (cred.disabled) return ['', 'state.disabled'];
+    if (cred.unavailable) return ['warn', 'state.unavailable'];
+    return ['ok', 'state.enabled'];
+  }
+
+  function credMatches(cred, filter) {
+    if (!filter) return true;
+    return [cred.label, cred.key_masked, cred.name, cred.effective_prefix, cred.note]
+      .some((value) => String(value || '').toLowerCase().includes(filter));
+  }
+
+  function meter(label, value, note, noteClass) {
+    return el('div', { class: 'meter' },
+      el('div', { class: 'meter-label', text: label }),
+      el('div', { class: 'meter-value', text: value }),
+      note ? el('div', { class: 'meter-note' + (noteClass ? ' ' + noteClass : ''), text: note, title: note }) : null);
+  }
+
+  function capBlock(key) {
+    const limit = Number(key.limit_usd) || 0;
+    const left = Number(key.limit_remaining_usd) || 0;
+    const fraction = limit > 0 ? Math.max(0, Math.min(1, left / limit)) : 0;
+    const level = fraction < 0.1 ? ' bad' : (fraction < 0.3 ? ' warn' : '');
+    const fill = el('span', { class: 'fill' });
+    fill.style.width = (fraction * 100).toFixed(1) + '%';
+    const label = t('usage.cap') + (key.limit_reset ? ' · ' + key.limit_reset : '');
+    return el('div', { class: 'cap' + level },
+      el('div', { class: 'cap-head' },
+        el('span', { text: label }),
+        el('strong', { text: t('usage.capLeft', { left: fmtUSD(left), limit: fmtUSD(limit) }) })),
+      el('div', { class: 'track', role: 'progressbar', 'aria-label': label, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': Math.round(fraction * 100) }, fill));
+  }
+
+  function usageBlock(cred) {
+    const box = el('div', { class: 'cred-usage' });
+    if (cred.read_error) return box;
     const q = ui.quota[cred.auth_index];
-    if (!q) {
-      td.appendChild(el('button', { type: 'button', class: 'btn-link', text: t('quota.load'), onclick: () => loadQuota(cred.auth_index) }));
-      return td;
+    const d = q && q.data;
+    if (!d) {
+      const state = el('div', { class: 'usage-state' });
+      if (q && q.state === 'loading') {
+        state.appendChild(el('span', { text: t('usage.loading') }));
+      } else if (q && q.state === 'error') {
+        state.appendChild(el('span', { class: 'danger-text', text: t('usage.failed', { msg: q.error }) }));
+        state.appendChild(el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: t('usage.retry'), onclick: () => loadQuota(cred.auth_index) }));
+      } else {
+        state.appendChild(el('span', { text: t(cred.disabled ? 'usage.disabled' : 'usage.notLoaded') }));
+        state.appendChild(el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: t('usage.check'), onclick: () => loadQuota(cred.auth_index) }));
+      }
+      box.appendChild(state);
+      return box;
     }
-    if (q.state === 'loading') {
-      td.appendChild(el('span', { class: 'sub', text: t('quota.loading') }));
-      return td;
-    }
-    if (q.state === 'error') {
-      td.appendChild(el('div', { class: 'sub danger-text', text: q.error, title: q.error }));
-      td.appendChild(el('button', { type: 'button', class: 'btn-link', text: t('quota.retry'), onclick: () => loadQuota(cred.auth_index) }));
-      return td;
-    }
-    const d = q.data || {};
+    const meters = el('div', { class: 'meters' });
     if (d.balance) {
-      td.appendChild(el('div', { class: 'strong', text: fmtUSD(d.balance.available_usd), title: t('quota.balance') }));
-      if (Number(d.balance.reserved_usd) > 0) td.appendChild(el('div', { class: 'sub', text: t('quota.reserved', { v: fmtUSD(d.balance.reserved_usd) }) }));
-    } else if (d.balance_error) {
-      td.appendChild(el('div', { class: 'sub danger-text', text: t('quota.balanceError', { msg: d.balance_error }) }));
+      const reserved = Number(d.balance.reserved_usd) > 0 ? t('usage.reserved', { v: fmtUSD(d.balance.reserved_usd) }) : t('usage.balanceNote');
+      meters.appendChild(meter(t('usage.balance'), fmtUSD(d.balance.available_usd), reserved));
+    } else {
+      meters.appendChild(meter(t('usage.balance'), '—', d.balance_error || '', 'danger-text'));
     }
     if (d.key) {
-      td.appendChild(el('div', { class: 'sub', text: t('quota.spent24h', { v: fmtUSD(d.key.daily_usd) }) }));
-      if (d.key.limit_usd !== undefined && d.key.limit_remaining_usd !== undefined) {
-        td.appendChild(el('div', { class: 'sub', text: t('quota.capLeft', { v: fmtUSD(d.key.limit_remaining_usd), cap: fmtUSD(d.key.limit_usd) }) }));
-      }
+      meters.appendChild(meter(t('usage.spent24h'), fmtUSD(d.key.daily_usd)));
+      meters.appendChild(meter(t('usage.spent7d'), fmtUSD(d.key.weekly_usd)));
+      meters.appendChild(meter(t('usage.spent30d'), fmtUSD(d.key.monthly_usd)));
+      if (d.key.limit_usd !== undefined && d.key.limit_remaining_usd !== undefined) meters.appendChild(capBlock(d.key));
     } else if (d.key_error) {
-      td.appendChild(el('div', { class: 'sub danger-text', text: d.key_error }));
+      meters.appendChild(el('div', { class: 'cap meter-note danger-text', text: t('usage.keyError', { msg: d.key_error }) }));
     }
-    td.appendChild(el('button', { type: 'button', class: 'btn-link', text: t('actions.refresh'), onclick: () => loadQuota(cred.auth_index) }));
-    return td;
+    box.appendChild(meters);
+    if (q.state === 'error') box.appendChild(el('div', { class: 'sub danger-text', text: t('usage.failed', { msg: q.error }) }));
+    return box;
+  }
+
+  function credCard(cred) {
+    const [badgeClass, badgeKey] = credState(cred);
+    const models = Array.isArray(cred.models) ? cred.models : [];
+    const missing = Array.isArray(cred.missing_models) ? cred.missing_models : [];
+    const facts = el('dl', { class: 'facts' });
+    const fact = (label, ...value) => {
+      facts.appendChild(el('dt', { text: label }));
+      facts.appendChild(el('dd', null, ...value));
+    };
+    if (cred.label) fact(t('card.key'), el('span', { class: 'mono', text: cred.key_masked }));
+    if (!cred.read_error) {
+      fact(t('card.models'),
+        cred.all_models ? t('models.all') : t('models.selected', { count: models.length }),
+        cred.registered_known ? el('span', { class: 'sub', text: ' · ' + t('models.registered', { count: cred.registered_models }) }) : null,
+        missing.length ? el('div', { class: 'sub warn-text', text: t('models.missing', { list: missing.join(', ') }) }) : null);
+      fact(t('card.prefix'),
+        el('span', { class: cred.effective_prefix ? 'mono' : null, text: cred.effective_prefix ? cred.effective_prefix + '/' : t('prefix.none') }),
+        el('span', { class: 'sub', text: ' · ' + t(cred.prefix === null || cred.prefix === undefined ? 'prefix.default' : 'prefix.custom') }));
+      let proxyText = t('proxy.inherit');
+      if (cred.proxy_url) proxyText = isDirect(cred.proxy_url) ? t('proxy.direct') : cred.proxy_url;
+      fact(t('card.proxy'), el('span', { class: cred.proxy_url && !isDirect(cred.proxy_url) ? 'mono' : null, text: proxyText }));
+      if (cred.priority) fact(t('card.priority'), String(cred.priority));
+      if (cred.note) fact(t('card.note'), cred.note);
+    }
+    const stateNote = cred.read_error || cred.status_message || '';
+    if (stateNote) fact(t('card.status'), el('span', { class: cred.read_error ? 'danger-text' : 'warn-text', text: stateNote }));
+
+    const q = ui.quota[cred.auth_index];
+    const meta = el('div', { class: 'cred-meta' },
+      el('span', { class: 'mono', text: cred.name, title: cred.name }),
+      cred.success || cred.failed ? el('span', { text: t('card.requests', { ok: cred.success || 0, failed: cred.failed || 0 }) }) : null,
+      q && q.data && q.data.fetched_at ? el('span', { text: t('usage.fetched', { time: formatTime(q.data.fetched_at) }) }) : null,
+      !cred.read_error && q && q.data ? el('button', { type: 'button', class: 'btn-link', text: t(q.state === 'loading' ? 'usage.loading' : 'usage.refresh'), disabled: q.state === 'loading', onclick: () => loadQuota(cred.auth_index) }) : null);
+
+    const armed = armedDelete.name === cred.name;
+    const actions = el('div', { class: 'row-actions' },
+      el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: t('row.edit'), disabled: !!cred.read_error, onclick: () => openEditor('edit', cred) }),
+      el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: t(cred.disabled ? 'row.enable' : 'row.disable'), onclick: (ev) => toggleDisabled(cred, ev.currentTarget) }),
+      el('button', { type: 'button', class: 'btn btn-danger btn-sm' + (armed ? ' armed' : ''), text: t(armed ? 'row.confirmDelete' : 'row.delete'), onclick: (ev) => deleteCredential(cred, ev.currentTarget) }));
+
+    return el('article', { class: 'cred' + (cred.disabled ? ' off' : '') },
+      el('div', { class: 'cred-main' },
+        el('div', { class: 'cred-title' },
+          el('span', { class: 'cred-name', text: displayName(cred), title: displayName(cred) }),
+          el('span', { class: 'badge ' + badgeClass, text: t(badgeKey) })),
+        facts),
+      usageBlock(cred),
+      el('div', { class: 'cred-bottom' }, meta, actions));
   }
 
   function renderKeys() {
     keysBody.textContent = '';
+    keysCount.textContent = '';
     const data = ui.status;
+    const creds = credentials();
+    keysToolbar.hidden = creds.length === 0;
+    quotaButton.hidden = creds.length === 0;
+    // The empty state carries its own add button.
+    addButton.hidden = !!data && !data.list_error && creds.length === 0;
     if (!data) {
       keysBody.appendChild(el('div', { class: 'empty', text: t('keys.notLoaded') }));
       return;
@@ -1022,53 +1884,28 @@
       keysBody.appendChild(el('div', { class: 'empty danger-text', text: t('keys.listError', { msg: data.list_error }) }));
       return;
     }
-    const creds = Array.isArray(data.credentials) ? data.credentials : [];
     if (creds.length === 0) {
-      keysBody.appendChild(el('div', { class: 'empty', text: t('keys.empty') }));
+      keysBody.appendChild(el('div', { class: 'empty-state' },
+        el('strong', { text: t('keys.emptyTitle') }),
+        el('div', { text: t('keys.empty') }),
+        el('button', { type: 'button', class: 'btn btn-primary', text: t('actions.add'), onclick: () => openEditor('add') })));
       return;
     }
-    const head = el('tr', null, ['col.key', 'col.state', 'col.models', 'col.prefix', 'col.proxy', 'col.balance', 'col.actions'].map((key) => el('th', { text: t(key) })));
-    const tbody = el('tbody');
-    for (const cred of creds) {
-      let badgeClass = 'ok';
-      let badgeKey = 'state.enabled';
-      if (cred.read_error) { badgeClass = 'danger'; badgeKey = 'state.readError'; }
-      else if (cred.disabled) { badgeClass = ''; badgeKey = 'state.disabled'; }
-      else if (cred.unavailable) { badgeClass = 'warn'; badgeKey = 'state.unavailable'; }
-      const stateNote = cred.read_error || cred.status_message || '';
-
-      const models = Array.isArray(cred.models) ? cred.models : [];
-      const missing = Array.isArray(cred.missing_models) ? cred.missing_models : [];
-      const prefixText = cred.read_error ? '—' : (cred.effective_prefix ? cred.effective_prefix + '/' : t('prefix.none'));
-      let proxyText = t('proxy.inherit');
-      if (cred.proxy_url) proxyText = isDirect(cred.proxy_url) ? t('proxy.direct') : cred.proxy_url;
-
-      const armed = armedDelete.name === cred.name;
-      const actions = el('div', { class: 'row-actions' },
-        el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: t('row.edit'), disabled: !!cred.read_error, onclick: () => openEditor('edit', cred) }),
-        el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: t(cred.disabled ? 'row.enable' : 'row.disable'), onclick: (ev) => toggleDisabled(cred, ev.currentTarget) }),
-        el('button', { type: 'button', class: 'btn btn-danger btn-sm' + (armed ? ' armed' : ''), text: t(armed ? 'row.confirmDelete' : 'row.delete'), onclick: (ev) => deleteCredential(cred, ev.currentTarget) }));
-
-      tbody.appendChild(el('tr', null,
-        el('td', null,
-          el('div', { class: 'strong', text: displayName(cred) }),
-          cred.label ? el('div', { class: 'sub mono', text: cred.key_masked }) : null,
-          el('div', { class: 'sub', text: cred.name })),
-        el('td', null,
-          el('span', { class: 'badge ' + badgeClass, text: t(badgeKey) }),
-          stateNote ? el('div', { class: 'sub', text: stateNote, title: stateNote }) : null),
-        el('td', null,
-          el('div', { text: cred.read_error ? '—' : (cred.all_models ? t('models.all') : t('models.selected', { count: models.length })) }),
-          cred.registered_known ? el('div', { class: 'sub', text: t('models.registered', { count: cred.registered_models }) }) : null,
-          missing.length ? el('div', { class: 'sub warn-text', text: t('models.missing', { list: missing.join(', ') }) }) : null),
-        el('td', null,
-          el('div', { class: 'mono', text: prefixText }),
-          cred.read_error ? null : el('div', { class: 'sub', text: t(cred.prefix === null || cred.prefix === undefined ? 'prefix.default' : 'prefix.custom') })),
-        el('td', { class: 'mono', text: proxyText }),
-        quotaCell(cred),
-        el('td', null, actions)));
+    const filter = ui.keysFilter.trim().toLowerCase();
+    const visible = creds.filter((c) => credMatches(c, filter));
+    keysCount.textContent = filter
+      ? t('keys.shown', { shown: visible.length, total: creds.length })
+      : t('keys.count', { count: creds.length });
+    if (visible.length === 0) {
+      keysBody.appendChild(el('div', { class: 'empty', text: t('keys.noMatch') }));
+      return;
     }
-    keysBody.appendChild(el('div', { class: 'table-wrap' }, el('table', null, el('thead', null, head), tbody)));
+    for (const cred of visible) keysBody.appendChild(credCard(cred));
+  }
+
+  function renderQuotas() {
+    renderSummary();
+    renderKeys();
   }
 
   function applyStatus(data) {
@@ -1080,9 +1917,18 @@
     else if (!data.catalog || !data.catalog.count) setHealth('warn', 'health.catalog');
     else if (creds.length === 0) setHealth('warn', 'health.noKeys');
     else setHealth('ok', 'health.ok', { enabled, total: creds.length });
-    renderOverview();
+    renderCheckedAt();
+    renderTabCounts();
+    renderConfig();
+    renderSummary();
     renderKeys();
+    renderModels();
     if (ui.editor) renderPrefixLabel();
+    // The loaded model list follows the catalog the plugin currently serves.
+    const loaded = ui.catalog && ui.catalog.catalog;
+    if (loaded && data.catalog && data.catalog.revision && loaded.revision !== data.catalog.revision && !ui.catalogLoading) {
+      loadCatalog(false).catch(() => {});
+    }
   }
 
   // ---- requests ----
@@ -1140,6 +1986,7 @@
     ui.loginError = null;
     renderLoginError();
     startAutoRefresh();
+    ensureTabData();
   }
 
   function startAutoRefresh() {
@@ -1173,24 +2020,28 @@
     }
   }
 
+  // Keeps the last result on screen while it reloads.
   async function loadQuota(authIndex) {
     if (!authIndex) return;
-    ui.quota[authIndex] = { state: 'loading' };
-    renderKeys();
+    const prev = ui.quota[authIndex];
+    ui.quota[authIndex] = { state: 'loading', data: prev && prev.data };
+    renderQuotas();
     try {
       const data = await api('/credentials/quota?auth_index=' + encodeURIComponent(authIndex));
       ui.quota[authIndex] = { state: 'ok', data };
     } catch (error) {
       if (isAuthError(error)) { showLogin('login.expired', error.message); return; }
-      ui.quota[authIndex] = { state: 'error', error: error.message };
+      ui.quota[authIndex] = { state: 'error', error: error.message, data: prev && prev.data };
     }
-    renderKeys();
+    renderQuotas();
   }
 
-  // Load balances of enabled keys once, a few at a time.
-  async function loadAllQuotas() {
-    const creds = (ui.status && Array.isArray(ui.status.credentials)) ? ui.status.credentials : [];
-    const queue = creds.filter((c) => !c.disabled && !c.read_error && !ui.quota[c.auth_index]).map((c) => c.auth_index);
+  // Loads balances a few at a time: enabled keys not loaded yet, or with
+  // force every key that is enabled or already showing a balance.
+  async function loadAllQuotas(force) {
+    const queue = credentials()
+      .filter((c) => !c.read_error && (!c.disabled || (force && ui.quota[c.auth_index])) && (force || !ui.quota[c.auth_index]))
+      .map((c) => c.auth_index);
     const workers = [];
     for (let i = 0; i < QUOTA_CONCURRENCY; i++) {
       workers.push((async () => {
@@ -1200,7 +2051,18 @@
     await Promise.all(workers);
   }
 
+  async function refreshQuotas() {
+    setBusy(quotaButton, true);
+    try {
+      await loadAllQuotas(true);
+    } finally {
+      setBusy(quotaButton, false);
+    }
+  }
+
   async function loadCatalog(force) {
+    ui.catalogLoading = true;
+    if (!ui.catalog) renderModels();
     try {
       ui.catalog = force ? await api('/models/refresh', { method: 'POST', body: {} }) : await api('/models');
       ui.catalogError = null;
@@ -1208,15 +2070,18 @@
       if (isAuthError(error)) { showLogin('login.expired', error.message); throw error; }
       ui.catalogError = error.message;
       if (force) throw error;
+    } finally {
+      ui.catalogLoading = false;
+      renderPicker();
+      renderModels();
     }
-    renderPicker();
   }
 
   async function reloadCatalog() {
     setBusy(catalogButton, true);
     try {
       await loadCatalog(true);
-      setLog('ok', 'log.catalogReloaded', { count: ui.catalog && ui.catalog.models ? ui.catalog.models.length : 0 });
+      notify('ok', 'log.catalogReloaded', { count: ui.catalog && ui.catalog.models ? ui.catalog.models.length : 0 });
       await refresh(true);
     } catch (error) {
       handleError(error, 'log.loadFailed');
@@ -1230,7 +2095,7 @@
     setBusy(button, true);
     try {
       await cpa('/auth-files/status', { method: 'PATCH', body: { name: cred.name, auth_index: cred.auth_index, disabled: !cred.disabled } });
-      setLog('ok', cred.disabled ? 'log.enabled' : 'log.disabled', { name: displayName(cred) });
+      notify('ok', cred.disabled ? 'log.enabled' : 'log.disabled', { name: displayName(cred) });
       await refresh(true);
     } catch (error) {
       handleError(error);
@@ -1259,7 +2124,7 @@
       await cpa('/auth-files?name=' + encodeURIComponent(cred.name), { method: 'DELETE' });
       delete ui.quota[cred.auth_index];
       if (ui.editor && ui.editor.authIndex === cred.auth_index) closeEditor();
-      setLog('ok', 'log.deleted', { name: displayName(cred) });
+      notify('ok', 'log.deleted', { name: displayName(cred) });
       await refresh(true);
     } catch (error) {
       handleError(error);
@@ -1300,20 +2165,23 @@
     fModelsAll.checked = all;
     fModelsPick.checked = !all;
     pickerSearch.value = '';
-    editorCard.classList.remove('hidden');
     renderEditorStatic();
     renderPrefixLabel();
     renderPicker();
-    if (!ui.catalog) loadCatalog(false).catch(() => {});
-    editorCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    (editing ? fLabel : fKey).focus({ preventScroll: true });
+    if (!ui.catalog && !ui.catalogLoading) loadCatalog(false).catch(() => {});
+    if (!editorDialog.open) editorDialog.showModal();
+    (editing ? fLabel : fKey).focus();
+  }
+
+  function resetEditor() {
+    ui.editor = null;
+    ui.editorError = null;
+    fKey.value = '';
   }
 
   function closeEditor() {
-    ui.editor = null;
-    ui.editorError = null;
-    editorCard.classList.add('hidden');
-    fKey.value = '';
+    if (editorDialog.open) editorDialog.close();
+    resetEditor();
   }
 
   function renderEditorStatic() {
@@ -1471,7 +2339,7 @@
       if (data && Array.isArray(data.unknown_models) && data.unknown_models.length) {
         setLog('warn', 'log.unknownModels', { name, list: data.unknown_models.join(', ') });
       } else {
-        setLog('ok', adding ? 'log.added' : 'log.updated', { name });
+        notify('ok', adding ? 'log.added' : 'log.updated', { name });
       }
       await refresh(true);
       if (cred && cred.auth_index && adding) loadQuota(cred.auth_index);
@@ -1493,12 +2361,23 @@
       node.textContent = t(node.dataset.i18n);
     });
     loginKey.placeholder = t('login.placeholder');
+    catalogSearch.placeholder = t('catalog.search');
+    keysSearch.placeholder = t('keys.search');
+    editorClose.setAttribute('aria-label', t('form.close'));
+    editorClose.title = t('form.close');
+    tabList.setAttribute('aria-label', t('tabs.label'));
+    logClose.setAttribute('aria-label', t('log.dismiss'));
+    logClose.title = t('log.dismiss');
     pickerSearch.placeholder = t('picker.search');
     renderHealth();
     renderLoginError();
     renderLog();
-    renderOverview();
+    renderToast();
+    renderCheckedAt();
+    renderConfig();
+    renderSummary();
     renderKeys();
+    renderModels();
     if (ui.editor) {
       renderEditorStatic();
       renderPrefixLabel();
@@ -1523,10 +2402,42 @@
 
   applyStaticI18n();
 
+  for (const btn of tabButtons) {
+    btn.addEventListener('click', () => selectTab(btn.dataset.tab));
+  }
+  // Arrow keys, Home and End move between tabs (WAI-ARIA tabs pattern).
+  tabList.addEventListener('keydown', (event) => {
+    const index = TABS.indexOf(currentTab);
+    let next = -1;
+    if (event.key === 'ArrowRight') next = (index + 1) % TABS.length;
+    else if (event.key === 'ArrowLeft') next = (index - 1 + TABS.length) % TABS.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = TABS.length - 1;
+    if (next < 0) return;
+    event.preventDefault();
+    selectTab(TABS[next], true);
+  });
+  selectTab(currentTab);
+
+  logClose.addEventListener('click', () => setLog(null));
+  catalogSearch.addEventListener('input', () => {
+    ui.catalogFilter = catalogSearch.value;
+    renderModels();
+  });
   refreshButton.addEventListener('click', () => refresh(false));
   catalogButton.addEventListener('click', reloadCatalog);
+  quotaButton.addEventListener('click', refreshQuotas);
+  keysSearch.addEventListener('input', () => {
+    ui.keysFilter = keysSearch.value;
+    renderKeys();
+  });
   addButton.addEventListener('click', () => openEditor('add'));
   editorCancel.addEventListener('click', closeEditor);
+  editorClose.addEventListener('click', closeEditor);
+  // Esc closes the dialog natively; drop the half-filled form with it. A
+  // reopen right after close() must not be wiped by the queued event.
+  editorDialog.addEventListener('close', () => { if (!editorDialog.open) resetEditor(); });
+  switchKey.addEventListener('click', () => showLogin());
   editorForm.addEventListener('submit', (event) => { event.preventDefault(); saveEditor(); });
   fPrefixDefault.addEventListener('change', () => {
     if (!fPrefixDefault.checked && ui.editor && ui.editor.original && ui.editor.original.prefix !== null && ui.editor.original.prefix !== undefined) {
@@ -1561,8 +2472,7 @@
   async function enter(data) {
     showContent();
     applyStatus(data);
-    if (!data.credentials || data.credentials.length === 0) openEditor('add');
-    loadAllQuotas();
+    loadAllQuotas(false);
   }
 
   loginForm.addEventListener('submit', async (event) => {
@@ -1570,6 +2480,7 @@
     const key = loginKey.value.trim();
     if (!key) return;
     managementKey = key;
+    ui.keySource = 'manual';
     setBusy(loginButton, true);
     try {
       const data = await api('/status');
@@ -1595,6 +2506,7 @@
   async function start() {
     managementKey = readPanelKey();
     if (!managementKey) { showLogin(); return; }
+    ui.keySource = 'panel';
     try {
       await enter(await api('/status'));
     } catch (error) {

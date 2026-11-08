@@ -40,6 +40,9 @@ type accountInfo struct {
 }
 
 type balanceInfo struct {
+	// Account identifies whose balance this is, so the management page can
+	// add up balances without counting a shared account once per key.
+	Account      string  `json:"account,omitempty"`
 	AvailableUSD float64 `json:"available_usd"`
 	ReservedUSD  float64 `json:"reserved_usd"`
 }
@@ -114,6 +117,7 @@ func (s *Service) fetchAccount(cred credential) (accountInfo, *pluginabi.Error) 
 		info.BalanceError = balanceErr.Message
 	} else {
 		info.Balance = &balanceInfo{
+			Account:      balanceAccount(balanceRaw),
 			AvailableUSD: numberField(balanceRaw, "availableUsd", "available_usd"),
 			ReservedUSD:  numberField(balanceRaw, "reservedUsd", "reserved_usd"),
 		}
@@ -146,48 +150,68 @@ func (s *Service) fetchAccount(cred credential) (accountInfo, *pluginabi.Error) 
 	return info, nil
 }
 
-// quotaFromAccount renders account info for CPA's quota panel.
+// quotaFromAccount renders account info for CPA's quota panel: the key's
+// rolling 24h / 7d / 30d spend, plus a progress bar when the key has a spend
+// cap. Wokey has no shorter window, and the account balance is shown on the
+// plugin's own management page instead.
 func quotaFromAccount(info accountInfo) pluginapi.QuotaFetchResponse {
 	usd := func(key, label string, value float64) pluginapi.QuotaMetric {
 		return pluginapi.QuotaMetric{Key: key, Label: label, Value: value, Format: "currency", Currency: "USD"}
 	}
 	var out pluginapi.QuotaFetchResponse
-	if info.Balance != nil {
-		out.Summary = append(out.Summary,
-			usd("balance", "Balance", info.Balance.AvailableUSD),
-			usd("reserved", "Reserved", info.Balance.ReservedUSD))
+	key := info.Key
+	if key == nil {
+		return out
 	}
-	if key := info.Key; key != nil {
-		out.Summary = append(out.Summary,
-			usd("spent_24h", "Key spent 24h", key.DailyUSD),
-			usd("spent_7d", "Key spent 7d", key.WeeklyUSD),
-			usd("spent_30d", "Key spent 30d", key.MonthlyUSD))
-		if key.LimitUSD != nil && key.LimitRemaining != nil {
-			out.Summary = append(out.Summary, usd("cap_left", "Key cap left", *key.LimitRemaining))
-			fraction := 0.0
-			if *key.LimitUSD > 0 {
-				fraction = math.Max(0, math.Min(1, *key.LimitRemaining / *key.LimitUSD))
-			}
-			window := "total"
-			if key.LimitResetLabel != "" {
-				window = key.LimitResetLabel
-			}
-			out.Groups = append(out.Groups, pluginapi.QuotaGroup{
-				DisplayName: "Key spend cap",
-				Buckets: []pluginapi.QuotaBucket{{
-					Window:            window,
-					RemainingFraction: fraction,
-					Description:       fmt.Sprintf("$%.2f of $%.2f left", *key.LimitRemaining, *key.LimitUSD),
-				}},
-			})
-		} else {
-			out.Summary = append(out.Summary, usd("spent_total", "Key spent total", key.UsageUSD))
+	out.Summary = append(out.Summary,
+		usd("spent_24h", "24h", key.DailyUSD),
+		usd("spent_7d", "7d", key.WeeklyUSD),
+		usd("spent_30d", "30d", key.MonthlyUSD))
+	if key.LimitUSD != nil && key.LimitRemaining != nil {
+		fraction := 0.0
+		if *key.LimitUSD > 0 {
+			fraction = math.Max(0, math.Min(1, *key.LimitRemaining / *key.LimitUSD))
 		}
-		if key.Label != "" {
-			out.Subscription = &pluginapi.QuotaSubscription{TierName: key.Label}
+		window := "total"
+		if key.LimitResetLabel != "" {
+			window = key.LimitResetLabel
 		}
+		out.Groups = append(out.Groups, pluginapi.QuotaGroup{
+			DisplayName: "Key spend cap",
+			Buckets: []pluginapi.QuotaBucket{{
+				Window:            window,
+				RemainingFraction: fraction,
+				Description:       fmt.Sprintf("$%.2f of $%.2f left", *key.LimitRemaining, *key.LimitUSD),
+			}},
+		})
 	}
 	return out
+}
+
+// balanceAccount names the balance's owner: a procurement order has its own
+// prepaid balance, every other key shares its user's account balance.
+func balanceAccount(fields map[string]any) string {
+	if order := scalarString(fields["marketOrderId"]); order != "" {
+		return "order:" + order
+	}
+	if user := scalarString(fields["userId"]); user != "" {
+		return "user:" + user
+	}
+	return ""
+}
+
+// scalarString accepts an ID sent as a JSON string or number.
+func scalarString(raw any) string {
+	switch value := raw.(type) {
+	case string:
+		return strings.TrimSpace(value)
+	case float64:
+		return strconv.FormatFloat(value, 'f', -1, 64)
+	case json.Number:
+		return value.String()
+	default:
+		return ""
+	}
 }
 
 // quotaFetch does not call rememberHost: CPA sends quota requests without the

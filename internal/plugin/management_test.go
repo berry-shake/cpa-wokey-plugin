@@ -378,7 +378,7 @@ func TestCredentialQuotaRoute(t *testing.T) {
 	}
 	balance, _ := out["balance"].(map[string]any)
 	key, _ := out["key"].(map[string]any)
-	if balance["available_usd"] != 42.5 || balance["reserved_usd"] != 0.75 || key["limit_remaining_usd"] != 8.5 || key["label"] != "test key" {
+	if balance["available_usd"] != 42.5 || balance["account"] != "user:1234" || balance["reserved_usd"] != 0.75 || key["limit_remaining_usd"] != 8.5 || key["label"] != "test key" {
 		t.Fatalf("quota = %v", out)
 	}
 	// A revoked Wokey key is a 400, so the page does not mistake it for a
