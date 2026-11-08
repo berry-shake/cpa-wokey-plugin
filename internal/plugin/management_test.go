@@ -64,7 +64,8 @@ func TestAddCredential(t *testing.T) {
 	}
 	name := authFileNameForKey(testGoodKey)
 	cred := credentialOf(t, out)
-	if cred["name"] != name || cred["label"] != "test key" || cred["key_masked"] != maskKey(testGoodKey) {
+	// Wokey's own key label is not copied: the name defaults to the file name.
+	if cred["name"] != name || cred["label"] != "" || cred["key_masked"] != maskKey(testGoodKey) {
 		t.Fatalf("credential = %v", cred)
 	}
 	if got := stringList(out["unknown_models"]); !reflect.DeepEqual(got, []string{"ghost"}) {
@@ -75,7 +76,7 @@ func TestAddCredential(t *testing.T) {
 	}
 
 	fields := host.fields(name)
-	if fields[keyAPIKey] != testGoodKey || fields[keyType] != ProviderID || fields[keyLabel] != "test key" {
+	if _, hasLabel := fields[keyLabel]; hasLabel || fields[keyAPIKey] != testGoodKey || fields[keyType] != ProviderID {
 		t.Fatalf("auth file = %v", fields)
 	}
 	if fields[keyModelRevision] == nil || fields[keyModelRevision] != svc.catalog.current().Revision {
@@ -105,7 +106,7 @@ func TestAddCredential(t *testing.T) {
 	if host.saveCount() != saves {
 		t.Fatal("a rejected key must not be saved")
 	}
-	// skip_verify saves without calling Wokey, so there is no label to copy.
+	// skip_verify saves without calling Wokey.
 	status, out = manage(t, svc, http.MethodPost, credentialsPath, `{"api_key":"sk-offline-key-123456","skip_verify":true,"prefix":"","proxy_url":"direct"}`)
 	if status != http.StatusCreated {
 		t.Fatalf("skip_verify: %d %v", status, out)

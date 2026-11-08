@@ -277,7 +277,7 @@
     .cred-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 650; }
     .cred.off .cred-name { color: var(--text-secondary); }
     .cred-file { margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); }
-    .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; margin: 0; font-size: 12.5px; }
+    .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; gap: 4px 12px; margin: 0; font-size: 12.5px; }
     .facts dt { color: var(--text-muted); }
     .facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
     .cred-foot {
@@ -819,7 +819,7 @@
       'form.key': 'Wokey API key',
       'form.skipVerify': 'Skip key check (save even if Wokey is unreachable)',
       'form.label': 'Label',
-      'form.labelHelp': 'Shown in CPA. Empty uses the key\'s Wokey label.',
+      'form.labelHelp': 'Shown in CPA. Empty uses the auth file name without .json.',
       'form.proxy': 'Egress proxy',
       'form.proxyHelp': 'Empty inherits CPA\'s proxy-url; "direct" forces a direct connection. http, https, socks5 and socks5h are supported.',
       'form.prefix': 'Model prefix',
@@ -914,7 +914,6 @@
       'usage.retry': 'Retry',
       'usage.refresh': 'Refresh',
       'usage.fetched': 'checked {time}',
-      'card.key': 'Key',
       'card.models': 'Models',
       'card.prefix': 'Prefix',
       'card.proxy': 'Egress',
@@ -1007,7 +1006,7 @@
       'form.key': 'Wokey API Key',
       'form.skipVerify': '跳过 Key 校验（Wokey 暂时连不上时也保存）',
       'form.label': '名称',
-      'form.labelHelp': '显示在 CPA 中；留空使用 Key 在 Wokey 的名称。',
+      'form.labelHelp': '显示在 CPA 中；留空使用认证文件名（不带 .json）。',
       'form.proxy': '出口代理',
       'form.proxyHelp': '留空继承 CPA 全局 proxy-url；填 direct 强制直连。支持 http、https、socks5、socks5h。',
       'form.prefix': '模型前缀',
@@ -1102,7 +1101,6 @@
       'usage.retry': '重试',
       'usage.refresh': '刷新',
       'usage.fetched': '查询于 {time}',
-      'card.key': 'Key',
       'card.models': '模型',
       'card.prefix': '前缀',
       'card.proxy': '出口',
@@ -1484,8 +1482,15 @@
     return String(n);
   }
 
+  // An auth file's name without extension: "wokey-ab12.json" -> "wokey-ab12".
+  function fileStem(name) {
+    const base = String(name || '').trim().split(/[\\/]/).pop();
+    const dot = base.lastIndexOf('.');
+    return dot > 0 ? base.slice(0, dot) : base;
+  }
+
   function displayName(cred) {
-    return cred.label || cred.key_masked || cred.name;
+    return cred.label || fileStem(cred.name) || cred.key_masked;
   }
 
   function isDirect(proxy) {
@@ -1834,7 +1839,6 @@
       facts.appendChild(el('dt', { text: label }));
       facts.appendChild(el('dd', null, ...value));
     };
-    if (cred.label) fact(t('card.key'), el('span', { class: 'mono', text: cred.key_masked }));
     if (!cred.read_error) {
       fact(t('card.models'),
         cred.all_models ? t('models.all') : t('models.selected', { count: models.length }),
@@ -1859,6 +1863,8 @@
       q && q.data && q.data.fetched_at ? el('span', { text: t('usage.fetched', { time: formatTime(q.data.fetched_at) }) }) : null,
       !cred.read_error && q && q.data ? el('button', { type: 'button', class: 'btn-link', text: t(q.state === 'loading' ? 'usage.loading' : 'usage.refresh'), disabled: q.state === 'loading', onclick: () => loadQuota(cred.auth_index) }) : null);
 
+    // The name defaults to the file name; show it here only under a custom label.
+    const subline = [cred.label && cred.label !== fileStem(cred.name) ? fileStem(cred.name) : '', cred.key_masked].filter(Boolean).join(' · ');
     const armed = armedDelete.name === cred.name;
     const actions = el('div', { class: 'row-actions' },
       el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: t('row.edit'), disabled: !!cred.read_error, onclick: () => openEditor('edit', cred) }),
@@ -1870,7 +1876,7 @@
         el('div', { class: 'cred-title' },
           el('span', { class: 'cred-name', text: displayName(cred), title: displayName(cred) }),
           el('span', { class: 'badge ' + badgeClass, text: t(badgeKey) })),
-        el('div', { class: 'cred-file', text: cred.name, title: cred.name })),
+        el('div', { class: 'cred-file', text: subline, title: cred.name })),
       el('div', { class: 'cred-body' }, facts, ...usageParts(cred)),
       el('div', { class: 'cred-foot' }, meta, actions));
   }
@@ -2164,6 +2170,7 @@
     fKey.value = '';
     fSkipVerify.checked = false;
     fLabel.value = editing ? (cred.label || '') : '';
+    fLabel.placeholder = editing ? fileStem(cred.name) : '';
     fProxy.value = editing ? (cred.proxy_url || '') : '';
     const usesDefault = !editing || cred.prefix === null || cred.prefix === undefined;
     fPrefixDefault.checked = usesDefault;

@@ -112,8 +112,8 @@ func TestParseAuthFile(t *testing.T) {
 	if auth.Prefix != "wokey" {
 		t.Fatalf("files without prefix get the plugin default, got %q", auth.Prefix)
 	}
-	if auth.Label != "sk-abc…mnop" {
-		t.Fatalf("label should fall back to the masked key, got %q", auth.Label)
+	if auth.Label != "wokey-1" {
+		t.Fatalf("label should fall back to the file name without extension, got %q", auth.Label)
 	}
 	if auth.Metadata["type"] != ProviderID {
 		t.Fatalf("metadata type = %v", auth.Metadata["type"])
@@ -162,5 +162,19 @@ func TestIntFieldKeepsJSONNumbers(t *testing.T) {
 	}
 	if intField(map[string]any{"priority": 3.0}, "priority") != 3 || intField(map[string]any{"priority": 4}, "priority") != 4 {
 		t.Fatal("float64/int priority not read")
+	}
+}
+
+func TestFileStem(t *testing.T) {
+	for in, want := range map[string]string{
+		"wokey-ab12.json":       "wokey-ab12",
+		" /auths/wokey-x.json ": "wokey-x",
+		`C:\auths\wokey-y.json`: "wokey-y",
+		"plain":                 "plain",
+		".json":                 "",
+	} {
+		if got := fileStem(in); got != want {
+			t.Errorf("fileStem(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

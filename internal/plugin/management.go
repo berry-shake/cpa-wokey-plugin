@@ -530,7 +530,7 @@ func (s *Service) addCredential(body []byte) pluginapi.ManagementResponse {
 	cred := credentialFromMap(fields)
 	if !input.SkipVerify {
 		ctx, cancel := context.WithTimeout(s.ctx, accountCallTimeout)
-		info, perr := s.accountGET(ctx, cred, endpointKeyInfo)
+		_, perr := s.accountGET(ctx, cred, endpointKeyInfo)
 		cancel()
 		if perr != nil {
 			status := http.StatusBadGateway
@@ -538,11 +538,6 @@ func (s *Service) addCredential(body []byte) pluginapi.ManagementResponse {
 				status = http.StatusBadRequest
 			}
 			return jsonResponse(status, errorBody{Error: "key_verification_failed", Message: perr.Message})
-		}
-		if _, hasLabel := fields[keyLabel]; !hasLabel {
-			if label := stringField(info, "label"); label != "" {
-				fields[keyLabel] = label
-			}
 		}
 	}
 	// Load the catalog before saving so the file records the revision its

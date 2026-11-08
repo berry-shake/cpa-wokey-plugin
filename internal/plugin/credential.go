@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"path"
 	"sort"
 	"strings"
 	"time"
@@ -227,6 +228,9 @@ func authDataFromFields(fields map[string]any, raw []byte, fileName string, now 
 	metadata[keyType] = ProviderID
 	label := cred.Label
 	if label == "" {
+		label = fileStem(fileName)
+	}
+	if label == "" {
 		label = maskKey(cred.APIKey)
 	}
 	return pluginapi.AuthData{
@@ -263,4 +267,14 @@ func keyFingerprint(key string) string {
 
 func authFileNameForKey(key string) string {
 	return ProviderID + "-" + keyFingerprint(key) + ".json"
+}
+
+// fileStem is an auth file's name without directory and extension
+// ("wokey-ab12.json" -> "wokey-ab12"). It is a credential's default label.
+func fileStem(fileName string) string {
+	name := strings.TrimSpace(fileName)
+	if i := strings.LastIndexAny(name, `/\`); i >= 0 {
+		name = name[i+1:]
+	}
+	return strings.TrimSuffix(name, path.Ext(name))
 }
