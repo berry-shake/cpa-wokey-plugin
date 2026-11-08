@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
 func TestRequestLogPersistAndReload(t *testing.T) {
@@ -78,6 +79,22 @@ func TestReasoningEffort(t *testing.T) {
 	} {
 		if got := reasoningEffort([]byte(body)); got != want {
 			t.Errorf("%s = %q", body, got)
+		}
+	}
+}
+
+func TestClientModel(t *testing.T) {
+	cases := []struct {
+		req  pluginapi.ExecutorRequest
+		want string
+	}{
+		{pluginapi.ExecutorRequest{Model: "claude-opus-5-5", Metadata: map[string]any{"requested_model": "wokey/claude-opus-5-5"}, OriginalRequest: []byte(`{"model":"other"}`)}, "wokey/claude-opus-5-5"},
+		{pluginapi.ExecutorRequest{Model: "claude-opus-5-5", OriginalRequest: []byte(`{"model":"opus"}`)}, "opus"},
+		{pluginapi.ExecutorRequest{Model: "claude-opus-5-5", OriginalRequest: []byte(`not json`)}, "claude-opus-5-5"},
+	}
+	for _, tc := range cases {
+		if got := clientModel(tc.req, tc.req.Model); got != tc.want {
+			t.Errorf("clientModel = %q, want %q", got, tc.want)
 		}
 	}
 }

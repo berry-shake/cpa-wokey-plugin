@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
 const requestLogFile = "requests.jsonl"
@@ -459,6 +460,13 @@ func reasoningEffort(body []byte) string {
 		}
 	}
 	return ""
+}
+
+// clientModel is the model name the client asked for (with the prefix or
+// alias it used), falling back to the model CPA passed to the executor.
+func clientModel(req pluginapi.ExecutorRequest, fallback string) string {
+	requested, _ := req.Metadata["requested_model"].(string)
+	return firstNonEmpty(requested, topLevelString(req.OriginalRequest, "model"), fallback)
 }
 
 func firstNonEmpty(values ...string) string {

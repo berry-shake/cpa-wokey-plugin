@@ -466,7 +466,7 @@
     .badge.warn { background: var(--warning-soft); color: var(--warning); }
     .badge.danger { background: var(--danger-soft); color: var(--danger); }
     .log-grid { font-size: 12.5px; }
-    .log-head, .log-row > summary { display: grid; grid-template-columns: 150px minmax(140px,1.4fr) 90px 80px minmax(90px,0.7fr) minmax(140px,1.3fr) 110px 150px; gap: 10px; padding: 8px 18px; align-items: center; }
+    .log-head, .log-row > summary { display: grid; grid-template-columns: 140px minmax(170px,2fr) 90px 104px minmax(100px,1fr) 124px minmax(150px,1.2fr) 14px; gap: 10px; padding: 8px 18px; align-items: center; }
     .log-head { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: var(--bg-inset); border-bottom: 1px solid var(--border-subtle); }
     .log-row { border-bottom: 1px solid var(--border-subtle); }
     .log-row > summary { cursor: pointer; list-style: none; }
@@ -477,12 +477,37 @@
     .log-detail .sub { display: block; }
     .log-detail .err { grid-column: 1 / -1; }
     .log-row > summary > .clip { white-space: nowrap; }
+    .log-row > summary { position: relative; }
+    .log-model > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .log-model .mono { font-size: 12px; }
+    .log-model .served { color: #cf9546; }
+    .log-lat { display: grid; gap: 4px; width: 118px; max-width: 100%; }
+    .lat-line { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; border-left: 3px solid var(--metric, var(--border-strong)); border-radius: 3px; padding: 2px 6px; background: color-mix(in srgb, var(--metric, var(--border-strong)) 9%, transparent); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+    .lat-line > span { color: var(--text-muted); font-size: 10.5px; flex-shrink: 0; }
+    .lat-line strong { color: var(--metric, var(--text-primary)); font-weight: 650; white-space: nowrap; }
+    .lat-line.good { --metric: var(--success); }
+    .lat-line.warn { --metric: var(--warning); }
+    .lat-line.bad { --metric: var(--danger); }
+    .log-usage { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .log-usage .sub { margin-top: 3px; overflow: hidden; text-overflow: ellipsis; }
+    .log-chev { color: var(--text-muted); font-size: 18px; line-height: 1; transition: transform .16s; justify-self: end; }
+    .log-row[open] .log-chev { transform: rotate(90deg); }
     .toolbar select.input { width: auto; flex: 0 0 auto; }
-    .pager { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 10px 18px; }
+    .pager { display: flex; justify-content: space-between; align-items: center; gap: 10px 16px; flex-wrap: wrap; padding: 10px 18px; }
     .pager:empty { display: none; }
+    .pager-info { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-muted); }
+    .pager-info select.input { width: auto; }
+    .pager-nav { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+    .pager-nav .btn { min-width: 30px; justify-content: center; }
+    .pager-nav .btn[aria-current="page"] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+    .pager-gap { min-width: 18px; text-align: center; color: var(--text-muted); font-size: 12px; }
+    .pager-jump { display: flex; align-items: center; gap: 6px; margin-left: 8px; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+    .pager-jump input.input { width: 56px; min-height: 28px; padding: 3px 6px; text-align: center; -moz-appearance: textfield; }
+    .pager-jump input::-webkit-outer-spin-button, .pager-jump input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     @media (max-width: 1100px) {
       .log-head { display: none; }
       .log-row > summary { grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px 16px; padding: 10px 18px; align-items: start; }
+      .log-chev { position: absolute; top: 12px; right: 16px; }
       .log-row > summary > [data-label]::before { content: attr(data-label); display: block; font-family: var(--font-sans); font-size: 11px; font-weight: 400; color: var(--text-muted); margin-bottom: 2px; }
     }
     @media (max-width: 720px) { .log-row > summary { grid-template-columns: repeat(2, minmax(0,1fr)); } }
@@ -500,6 +525,14 @@
     .input::placeholder { color: var(--text-muted); font-family: var(--font-sans); }
     .input.input-sm { min-height: 30px; padding: 4px 10px; font-size: 12.5px; border-radius: var(--radius-sm); }
     .input.search { flex: 0 1 320px; width: 320px; }
+    select.input {
+      -webkit-appearance: none; appearance: none; cursor: pointer; padding-right: 32px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2396908a' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 10px center; background-size: 12px 12px;
+    }
+    select.input.input-sm { padding-right: 28px; background-position: right 8px center; }
+    select.input:hover { border-color: var(--text-muted); }
+    select.input:focus { border-color: var(--accent); }
     .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px 16px; }
     .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
     .field > label, .field > .label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
@@ -845,11 +878,20 @@
       'logs.count': '{n} requests',
       'logs.empty': 'No requests yet.',
       'logs.col.time': 'Time',
-      'logs.col.model': 'Model / upstream',
+      'logs.col.model': 'Client model / upstream',
       'logs.col.effort': 'Effort',
       'logs.col.result': 'Result',
       'logs.col.cred': 'Credential',
-      'logs.col.served': 'Served model',
+      'logs.ttft': 'TTFT',
+      'logs.total': 'Total',
+      'logs.ttftHint': 'TTFT: under 5s green, under 10s yellow, otherwise red',
+      'logs.totalHint': 'Total: with under 100 output tokens, under 10s green, under 30s yellow, otherwise red; otherwise by output ÷ total time, ≥30 t/s green, ≥15 t/s yellow, otherwise red',
+      'logs.usageHint': 'Input / output tokens',
+      'logs.cacheLine': 'cached {c} ({p})',
+      'logs.speedHint': 'Output tokens ÷ (total − TTFT)',
+      'logs.servedHint': 'Model in the response: {m}',
+      'logs.stream': 'Stream',
+      'logs.nonStream': 'Non-stream',
       'logs.col.timing': 'TTFT / total',
       'logs.col.usage': 'Usage',
       'logs.sum.requests': 'Requests',
@@ -875,6 +917,10 @@
       'logs.prev': 'Previous',
       'logs.next': 'Next',
       'logs.page': '{from}–{to} of {total}',
+      'logs.pageSize': '{n} / page',
+      'logs.pageN': 'Page {n}',
+      'logs.jumpTo': 'Go to',
+      'logs.jumpUnit': '/ {n}',
       'logs.cleared': 'Request log cleared.',
       'checkedAt': 'Updated {time}',
       'log.dismiss': 'Dismiss',
@@ -1088,11 +1134,20 @@
       'logs.count': '{n} 条请求',
       'logs.empty': '还没有请求。',
       'logs.col.time': '时间',
-      'logs.col.model': '模型 / 上游',
+      'logs.col.model': '客户端模型 / 上游',
       'logs.col.effort': '思考强度',
       'logs.col.result': '结果',
       'logs.col.cred': '凭据',
-      'logs.col.served': '实际模型',
+      'logs.ttft': '首字',
+      'logs.total': '耗时',
+      'logs.ttftHint': '首字：<5 秒绿，<10 秒黄，其余红',
+      'logs.totalHint': '耗时：输出不足 100 Token 时，<10 秒绿、<30 秒黄、其余红；否则按输出 ÷ 总耗时，≥30 t/s 绿、≥15 t/s 黄、其余红',
+      'logs.usageHint': '输入 / 输出 Token',
+      'logs.cacheLine': '缓存 {c} ({p})',
+      'logs.speedHint': '输出 Token ÷（总耗时 − 首字时间）',
+      'logs.servedHint': '实际响应模型：{m}',
+      'logs.stream': '流式',
+      'logs.nonStream': '非流式',
       'logs.col.timing': '首字 / 耗时',
       'logs.col.usage': '用量',
       'logs.sum.requests': '请求数',
@@ -1118,6 +1173,10 @@
       'logs.prev': '上一页',
       'logs.next': '下一页',
       'logs.page': '第 {from}–{to} 条，共 {total} 条',
+      'logs.pageSize': '每页 {n} 条',
+      'logs.pageN': '第 {n} 页',
+      'logs.jumpTo': '跳至',
+      'logs.jumpUnit': '页，共 {n} 页',
       'logs.cleared': '请求日志已清空。',
       'checkedAt': '更新于 {time}',
       'log.dismiss': '关闭',
@@ -2684,16 +2743,27 @@
   const logsHint = $('logs-hint');
   const logsRefresh = $('logs-refresh');
   const logsClear = $('logs-clear');
-  const LOG_PAGE = 50;
-  const logState = { page: null, offset: 0, seq: 0, armed: null };
+  const LOG_SIZE_KEY = 'cliproxy-wokey-log-size';
+  const LOG_SIZES = [20, 50, 100, 200];
+  const logState = { page: null, offset: 0, size: 50, seq: 0, armed: null };
+  try {
+    const saved = Number(localStorage.getItem(LOG_SIZE_KEY));
+    if (LOG_SIZES.includes(saved)) logState.size = saved;
+  } catch (_) { /* ignore */ }
 
   async function loadLogs(silent) {
     const seq = ++logState.seq;
-    const params = new URLSearchParams({ limit: LOG_PAGE, offset: logState.offset, status: logsStatus.value, search: logsSearch.value.trim() });
+    const params = new URLSearchParams({ limit: logState.size, offset: logState.offset, status: logsStatus.value, search: logsSearch.value.trim() });
     if (!silent) setBusy(logsRefresh, true);
     try {
       const page = await api('/logs?' + params.toString());
       if (seq !== logState.seq) return;
+      if (!(page.items || []).length && page.total > 0 && logState.offset > 0) {
+        // The page went past the end (log trimmed or filter changed): show the last page.
+        logState.offset = Math.floor((page.total - 1) / logState.size) * logState.size;
+        loadLogs(silent);
+        return;
+      }
       logState.page = page;
       renderLogs();
     } catch (error) {
@@ -2704,10 +2774,30 @@
   }
 
   function fmtMS(ms) {
-    if (ms === null || ms === undefined) return '—';
-    return ms >= 1000 ? (ms / 1000).toFixed(ms >= 10000 ? 0 : 1) + 's' : ms + 'ms';
+    if (ms === null || ms === undefined || !(ms > 0)) return '—';
+    if (ms < 60000) return (ms / 1000).toFixed(1) + 's';
+    const sec = Math.round(ms / 1000);
+    return Math.floor(sec / 60) + 'm ' + (sec % 60) + 's';
   }
-  function fmtRate(v) { return v === null || v === undefined ? '—' : (v >= 100 ? Math.round(v) : v.toFixed(1)) + ' tok/s'; }
+  function fmtRate(v) { return v === null || v === undefined ? '—' : Math.round(v).toLocaleString() + ' t/s'; }
+  function fmtCount(n) { return (Number(n) || 0).toLocaleString(); }
+
+  // latTone colours a timing the way ClinePassBridge does.
+  function latTone(ms, kind, outTokens) {
+    if (!(ms > 0)) return '';
+    const sec = ms / 1000;
+    if (kind === 'ttft') return sec < 5 ? 'good' : sec < 10 ? 'warn' : 'bad';
+    if (outTokens >= 100) {
+      const rate = outTokens / sec;
+      return rate >= 30 ? 'good' : rate >= 15 ? 'warn' : 'bad';
+    }
+    return sec < 10 ? 'good' : sec < 30 ? 'warn' : 'bad';
+  }
+  function latLine(kind, ms, outTokens) {
+    return el('div', { class: 'lat-line ' + latTone(ms, kind, outTokens), title: t(kind === 'ttft' ? 'logs.ttftHint' : 'logs.totalHint') },
+      el('span', { text: t(kind === 'ttft' ? 'logs.ttft' : 'logs.total') }),
+      el('strong', { text: fmtMS(ms) }));
+  }
   function fmtPct(v) { return v === null || v === undefined ? '—' : (v * 100).toFixed(1) + '%'; }
 
   function stripItem(label, value, note) {
@@ -2739,21 +2829,26 @@
       logsBody.replaceChildren(el('div', { class: 'empty', text: t('logs.empty') }));
       return;
     }
-    const cols = ['time', 'model', 'effort', 'result', 'cred', 'served', 'timing', 'usage'];
-    const head = el('div', { class: 'log-head' }, cols.map((c) => el('div', { text: t('logs.col.' + c) })));
+    const cols = ['time', 'model', 'effort', 'result', 'cred', 'timing', 'usage'];
+    const head = el('div', { class: 'log-head' }, cols.map((c) => el('div', { text: t('logs.col.' + c) })), el('div'));
     const rows = items.map((e) => {
       const ok = e.status === 'success';
-      const result = el('span', { class: 'badge ' + (ok ? 'ok' : 'danger'), text: ok ? String(e.http_status || 200) : String(e.http_status || t('logs.error')), title: e.error || '' });
-      const usage = t('logs.sum.io', { i: fmtTokens(e.input_tokens), o: fmtTokens(e.output_tokens), c: fmtTokens(e.cached_tokens) });
+      const result = el('span', { class: 'badge ' + (ok ? 'ok' : 'danger'), text: e.http_status ? 'HTTP ' + e.http_status : t('logs.error'), title: e.error || '' });
+      const cacheRate = e.input_tokens > 0 ? fmtPct(e.cached_tokens / e.input_tokens) : '—';
       const summary = el('summary', null,
         el('div', { class: 'nowrap', text: formatWhen(e.time), 'data-label': t('logs.col.time') }),
-        el('div', { 'data-label': t('logs.col.model') }, el('div', { class: 'strong', text: e.model || '—' }), e.upstream_model && e.upstream_model !== e.model ? el('div', { class: 'sub', text: e.upstream_model }) : null),
+        el('div', { class: 'log-model', 'data-label': t('logs.col.model') },
+          el('div', { class: 'mono strong', text: e.model || '—', title: e.model || '' }),
+          el('div', { class: 'mono sub', text: e.upstream_model || '—', title: e.upstream_model || '' }),
+          el('div', { class: 'mono served', text: '↳ ' + (e.served_model || '—'), title: t('logs.servedHint', { m: e.served_model || '—' }) })),
         el('div', { text: e.reasoning_effort || '—', 'data-label': t('logs.col.effort') }),
-        el('div', { 'data-label': t('logs.col.result') }, result),
+        el('div', { 'data-label': t('logs.col.result') }, result, el('div', { class: 'sub', text: e.stream ? t('logs.stream') : t('logs.nonStream') })),
         el('div', { class: 'clip', text: e.credential || e.auth_id || '—', title: e.auth_id || '', 'data-label': t('logs.col.cred') }),
-        el('div', { class: 'mono clip', text: e.served_model || '—', title: e.served_model || '', 'data-label': t('logs.col.served') }),
-        el('div', { class: 'nowrap', text: fmtMS(e.ttft_ms) + ' / ' + fmtMS(e.duration_ms), 'data-label': t('logs.col.timing') }),
-        el('div', { class: 'sub', text: usage, 'data-label': t('logs.col.usage') }));
+        el('div', { 'data-label': t('logs.col.timing') }, el('div', { class: 'log-lat' }, latLine('ttft', e.ttft_ms, e.output_tokens), latLine('total', e.duration_ms, e.output_tokens))),
+        el('div', { class: 'log-usage', 'data-label': t('logs.col.usage') },
+          el('div', { text: fmtCount(e.input_tokens) + ' / ' + fmtCount(e.output_tokens), title: t('logs.usageHint') }),
+          el('div', { class: 'sub', title: t('logs.speedHint') }, t('logs.cacheLine', { c: fmtCount(e.cached_tokens), p: cacheRate }) + ' · ' + fmtRate(e.output_tokens_per_second))),
+        el('span', { class: 'log-chev', 'aria-hidden': 'true', text: '›' }));
       const detail = el('div', { class: 'log-detail' },
         detailItem('ID', e.id),
         detailItem(t('logs.d.endpoint'), e.endpoint || '—'),
@@ -2769,13 +2864,59 @@
       return el('details', { class: 'log-row' }, summary, detail);
     });
     logsBody.replaceChildren(head, ...rows);
-    if (page.total > LOG_PAGE) {
-      const from = page.offset + 1, to = page.offset + items.length;
-      logsPager.append(
-        el('span', { class: 'sub', text: t('logs.page', { from, to, total: page.total }) }),
-        el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: t('logs.prev'), disabled: page.offset <= 0, onclick: () => { logState.offset = Math.max(0, page.offset - LOG_PAGE); loadLogs(true); } }),
-        el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: t('logs.next'), disabled: to >= page.total, onclick: () => { logState.offset = page.offset + LOG_PAGE; loadLogs(true); } }));
+    renderLogPager(page, items.length);
+  }
+
+  function renderLogPager(page, shown) {
+    const size = logState.size;
+    const pages = Math.max(1, Math.ceil(page.total / size));
+    const current = Math.min(pages - 1, Math.floor(page.offset / size));
+    const go = (n) => {
+      if (n < 0 || n >= pages || n === current) return;
+      logState.offset = n * size;
+      loadLogs(true);
+    };
+    const sizeSelect = el('select', { class: 'input input-sm', 'aria-label': t('logs.pageSize', { n: size }) },
+      LOG_SIZES.map((n) => el('option', { value: n, text: t('logs.pageSize', { n }), selected: n === size })));
+    sizeSelect.addEventListener('change', () => {
+      logState.size = Number(sizeSelect.value);
+      try { localStorage.setItem(LOG_SIZE_KEY, String(logState.size)); } catch (_) { /* ignore */ }
+      logState.offset = Math.floor(page.offset / logState.size) * logState.size;
+      loadLogs(true);
+    });
+    const nav = el('div', { class: 'pager-nav' },
+      el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: '‹ ' + t('logs.prev'), disabled: current <= 0, onclick: () => go(current - 1) }));
+    let last = -1;
+    for (const n of pagerNumbers(current, pages)) {
+      if (n - last > 1) nav.append(el('span', { class: 'pager-gap', text: '…' }));
+      nav.append(el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: String(n + 1), title: t('logs.pageN', { n: n + 1 }), 'aria-current': n === current ? 'page' : null, onclick: () => go(n) }));
+      last = n;
     }
+    nav.append(el('button', { class: 'btn btn-secondary btn-sm', type: 'button', text: t('logs.next') + ' ›', disabled: current >= pages - 1, onclick: () => go(current + 1) }));
+    const jump = el('input', { class: 'input input-sm', type: 'number', min: 1, max: pages, step: 1, inputmode: 'numeric', value: current + 1, 'aria-label': t('logs.jumpTo') });
+    let jumped = false; // Enter fires both keydown and change.
+    const jumpTo = () => {
+      if (jumped) return;
+      const n = Math.round(Number(jump.value));
+      if (!Number.isFinite(n) || jump.value === '') { jump.value = current + 1; return; }
+      const target = Math.min(pages, Math.max(1, n));
+      jump.value = target;
+      if (target - 1 !== current) { jumped = true; go(target - 1); }
+    };
+    jump.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); jumpTo(); } });
+    jump.addEventListener('change', jumpTo);
+    nav.append(el('label', { class: 'pager-jump' }, t('logs.jumpTo'), jump, t('logs.jumpUnit', { n: pages })));
+    logsPager.append(
+      el('div', { class: 'pager-info' }, el('span', { text: t('logs.page', { from: page.offset + 1, to: page.offset + shown, total: page.total }) }), sizeSelect),
+      nav);
+  }
+
+  // pagerNumbers picks the page buttons to show: the first, the last and two
+  // on each side of the current page.
+  function pagerNumbers(current, pages) {
+    const set = new Set([0, pages - 1]);
+    for (let n = current - 2; n <= current + 2; n++) if (n >= 0 && n < pages) set.add(n);
+    return [...set].sort((a, b) => a - b);
   }
 
   let logsSearchTimer = null;

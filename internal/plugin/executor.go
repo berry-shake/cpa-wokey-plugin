@@ -125,7 +125,7 @@ func (s *Service) prepareCall(req pluginapi.ExecutorRequest, endpoint string) (*
 		client:   s.clients.client(setting),
 		authID:   req.AuthID,
 
-		model:         model,
+		model:         clientModel(req, model),
 		upstreamModel: upstream,
 		label:         firstNonEmpty(cred.Label, req.AuthID),
 	}, nil
@@ -166,7 +166,7 @@ func (s *Service) countTokens(req pluginapi.ExecutorRequest) []byte {
 func (s *Service) executeBuffered(req pluginapi.ExecutorRequest, endpoint string) []byte {
 	call, perr := s.prepareCall(req, endpoint)
 	if perr != nil {
-		s.recordFailure(req.Model, endpoint, false, req.AuthID, perr)
+		s.recordFailure(clientModel(req, req.Model), endpoint, false, req.AuthID, perr)
 		return errorEnvelopeFrom(perr)
 	}
 	var rec *callRecord
