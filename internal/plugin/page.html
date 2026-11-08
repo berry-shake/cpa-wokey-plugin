@@ -286,9 +286,8 @@
     .cred-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 650; }
     .cred.off .cred-name { color: var(--text-secondary); }
     .cred-file { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); }
-    .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); align-content: start; gap: 6px 12px; margin: 0; font-size: 12.5px; line-height: 1.45; }
-    .facts dt { color: var(--text-muted); }
-    .facts dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* The facts mirror the usage figures: a 2x2 of label over value, so both halves match. */
+    .facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 10px 12px; }
     .cred-foot {
       display: flex;
       align-items: center;
@@ -299,11 +298,12 @@
       padding-top: 10px;
       border-top: 1px solid var(--border-subtle);
     }
+    .cred-foot .row-actions { margin-left: auto; }
     /* Facts with usage below; a wide card puts the usage figures beside the facts. */
     .cred-body { display: grid; gap: 12px; min-width: 0; }
     .meters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-content: start; gap: 10px 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
     @container (min-width: 340px) {
-      .cred-body { grid-template-columns: minmax(0, 1fr) minmax(0, 0.72fr); column-gap: 14px; }
+      .cred-body { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 14px; }
       .cred-body > .cap, .cred-body > .usage-note { grid-column: 1 / -1; }
       .cred-body > .meters, .cred-body > .usage-state { padding: 0 0 0 14px; border-top: none; border-left: 1px solid var(--border-subtle); }
       .cred-body > .meters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -313,6 +313,7 @@
     .meter-label, .meter-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .meter-label { font-size: 11px; color: var(--text-muted); }
     .meter-value { margin-top: 2px; font-size: 15px; font-weight: 650; line-height: 1.3; font-variant-numeric: tabular-nums; }
+    .meter-value.text { font-size: 13px; font-weight: 500; line-height: 19.5px; }
     .meter-note { margin-top: 1px; font-size: 11px; color: var(--text-muted); overflow-wrap: anywhere; }
     .cap-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-muted); }
     .cap-head strong { color: var(--success); font-variant-numeric: tabular-nums; }
@@ -818,7 +819,7 @@
       'models.selected': '{count} selected',
       'models.registered': '{count} registered in CPA',
       'models.missing': 'Gone from catalog: {list}',
-      'models.missingCount': '{count} gone from catalog',
+      'models.missingCount': '{count} gone',
       'prefix.none': 'none (bare IDs)',
       'prefix.default': 'plugin default',
       'prefix.custom': 'per key',
@@ -919,7 +920,7 @@
       'summary.pending': '{n} key(s) not checked',
       'summary.failed': '{n} key(s) failed',
       'usage.balance': 'Balance',
-      'usage.balanceNote': 'account-wide',
+      'usage.balanceNote': 'shared by the account',
       'usage.reserved': 'reserved {v}',
       'usage.spent24h': 'Spent 24h',
       'usage.spent7d': 'Spent 7d',
@@ -945,8 +946,9 @@
       'card.prefix': 'Prefix',
       'card.proxy': 'Egress',
       'card.priority': 'Priority',
-      'card.note': 'Note',
+      'card.noteLine': 'Note: {msg}',
       'card.statusNote': 'Status: {msg}',
+      'card.requestsLabel': 'OK / failed',
       'card.requests': '{ok} ok · {failed} failed',
       'keys.search': 'Search name, key or file',
       'keys.count': '{count} keys',
@@ -1016,7 +1018,7 @@
       'models.selected': '已选 {count} 个',
       'models.registered': 'CPA 已注册 {count} 个',
       'models.missing': '目录中已下架：{list}',
-      'models.missingCount': '{count} 个已下架',
+      'models.missingCount': '下架 {count}',
       'prefix.none': '无（裸模型名）',
       'prefix.default': '插件默认',
       'prefix.custom': '单独设置',
@@ -1143,8 +1145,9 @@
       'card.prefix': '前缀',
       'card.proxy': '出口',
       'card.priority': '优先级',
-      'card.note': '备注',
+      'card.noteLine': '备注：{msg}',
       'card.statusNote': '状态：{msg}',
+      'card.requestsLabel': '成功 / 失败',
       'card.requests': '成功 {ok} · 失败 {failed}',
       'keys.search': '搜索名称、Key 或文件名',
       'keys.count': '{count} 个 Key',
@@ -1872,10 +1875,10 @@
   }
 
   // One figure of a card's usage row: label, value, optional note below.
-  function meter(label, value, note, noteClass) {
+  function meter(label, value, note, noteClass, tip) {
     return el('div', { class: 'meter' },
-      el('div', { class: 'meter-label', text: label, title: label }),
-      el('div', { class: 'meter-value', text: value, title: value }),
+      el('div', { class: 'meter-label', text: label, title: tip ? label + ' · ' + tip : label }),
+      el('div', { class: 'meter-value', text: value, title: tip ? value + ' · ' + tip : value }),
       note ? el('div', { class: 'meter-note' + (noteClass ? ' ' + noteClass : ''), text: note, title: note }) : null);
   }
 
@@ -1901,8 +1904,9 @@
     }
     const meters = el('div', { class: 'meters' });
     if (d.balance) {
-      const reserved = Number(d.balance.reserved_usd) > 0 ? t('usage.reserved', { v: fmtUSD(d.balance.reserved_usd) }) : t('usage.balanceNote');
-      meters.appendChild(meter(t('usage.balance'), fmtUSD(d.balance.available_usd), reserved));
+      // Kept to the tooltip so the figures stay as tall as the facts beside them.
+      const tip = [t('usage.balanceNote'), Number(d.balance.reserved_usd) > 0 ? t('usage.reserved', { v: fmtUSD(d.balance.reserved_usd) }) : ''].filter(Boolean).join(' · ');
+      meters.appendChild(meter(t('usage.balance'), fmtUSD(d.balance.available_usd), '', '', tip));
     } else {
       meters.appendChild(meter(t('usage.balance'), '—', d.balance_error || '', 'danger-text'));
     }
@@ -1922,40 +1926,45 @@
     const [badgeClass, badgeKey] = credState(cred);
     const models = Array.isArray(cred.models) ? cred.models : [];
     const missing = Array.isArray(cred.missing_models) ? cred.missing_models : [];
-    const facts = el('dl', { class: 'facts' });
-    // One line per fact; details that used to trail in grey are in the tooltip.
-    const fact = (label, text, details, extra) => {
-      facts.appendChild(el('dt', { text: label }));
-      facts.appendChild(el('dd', { title: [text, ...(details || [])].join('\n') }, text, extra || null));
-    };
+    const facts = el('div', { class: 'facts' });
+    // Four facts laid out like the usage figures; details are in the tooltip.
+    const fact = (label, text, tip, extra, flag) => facts.appendChild(el('div', { class: 'meter' },
+      el('div', { class: 'meter-label', title: label }, label, flag ? el('span', { class: 'warn-text', text: ' · ' + flag }) : null),
+      el('div', { class: 'meter-value text', title: tip || text }, text, extra || null)));
     if (!cred.read_error) {
-      fact(t('card.models'),
-        cred.all_models ? t('models.all') : t('models.selected', { count: models.length }),
+      const modelsText = cred.all_models ? t('models.all') : t('models.selected', { count: models.length });
+      fact(t('card.models'), modelsText,
         [
+          modelsText,
           cred.registered_known ? t('models.registered', { count: cred.registered_models }) : '',
           missing.length ? t('models.missing', { list: missing.join(', ') }) : '',
-        ].filter(Boolean),
-        missing.length ? el('span', { class: 'warn-text', text: ' · ' + t('models.missingCount', { count: missing.length }) }) : null);
-      fact(t('card.prefix'),
-        cred.effective_prefix ? cred.effective_prefix + '/' : t('prefix.none'),
-        [t(cred.prefix === null || cred.prefix === undefined ? 'prefix.default' : 'prefix.custom')]);
+        ].filter(Boolean).join('\n'),
+        null, missing.length ? t('models.missingCount', { count: missing.length }) : '');
+      const prefixText = cred.effective_prefix ? cred.effective_prefix + '/' : t('prefix.none');
+      fact(t('card.prefix'), prefixText,
+        prefixText + '\n' + t(cred.prefix === null || cred.prefix === undefined ? 'prefix.default' : 'prefix.custom'));
       let proxyText = t('proxy.inherit');
       if (cred.proxy_url) proxyText = isDirect(cred.proxy_url) ? t('proxy.direct') : cred.proxy_url;
       fact(t('card.proxy'), proxyText);
-      if (cred.priority) fact(t('card.priority'), String(cred.priority));
-      if (cred.note) fact(t('card.note'), cred.note);
+      const ok = cred.success || 0;
+      const failed = cred.failed || 0;
+      fact(t('card.requestsLabel'), ok + ' / ', t('card.requests', { ok, failed }),
+        el('span', { class: failed ? 'danger-text' : '', text: String(failed) }));
     }
     // Why the key is off or cooling down, under the figures on its own line.
     const stateNote = cred.read_error || cred.status_message || '';
 
     const q = ui.quota[cred.auth_index];
     const meta = el('div', { class: 'cred-meta' },
-      cred.success || cred.failed ? el('span', { text: t('card.requests', { ok: cred.success || 0, failed: cred.failed || 0 }) }) : null,
       q && q.data && q.data.fetched_at ? el('span', { text: t('usage.fetched', { time: formatTime(q.data.fetched_at) }) }) : null,
       !cred.read_error && q && q.data ? el('button', { type: 'button', class: 'btn-link', text: t(q.state === 'loading' ? 'usage.loading' : 'usage.refresh'), disabled: q.state === 'loading', onclick: () => loadQuota(cred.auth_index) }) : null);
 
     // The name defaults to the file name; show it here only under a custom label.
-    const subline = [cred.label && cred.label !== fileStem(cred.name) ? fileStem(cred.name) : '', cred.key_masked].filter(Boolean).join(' · ');
+    const subline = [
+      cred.label && cred.label !== fileStem(cred.name) ? fileStem(cred.name) : '',
+      cred.key_masked,
+      cred.priority ? t('card.priority') + ' ' + cred.priority : '',
+    ].filter(Boolean).join(' · ');
     const armed = armedDelete.name === cred.name;
     const [earn, earnNote] = !cred.read_error && cred.issuer_token_masked ? earnCorner(q) : [null, null];
     const actions = el('div', { class: 'row-actions' },
@@ -1973,7 +1982,8 @@
         el('div', { class: 'cred-row' },
           el('div', { class: 'cred-file', text: subline, title: cred.name }),
           earnNote)),
-      el('div', { class: 'cred-body' }, facts, ...usageParts(cred),
+      el('div', { class: 'cred-body' }, cred.read_error ? null : facts, ...usageParts(cred),
+        cred.note ? el('div', { class: 'usage-note sub', text: t('card.noteLine', { msg: cred.note }), title: cred.note }) : null,
         stateNote ? el('div', { class: 'usage-note ' + (cred.read_error ? 'danger-text' : 'warn-text'), text: t('card.statusNote', { msg: stateNote }) }) : null),
       el('div', { class: 'cred-foot' }, meta, actions));
   }
