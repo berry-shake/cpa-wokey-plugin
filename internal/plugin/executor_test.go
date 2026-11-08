@@ -175,6 +175,7 @@ func TestExecuteRewritesModelAndForwards(t *testing.T) {
 		writeJSON(rw, http.StatusOK, map[string]any{"id": "c1", "object": "chat.completion"})
 	}))
 	svc, _ := newTestService(t, upstream)
+	svc.reqlog.configure("", 10)
 
 	envelope := decodeEnvelope(t, svc.execute(executorRequest("openai", "wokey/model-a", `{"model":"wokey/model-a","messages":[]}`)))
 	if !envelope.OK {
@@ -196,6 +197,10 @@ func TestExecuteRewritesModelAndForwards(t *testing.T) {
 	}
 	if ua := got.Header.Get("User-Agent"); ua != "cpa-wokey-plugin/test" {
 		t.Fatalf("User-Agent = %q", ua)
+	}
+	items := svc.reqlog.query(logQuery{}).Items
+	if len(items) != 1 || items[0].Credential != maskKey(testGoodKey) || items[0].AuthID != "wokey-test.json" || items[0].Model != "wokey/model-a" || items[0].UpstreamModel != "model-a" {
+		t.Fatalf("log entries = %+v", items)
 	}
 }
 

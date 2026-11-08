@@ -127,7 +127,7 @@ func (s *Service) prepareCall(req pluginapi.ExecutorRequest, endpoint string) (*
 
 		model:         clientModel(req, model),
 		upstreamModel: upstream,
-		label:         firstNonEmpty(cred.Label, req.AuthID),
+		label:         firstNonEmpty(cred.Label, maskKey(cred.APIKey), req.AuthID),
 	}, nil
 }
 
