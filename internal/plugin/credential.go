@@ -28,6 +28,7 @@ const (
 	keyDisabled      = "disabled"
 	keyNote          = "note"
 	keyModelRevision = "model_revision"
+	keyIssuerToken   = "issuer_token"
 )
 
 // refreshHorizon is how far ahead auth.parse and auth.refresh schedule the next
@@ -50,6 +51,9 @@ type credential struct {
 	AllModels     bool
 	ProxyURL      string
 	ModelRevision string
+	// IssuerToken is an optional Wokey issuing token (wkt_…) of the key's
+	// account. Only keys with one query the account's Provider earnings.
+	IssuerToken string
 }
 
 // credentialFromMaps merges the persisted auth file with CPA's mutable auth
@@ -78,6 +82,7 @@ func credentialFromMap(fields map[string]any) credential {
 		BaseURL:       stringField(fields, keyBaseURL, "base-url"),
 		ProxyURL:      stringField(fields, keyProxyURL, "proxy-url"),
 		ModelRevision: stringField(fields, keyModelRevision),
+		IssuerToken:   stringField(fields, keyIssuerToken, "issuer-token"),
 	}
 	if raw, ok := fields[keyPrefix]; ok && raw != nil {
 		if text, okText := raw.(string); okText {

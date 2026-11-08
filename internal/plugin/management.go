@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
@@ -50,9 +51,9 @@ func managementRoutes() managementRegistration {
 			{Method: http.MethodGet, Path: statusPath, Description: "Plugin status, model catalog summary and Wokey credentials."},
 			{Method: http.MethodGet, Path: modelsPath, Description: "Wokey model catalog with prices per million tokens."},
 			{Method: http.MethodPost, Path: modelsRefresh, Description: "Reload the Wokey model catalog and re-register changed models."},
-			{Method: http.MethodPost, Path: credentialsPath, Description: `Add a Wokey API key. Body: {"api_key","label","models","prefix","proxy_url"}.`},
-			{Method: http.MethodPatch, Path: credentialsPath, Description: `Edit a Wokey credential. Body: {"auth_index","label","models","prefix","proxy_url","priority"}.`},
-			{Method: http.MethodGet, Path: quotaPath, Description: "Balance and key usage of one Wokey credential (?auth_index=)."},
+			{Method: http.MethodPost, Path: credentialsPath, Description: `Add a Wokey API key. Body: {"api_key","label","models","prefix","proxy_url","issuer_token"}.`},
+			{Method: http.MethodPatch, Path: credentialsPath, Description: `Edit a Wokey credential. Body: {"auth_index","label","models","prefix","proxy_url","priority","issuer_token"}.`},
+			{Method: http.MethodGet, Path: quotaPath, Description: "Balance and key usage of one Wokey credential (?auth_index=), plus Provider earnings when it has an issuing token."},
 		},
 		Resources: []resourceDeclaration{
 			{Path: "/manage", Menu: displayName, Description: "Manage Wokey API keys, model selection and egress proxies."},
@@ -160,6 +161,7 @@ type credentialView struct {
 	Note             string   `json:"note,omitempty"`
 	BaseURL          string   `json:"base_url,omitempty"`
 	ProxyURL         string   `json:"proxy_url,omitempty"`
+	IssuerToken      string   `json:"issuer_token_masked,omitempty"`
 	Prefix           *string  `json:"prefix"`
 	EffectivePrefix  string   `json:"effective_prefix"`
 	AllModels        bool     `json:"all_models"`
@@ -249,6 +251,9 @@ func credentialViewOf(entry wokeyAuth, cfg Config, snapshot catalogSnapshot, reg
 	view.KeyMasked = maskKey(cred.APIKey)
 	view.BaseURL = cred.BaseURL
 	view.ProxyURL = redactProxy(cred.ProxyURL)
+	if cred.IssuerToken != "" {
+		view.IssuerToken = maskKey(cred.IssuerToken)
+	}
 	view.Prefix = cred.Prefix
 	view.EffectivePrefix = cred.effectivePrefix(cfg)
 	view.AllModels = cred.AllModels
@@ -383,17 +388,19 @@ func (s *Service) refreshModels() pluginapi.ManagementResponse {
 // credentialInput is the editable part of a Wokey auth file. Pointer and
 // RawMessage fields distinguish "absent" from "clear".
 type credentialInput struct {
-	AuthIndex  string          `json:"auth_index"`
-	Name       string          `json:"name"`
-	APIKey     string          `json:"api_key"`
-	SkipVerify bool            `json:"skip_verify"`
-	Label      *string         `json:"label"`
-	Note       *string         `json:"note"`
-	BaseURL    *string         `json:"base_url"`
-	ProxyURL   *string         `json:"proxy_url"`
-	Prefix     json.RawMessage `json:"prefix"`
-	Models     json.RawMessage `json:"models"`
-	Priority   json.RawMessage `json:"priority"`
+	AuthIndex  string  `json:"auth_index"`
+	Name       string  `json:"name"`
+	APIKey     string  `json:"api_key"`
+	SkipVerify bool    `json:"skip_verify"`
+	Label      *string `json:"label"`
+	Note       *string `json:"note"`
+	BaseURL    *string `json:"base_url"`
+	ProxyURL   *string `json:"proxy_url"`
+	// IssuerToken sets the issuing token; "" removes it.
+	IssuerToken *string         `json:"issuer_token"`
+	Prefix      json.RawMessage `json:"prefix"`
+	Models      json.RawMessage `json:"models"`
+	Priority    json.RawMessage `json:"priority"`
 }
 
 type credentialResult struct {
@@ -438,6 +445,13 @@ func applyCredentialInput(fields map[string]any, input credentialInput) *errorBo
 			return &errorBody{Error: "invalid_proxy", Message: "proxy_url: " + errProxy.Error()}
 		}
 		setOrDelete(fields, keyProxyURL, proxy)
+	}
+	if input.IssuerToken != nil {
+		token := strings.TrimSpace(*input.IssuerToken)
+		if token != "" && !validIssuerToken(token) {
+			return &errorBody{Error: "invalid_issuer_token", Message: "issuer_token must be a Wokey issuing token starting with " + issuerTokenPrefix}
+		}
+		setOrDelete(fields, keyIssuerToken, token)
 	}
 	if len(input.Prefix) > 0 {
 		if isJSONNull(input.Prefix) {
@@ -533,11 +547,10 @@ func (s *Service) addCredential(body []byte) pluginapi.ManagementResponse {
 		_, perr := s.accountGET(ctx, cred, endpointKeyInfo)
 		cancel()
 		if perr != nil {
-			status := http.StatusBadGateway
-			if perr.HTTPStatus == http.StatusUnauthorized || perr.HTTPStatus == http.StatusForbidden || perr.HTTPStatus == http.StatusBadRequest {
-				status = http.StatusBadRequest
-			}
-			return jsonResponse(status, errorBody{Error: "key_verification_failed", Message: perr.Message})
+			return jsonResponse(verifyStatus(perr), errorBody{Error: "key_verification_failed", Message: perr.Message})
+		}
+		if resp, failed := s.verifyIssuerToken(cred); failed {
+			return resp
 		}
 	}
 	// Load the catalog before saving so the file records the revision its
@@ -586,6 +599,11 @@ func (s *Service) updateCredential(body []byte) pluginapi.ManagementResponse {
 	if errApply := applyCredentialInput(fields, input); errApply != nil {
 		return jsonResponse(http.StatusBadRequest, *errApply)
 	}
+	if updated := credentialFromMap(fields); !input.SkipVerify && updated.IssuerToken != entry.cred.IssuerToken {
+		if resp, failed := s.verifyIssuerToken(updated); failed {
+			return resp
+		}
+	}
 	snapshot := s.catalog.current()
 	if snapshot.Revision != "" {
 		fields[keyModelRevision] = snapshot.Revision
@@ -595,6 +613,30 @@ func (s *Service) updateCredential(body []byte) pluginapi.ManagementResponse {
 	}
 	s.logf("info", "wokey: updated credential", map[string]any{"auth": name})
 	return jsonResponse(http.StatusOK, credentialResult{OK: true, Credential: s.credentialViewByName(name), UnknownModels: missingModels(credentialFromMap(fields), snapshot)})
+}
+
+// verifyIssuerToken checks a newly set issuing token with one balance call.
+// It passes when the credential has no token.
+func (s *Service) verifyIssuerToken(cred credential) (pluginapi.ManagementResponse, bool) {
+	if cred.IssuerToken == "" {
+		return pluginapi.ManagementResponse{}, false
+	}
+	ctx, cancel := context.WithTimeout(s.ctx, accountCallTimeout)
+	defer cancel()
+	if _, perr := s.issuerBalance(ctx, cred); perr != nil {
+		return jsonResponse(verifyStatus(perr), errorBody{Error: "issuer_token_verification_failed", Message: perr.Message}), true
+	}
+	return pluginapi.ManagementResponse{}, false
+}
+
+// verifyStatus reports a rejected Wokey token as 400 and anything else
+// (unreachable, 5xx) as 502.
+func verifyStatus(perr *pluginabi.Error) int {
+	switch perr.HTTPStatus {
+	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden:
+		return http.StatusBadRequest
+	}
+	return http.StatusBadGateway
 }
 
 func findEntry(entries []wokeyAuth, authIndex, name string) (wokeyAuth, bool) {
@@ -631,7 +673,7 @@ func (s *Service) credentialQuota(authIndex string) pluginapi.ManagementResponse
 	if !ok {
 		return jsonResponse(http.StatusNotFound, errorBody{Error: "credential_not_found", Message: "no Wokey credential matches auth_index"})
 	}
-	info, perr := s.fetchAccount(cred)
+	info, perr := s.fetchAccount(cred, true)
 	if perr != nil {
 		// Upstream 401/403 describe the Wokey key, not the management key;
 		// keep them out of the page's "management key rejected" handling.

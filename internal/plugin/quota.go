@@ -36,7 +36,11 @@ type accountInfo struct {
 	BalanceError string       `json:"balance_error,omitempty"`
 	Key          *keyInfo     `json:"key,omitempty"`
 	KeyError     string       `json:"key_error,omitempty"`
-	FetchedAt    string       `json:"fetched_at"`
+	// Issuer is set only for keys with an issuing token, and only when the
+	// management page asks.
+	Issuer      *issuerInfo `json:"issuer,omitempty"`
+	IssuerError string      `json:"issuer_error,omitempty"`
+	FetchedAt   string      `json:"fetched_at"`
 }
 
 type balanceInfo struct {
@@ -60,15 +64,21 @@ type keyInfo struct {
 
 // accountGET calls an authenticated Wokey account endpoint with a credential.
 func (s *Service) accountGET(ctx context.Context, cred credential, path string) (map[string]any, *pluginabi.Error) {
-	setting, errProxy := resolveProxy(cred.ProxyURL, s.globalProxy())
+	return s.getJSON(ctx, cred.ProxyURL, cred.effectiveBaseURL(s.config())+path, cred.APIKey, path)
+}
+
+// getJSON GETs a JSON object from Wokey with a bearer token through the
+// credential's egress. path names the endpoint in errors.
+func (s *Service) getJSON(ctx context.Context, proxyURL, target, token, path string) (map[string]any, *pluginabi.Error) {
+	setting, errProxy := resolveProxy(proxyURL, s.globalProxy())
 	if errProxy != nil {
 		return nil, requestError("invalid_proxy", errProxy.Error())
 	}
-	req, errReq := http.NewRequestWithContext(ctx, http.MethodGet, cred.effectiveBaseURL(s.config())+path, nil)
+	req, errReq := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if errReq != nil {
 		return nil, transportError(errReq)
 	}
-	req.Header.Set("Authorization", "Bearer "+cred.APIKey)
+	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", s.userAgent())
 	resp, errDo := s.clients.client(setting).Do(req)
@@ -90,16 +100,19 @@ func (s *Service) accountGET(ctx context.Context, cred credential, path string) 
 	return out, nil
 }
 
-// fetchAccount loads balance and key usage in parallel. A failure of one call
-// is reported next to the other's result; the error is returned only when
-// both fail.
-func (s *Service) fetchAccount(cred credential) (accountInfo, *pluginabi.Error) {
+// fetchAccount loads balance and key usage in parallel, plus the issuing
+// balance when withIssuer is set and the key has an issuing token. A failure
+// of one call is reported next to the others' results; the error is returned
+// only when both balance and key usage fail.
+func (s *Service) fetchAccount(cred credential, withIssuer bool) (accountInfo, *pluginabi.Error) {
 	ctx, cancel := context.WithTimeout(s.ctx, accountCallTimeout)
 	defer cancel()
 	var (
 		wg                   sync.WaitGroup
 		balanceRaw, keyRaw   map[string]any
 		balanceErr, keyErrIn *pluginabi.Error
+		issuer               *issuerInfo
+		issuerErr            *pluginabi.Error
 	)
 	wg.Add(2)
 	go func() {
@@ -110,9 +123,19 @@ func (s *Service) fetchAccount(cred credential) (accountInfo, *pluginabi.Error) 
 		defer wg.Done()
 		keyRaw, keyErrIn = s.accountGET(ctx, cred, endpointKeyInfo)
 	}()
+	if withIssuer && cred.IssuerToken != "" {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			issuer, issuerErr = s.issuerBalance(ctx, cred)
+		}()
+	}
 	wg.Wait()
 
-	info := accountInfo{FetchedAt: s.now().UTC().Format(time.RFC3339)}
+	info := accountInfo{FetchedAt: s.now().UTC().Format(time.RFC3339), Issuer: issuer}
+	if issuerErr != nil {
+		info.IssuerError = issuerErr.Message
+	}
 	if balanceErr != nil {
 		info.BalanceError = balanceErr.Message
 	} else {
@@ -250,7 +273,8 @@ func (s *Service) quotaFetch(req pluginapi.QuotaFetchRequest) []byte {
 	if cred.APIKey == "" {
 		return errorEnvelopeFrom(authError("wokey: credential has no api_key"))
 	}
-	info, perr := s.fetchAccount(cred)
+	// CPA's quota panel shows spend only, so it skips the issuing balance.
+	info, perr := s.fetchAccount(cred, false)
 	if perr != nil {
 		return errorEnvelopeFrom(perr)
 	}

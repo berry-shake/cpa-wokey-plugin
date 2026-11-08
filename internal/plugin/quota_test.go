@@ -97,7 +97,7 @@ func TestFetchAccountPartialFailure(t *testing.T) {
 	})
 	svc, _ := newTestService(t, upstream)
 
-	info, perr := svc.fetchAccount(credential{APIKey: testGoodKey})
+	info, perr := svc.fetchAccount(credential{APIKey: testGoodKey}, false)
 	if perr != nil {
 		t.Fatalf("one failing endpoint must not fail the call: %+v", perr)
 	}
@@ -109,7 +109,7 @@ func TestFetchAccountPartialFailure(t *testing.T) {
 	}
 
 	// Both failing returns the key endpoint's error.
-	_, perr = svc.fetchAccount(credential{APIKey: "sk-unknown-0000000"})
+	_, perr = svc.fetchAccount(credential{APIKey: "sk-unknown-0000000"}, false)
 	if perr == nil || perr.HTTPStatus != http.StatusUnauthorized || perr.Code != "invalid_api_key" {
 		t.Fatalf("both failing: %+v", perr)
 	}
@@ -118,13 +118,13 @@ func TestFetchAccountPartialFailure(t *testing.T) {
 func TestFetchAccountUsesCredentialEgress(t *testing.T) {
 	upstream := newFakeWokey(t)
 	svc, _ := newTestService(t, upstream)
-	_, perr := svc.fetchAccount(credential{APIKey: testGoodKey, ProxyURL: "ftp://bad"})
+	_, perr := svc.fetchAccount(credential{APIKey: testGoodKey, ProxyURL: "ftp://bad"}, false)
 	if perr == nil || perr.Code != "invalid_proxy" {
 		t.Fatalf("bad proxy: %+v", perr)
 	}
 	// A per-key base URL wins over the plugin base URL.
 	svc.cfg.BaseURL = "http://127.0.0.1:1"
-	if _, perr = svc.fetchAccount(credential{APIKey: testGoodKey, BaseURL: upstream.URL}); perr != nil {
+	if _, perr = svc.fetchAccount(credential{APIKey: testGoodKey, BaseURL: upstream.URL}, false); perr != nil {
 		t.Fatalf("base_url override: %+v", perr)
 	}
 }

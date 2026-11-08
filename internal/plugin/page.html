@@ -259,6 +259,7 @@
     .summary { box-shadow: var(--shadow-sm); }
     .summary .strip-value { font-size: 16px; }
     .summary .strip-note { font-size: 12px; }
+    .summary.has-earn { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .cred-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; padding: 14px 18px; }
     .cred-list > .empty, .cred-list > .empty-state { grid-column: 1 / -1; }
     .cred {
@@ -295,7 +296,7 @@
     .meters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-content: start; gap: 10px 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
     @container (min-width: 340px) {
       .cred-body { grid-template-columns: minmax(0, 1fr) minmax(0, 0.72fr); column-gap: 14px; }
-      .cred-body > .cap, .cred-body > .usage-note { grid-column: 1 / -1; }
+      .cred-body > .cap, .cred-body > .earn, .cred-body > .usage-note { grid-column: 1 / -1; }
       .cred-body > .meters, .cred-body > .usage-state { padding: 0 0 0 14px; border-top: none; border-left: 1px solid var(--border-subtle); }
       .cred-body > .meters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .cred-body > .usage-state { align-content: flex-start; }
@@ -313,6 +314,9 @@
     .fill { display: block; height: 100%; border-radius: inherit; background: var(--success); }
     .cap.warn .fill { background: var(--warning); }
     .cap.bad .fill { background: var(--danger); }
+    .earn .cap-head span { min-width: 0; overflow-wrap: anywhere; }
+    .earn .cap-head strong { color: var(--text-primary); }
+    .earn .cap-head strong.warn-text { color: var(--warning); }
     .usage-note { font-size: 12px; overflow-wrap: anywhere; }
     .usage-state { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 44px; color: var(--text-muted); font-size: 12.5px; }
     .cred-meta { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; min-width: 0; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
@@ -499,8 +503,9 @@
     footer a { color: inherit; text-decoration: none; border-bottom: 1px dashed var(--border-strong); }
     footer a:hover { color: var(--text-primary); }
     @media (max-width: 860px) {
-      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .summary, .summary.has-earn { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .summary .strip-item:nth-child(odd) { border-left: none; }
+      .summary .strip-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
       .summary .strip-item:nth-child(n+3) { border-top: 1px solid var(--border-subtle); }
       .config-grid { grid-template-columns: 1fr; }
     }
@@ -709,6 +714,12 @@
             <input class="input" id="f-priority" type="number" step="1" inputmode="numeric">
             <span class="help" data-i18n="form.priorityHelp">CPA routing priority; higher is tried first. Empty = 0.</span>
           </div>
+          <div class="field">
+            <label for="f-issuer" data-i18n="form.issuer">Issuing token</label>
+            <input class="input mono" id="f-issuer" type="password" spellcheck="false" autocomplete="new-password" placeholder="wkt_…">
+            <label class="check hidden" id="row-issuer-clear"><input type="checkbox" id="f-issuer-clear"> <span id="f-issuer-clear-label">Remove the saved token</span></label>
+            <span class="help" data-i18n="form.issuerHelp">Optional Wokey issuing token (wkt_…); the card then also shows Provider earnings. When editing, empty keeps the saved token.</span>
+          </div>
         </div>
         <div class="models-mode" role="radiogroup">
           <label class="check"><input type="radio" name="models-mode" id="f-models-all" value="all"> <span data-i18n="form.modelsAll">All models (new Wokey models are added automatically)</span></label>
@@ -836,6 +847,10 @@
       'form.needKey': 'Enter the Wokey API key.',
       'form.needModels': 'Select at least one model, or choose "All models".',
       'form.badPriority': 'Priority must be a whole number.',
+      'form.issuer': 'Issuing token',
+      'form.issuerHelp': 'Optional Wokey issuing token (wkt_…); the card then also shows Provider earnings. When editing, empty keeps the saved token.',
+      'form.issuerClear': 'Remove the saved token {token}',
+      'form.badIssuer': 'The issuing token starts with wkt_ and has no spaces.',
       'form.registerAs': 'Registered in CPA as {example}',
       'form.registerAsBoth': 'Registered in CPA as {example} and {bare} (CPA routing.force-model-prefix is off)',
       'picker.search': 'Search models',
@@ -904,6 +919,11 @@
       'usage.spent7d': 'Spent 7d',
       'usage.spent30d': 'Spent 30d',
       'usage.cap': 'Key spend cap',
+      'usage.earnings': 'Earnings',
+      'usage.referrer': 'referral {v}',
+      'usage.noProvider': 'no Provider account',
+      'usage.frozen': 'settlement frozen',
+      'usage.earnError': 'Earnings: {msg}',
       'usage.capLeft': '{left} of {limit} left',
       'usage.keyError': 'Key usage: {msg}',
       'usage.notLoaded': 'Balance not checked yet.',
@@ -1023,6 +1043,10 @@
       'form.needKey': '请填写 Wokey API Key。',
       'form.needModels': '至少选择一个模型，或选择“全部模型”。',
       'form.badPriority': '优先级必须是整数。',
+      'form.issuer': '发卡令牌',
+      'form.issuerHelp': '可选，填了 Wokey 发卡令牌（wkt_ 开头），卡片会多显示 Provider 收益；编辑时留空表示不改。',
+      'form.issuerClear': '移除已保存的令牌 {token}',
+      'form.badIssuer': '发卡令牌以 wkt_ 开头，且不能有空格。',
       'form.registerAs': '注册到 CPA 的模型名：{example}',
       'form.registerAsBoth': '注册到 CPA 的模型名：{example} 和 {bare}（CPA 没有开启 routing.force-model-prefix）',
       'picker.search': '搜索模型',
@@ -1091,6 +1115,11 @@
       'usage.spent7d': '7 天消费',
       'usage.spent30d': '30 天消费',
       'usage.cap': 'Key 消费限额',
+      'usage.earnings': '收益',
+      'usage.referrer': '返佣 {v}',
+      'usage.noProvider': '没有 Provider 账号',
+      'usage.frozen': '结算已冻结',
+      'usage.earnError': '收益查询失败：{msg}',
       'usage.capLeft': '剩余 {left} / {limit}',
       'usage.keyError': 'Key 用量：{msg}',
       'usage.notLoaded': '还没有查询余额。',
@@ -1298,6 +1327,10 @@
   const fPrefixDefault = $('f-prefix-default');
   const fPrefixDefaultLabel = $('f-prefix-default-label');
   const fPriority = $('f-priority');
+  const fIssuer = $('f-issuer');
+  const fIssuerClear = $('f-issuer-clear');
+  const rowIssuerClear = $('row-issuer-clear');
+  const fIssuerClearLabel = $('f-issuer-clear-label');
   const fModelsAll = $('f-models-all');
   const fModelsPick = $('f-models-pick');
   const picker = $('picker');
@@ -1708,9 +1741,13 @@
     keySummary.hidden = creds.length === 0;
     if (!creds.length) return;
     const accounts = new Map();
+    // Provider earnings, once per issuing token; never part of the balance.
+    const earners = new Map();
+    let hasIssuer = false;
     let daily = 0, weekly = 0, monthly = 0, loaded = 0, pending = 0, failed = 0, loading = false;
     for (const cred of creds) {
       if (cred.read_error) continue;
+      if (cred.issuer_token_masked) hasIssuer = true;
       const q = ui.quota[cred.auth_index];
       if (q && q.state === 'loading') loading = true;
       const d = q && q.data;
@@ -1721,6 +1758,7 @@
       }
       loaded++;
       if (d.balance) accounts.set(d.balance.account || 'auth:' + cred.auth_index, d.balance);
+      if (d.issuer) earners.set(d.issuer.account || 'auth:' + cred.auth_index, d.issuer);
       if (d.key) {
         daily += Number(d.key.daily_usd) || 0;
         weekly += Number(d.key.weekly_usd) || 0;
@@ -1739,6 +1777,18 @@
     if (accounts.size > 1) balanceNote.push(t('summary.accounts', { n: accounts.size }));
     if (reserved > 0) balanceNote.push(t('usage.reserved', { v: fmtUSD(reserved) }));
     item(t('summary.balance'), accounts.size ? fmtUSD(available) : blank, balanceNote.join(' · '));
+    keySummary.classList.toggle('has-earn', hasIssuer);
+    if (hasIssuer) {
+      let earned = 0, referral = 0;
+      for (const e of earners.values()) {
+        earned += Number(e.provider_usd) || 0;
+        referral += Number(e.referrer_usd) || 0;
+      }
+      const earnNote = [];
+      if (earners.size > 1) earnNote.push(t('summary.accounts', { n: earners.size }));
+      if (referral > 0) earnNote.push(t('usage.referrer', { v: fmtUSD(referral) }));
+      item(t('usage.earnings'), earners.size ? fmtUSD(earned) : blank, earnNote.join(' · '));
+    }
     item(t('usage.spent24h'), loaded ? fmtUSD(daily) : blank);
     item(t('usage.spent7d'), loaded ? fmtUSD(weekly) : blank);
     const missingNote = [];
@@ -1784,6 +1834,19 @@
       el('div', { class: 'track', role: 'progressbar', 'aria-label': label, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': Math.round(fraction * 100) }, fill));
   }
 
+  // Provider earnings from the issuing API, kept apart from the API balance.
+  function earnBlock(issuer) {
+    const hasProvider = issuer.provider_usd !== undefined && issuer.provider_usd !== null;
+    const notes = [t('usage.earnings')];
+    if (!hasProvider) notes.push(t('usage.noProvider'));
+    if (issuer.provider_frozen) notes.push(t('usage.frozen'));
+    if (Number(issuer.referrer_usd) > 0) notes.push(t('usage.referrer', { v: fmtUSD(issuer.referrer_usd) }));
+    return el('div', { class: 'earn' },
+      el('div', { class: 'cap-head' },
+        el('span', { text: notes.join(' · ') }),
+        el('strong', { class: issuer.provider_frozen ? 'warn-text' : null, text: hasProvider ? fmtUSD(issuer.provider_usd) : '—' })));
+  }
+
   // One figure of a card's usage row: label, value, optional note below.
   function meter(label, value, note, noteClass) {
     return el('div', { class: 'meter' },
@@ -1825,6 +1888,8 @@
     meters.appendChild(meter(t('usage.spent30d'), k ? fmtUSD(k.monthly_usd) : '—'));
     box.push(meters);
     if (k && k.limit_usd !== undefined && k.limit_remaining_usd !== undefined) box.push(capBlock(k));
+    if (d.issuer) box.push(earnBlock(d.issuer));
+    else if (d.issuer_error) box.push(el('div', { class: 'usage-note danger-text', text: t('usage.earnError', { msg: d.issuer_error }) }));
     if (!k && d.key_error) box.push(el('div', { class: 'usage-note danger-text', text: t('usage.keyError', { msg: d.key_error }) }));
     if (q.state === 'error') box.push(el('div', { class: 'usage-note danger-text', text: t('usage.failed', { msg: q.error }) }));
     return box;
@@ -2160,6 +2225,7 @@
         proxy: cred.proxy_url || '',
         prefix: cred.prefix,
         priority: cred.priority ? String(cred.priority) : '',
+        issuer: cred.issuer_token_masked || '',
         all: !!cred.all_models,
         models: Array.isArray(cred.models) ? cred.models.slice() : [],
       } : null,
@@ -2176,6 +2242,12 @@
     fPrefixDefault.checked = usesDefault;
     fPrefix.value = usesDefault ? defaultPrefix() : (cred.prefix || '');
     fPriority.value = editing && cred.priority ? String(cred.priority) : '';
+    const savedIssuer = editing ? (cred.issuer_token_masked || '') : '';
+    fIssuer.value = '';
+    fIssuer.disabled = false;
+    fIssuer.placeholder = savedIssuer || 'wkt_…';
+    fIssuerClear.checked = false;
+    rowIssuerClear.classList.toggle('hidden', !savedIssuer);
     const all = !editing || !!cred.all_models;
     fModelsAll.checked = all;
     fModelsPick.checked = !all;
@@ -2192,6 +2264,7 @@
     ui.editor = null;
     ui.editorError = null;
     fKey.value = '';
+    fIssuer.value = '';
   }
 
   function closeEditor() {
@@ -2207,6 +2280,7 @@
     editorTitle.textContent = adding ? t('form.addTitle') : t('form.editTitle', { name: ed.title });
     editorHint.textContent = adding ? t('form.addHint') : t('form.editHint');
     editorSave.textContent = adding ? t('form.add') : t('form.save');
+    fIssuerClearLabel.textContent = t('form.issuerClear', { token: ed.original ? ed.original.issuer : '' });
     editorError.classList.toggle('hidden', !ui.editorError);
     editorError.textContent = ui.editorError ? t(ui.editorError.key, ui.editorError.params) : '';
   }
@@ -2334,6 +2408,16 @@
     if (priorityText !== '' && !/^-?\d+$/.test(priorityText)) { editorFail('form.badPriority'); return; }
     if (adding ? priorityText !== '' : priorityText !== orig.priority) body.priority = priorityText === '' ? null : Number(priorityText);
 
+    // The saved token is never sent to the page: empty keeps it, the
+    // checkbox removes it.
+    const issuer = fIssuer.value.trim();
+    if (issuer) {
+      if (!/^wkt_\S+$/.test(issuer)) { editorFail('form.badIssuer'); return; }
+      body.issuer_token = issuer;
+    } else if (!adding && fIssuerClear.checked) {
+      body.issuer_token = '';
+    }
+
     if (fModelsAll.checked) {
       if (!adding && !orig.all) body.models = null;
     } else {
@@ -2357,7 +2441,7 @@
         notify('ok', adding ? 'log.added' : 'log.updated', { name });
       }
       await refresh(true);
-      if (cred && cred.auth_index && adding) loadQuota(cred.auth_index);
+      if (cred && cred.auth_index && (adding || body.issuer_token !== undefined)) loadQuota(cred.auth_index);
     } catch (error) {
       if (isAuthError(error)) { showLogin('login.expired', error.message); return; }
       ui.editorError = { key: 'log.actionFailed', params: { msg: error.message } };
@@ -2461,6 +2545,10 @@
     renderPrefixLabel();
   });
   fPrefix.addEventListener('input', renderPrefixLabel);
+  fIssuerClear.addEventListener('change', () => {
+    fIssuer.disabled = fIssuerClear.checked;
+    if (fIssuerClear.checked) fIssuer.value = '';
+  });
   fModelsAll.addEventListener('change', renderPicker);
   fModelsPick.addEventListener('change', renderPicker);
   pickerSearch.addEventListener('input', () => {

@@ -138,6 +138,9 @@ func TestAddCredentialValidation(t *testing.T) {
 		{`{"api_key":"k","prefix":"a b"}`, "invalid_prefix"},
 		{`{"api_key":"k","priority":"high"}`, "invalid_priority"},
 		{`{"api_key":"k","priority":1.5}`, "invalid_priority"},
+		{`{"api_key":"k","issuer_token":"sk-not-issuing"}`, "invalid_issuer_token"},
+		{`{"api_key":"k","issuer_token":"wkt_"}`, "invalid_issuer_token"},
+		{`{"api_key":"k","issuer_token":"wkt_a b"}`, "invalid_issuer_token"},
 	}
 	for _, tc := range cases {
 		status, out := manage(t, svc, http.MethodPost, credentialsPath, tc.body)

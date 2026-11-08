@@ -280,10 +280,19 @@ type fakeWokey struct {
 	catalogFull   int
 	catalogNotMod int
 	keys          map[string]map[string]any
+	issuers       map[string]map[string]any
+	issuerCalls   int
 	handlers      map[string]http.HandlerFunc
 }
 
-const testGoodKey = "sk-test-good-0000000000"
+const (
+	testGoodKey    = "sk-test-good-0000000000"
+	testIssuerPath = "/api/issuer/v1"
+	// testIssuerToken answers with the first sample response from Wokey's
+	// issuing API, testIssuerToken2 with the second.
+	testIssuerToken  = "wkt_test_good_00000000"
+	testIssuerToken2 = "wkt_test_p2p_00000000"
+)
 
 func newFakeWokey(t *testing.T) *fakeWokey {
 	t.Helper()
@@ -298,6 +307,19 @@ func newFakeWokey(t *testing.T) *fakeWokey {
 		keys: map[string]map[string]any{
 			testGoodKey: {"label": "test key", "usage": 1.5, "usage_daily": 0.25, "usage_weekly": 1, "usage_monthly": 1.5, "limit": 10, "limit_remaining": 8.5, "limit_reset": "monthly"},
 		},
+		issuers: map[string]map[string]any{
+			testIssuerToken: {
+				"provider": map[string]any{"availableUsd": "9.56639200"},
+				"referrer": map[string]any{"availableUsd": "0.00000000"},
+				"api":      map[string]any{"enabled": true, "eligible": true, "availableUsd": "0.33", "disqualifiedBy": nil},
+			},
+			testIssuerToken2: {
+				"provider": map[string]any{"availableUsd": "0.00000000"},
+				"referrer": map[string]any{"availableUsd": "0.00000000"},
+				"api": map[string]any{"enabled": true, "eligible": false, "availableUsd": "20.47",
+					"disqualifiedBy": map[string]any{"kind": "p2p", "at": "2026-11-05T12:01:20.870Z"}},
+			},
+		},
 		handlers: map[string]http.HandlerFunc{},
 	}
 	w.Server = httptest.NewServer(http.HandlerFunc(w.serve))
@@ -310,6 +332,13 @@ func (w *fakeWokey) setModels(models []map[string]any, etag string) {
 	defer w.mu.Unlock()
 	w.models = models
 	w.etag = etag
+}
+
+// issuerCallCount returns how many issuing balance requests were served.
+func (w *fakeWokey) issuerCallCount() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.issuerCalls
 }
 
 // catalogCounts returns how many full and 304 catalog responses were served.
@@ -368,6 +397,17 @@ func (w *fakeWokey) serve(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(rw, http.StatusOK, map[string]any{"userId": "1234", "availableUsd": 42.5, "reservedUsd": "0.75"})
+	case testIssuerPath + endpointIssuerBalance:
+		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		w.mu.Lock()
+		w.issuerCalls++
+		info, ok := w.issuers[token]
+		w.mu.Unlock()
+		if !ok {
+			writeJSON(rw, http.StatusUnauthorized, map[string]any{"error": map[string]any{"code": "invalid_issuer_token", "message": "invalid_issuer_token", "type": "invalid_request_error"}})
+			return
+		}
+		writeJSON(rw, http.StatusOK, info)
 	default:
 		writeJSON(rw, http.StatusNotFound, map[string]any{"error": map[string]any{"code": "not_found", "message": "no route " + r.URL.Path}})
 	}
@@ -382,6 +422,7 @@ func newTestService(t *testing.T, upstream *fakeWokey) (*Service, *fakeHost) {
 	host.svc = svc
 	if upstream != nil {
 		svc.cfg.BaseURL = upstream.URL
+		svc.issuerBase = upstream.URL + testIssuerPath
 	}
 	t.Cleanup(svc.Close)
 	return svc, host

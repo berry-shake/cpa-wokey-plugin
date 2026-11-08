@@ -7,7 +7,7 @@
 - 请求按客户端格式原样转发到 Wokey 对应的接口，不做协议转换；
 - CPA 的额度面板把每个 Key 近 24 小时 / 7 天 / 30 天的消费画成进度条（剩余比例 = 余额 ÷ (余额 + 该时段消费)，期间充值或多个 Key 共用余额时只是近似值；查不到余额时直接显示消费金额），设置了限额的 Key 另有限额进度条；
 - 每个 Key 可以单独配置出口代理（CPA 通用认证文件字段 `proxy_url`）；
-- 自带管理页：添加、编辑、启停、删除 Key，选择上游模型，查看账户余额和消费。
+- 自带管理页：添加、编辑、启停、删除 Key，选择上游模型，查看账户余额和消费；配了发卡令牌的 Key 还会显示 Provider 收益。
 
 ## 环境要求
 
@@ -33,7 +33,7 @@ plugins:
 ```bash
 curl -X POST -H "Authorization: Bearer $MANAGEMENT_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"version":"0.1.4"}' \
+  -d '{"version":"0.1.5"}' \
   http://127.0.0.1:8317/v0/management/plugin-store/wokey/install
 ```
 
@@ -93,6 +93,7 @@ plugins:
   "prefix": "wokey",
   "proxy_url": "socks5://127.0.0.1:1080",
   "priority": 0,
+  "issuer_token": "wkt_...",
   "note": "",
   "disabled": false
 }
@@ -108,6 +109,7 @@ plugins:
 | `proxy_url` | 否 | 出口代理，见下文 |
 | `base_url` | 否 | 覆盖插件配置里的 `base-url`，一般不需要 |
 | `priority` | 否 | CPA 通用的凭证优先级 |
+| `issuer_token` | 否 | Wokey 发卡令牌（`wkt_` 开头），见下文 |
 | `note` | 否 | 备注 |
 | `disabled` | 否 | CPA 通用的停用开关 |
 | `model_revision` | — | 插件自己维护的目录版本标记，不要手动修改 |
@@ -170,6 +172,17 @@ plugins:
 | 529 | 503 | 可重试 |
 | 499 | 408 | 可重试 |
 
+### 发卡令牌和收益
+
+`issuer_token` 填 Wokey「礼品卡与直充」页面里创建的发卡令牌（`wkt_` 开头，和 API Key 不通用）。填了以后，管理页查余额时会多调用一次 Wokey 发卡接口 `GET /api/issuer/v1/balance`，显示：
+
+- **收益**：Provider 收益中可提现的部分；账号没有 Provider 身份时显示 `—`，结算被冻结时会注明；
+- 返佣：可提现的推荐返佣，大于 0 时显示在收益旁边。
+
+收益和 API 余额是两回事，不会加进"可用余额"。没填 `issuer_token` 的 Key 不会调用发卡接口；CPA 原生的额度面板也不调用。这个请求和其他上游请求一样走这个 Key 的出口代理，如果令牌设了 IP 白名单，要把出口 IP 加进去。
+
+Wokey 在这个接口里会顺带结算冷却期已满的作废礼品卡，除此之外只是查询，不会发卡或扣款。插件只用到这一个接口。
+
 ## 管理页
 
 在 CPA 管理面板的插件菜单里点 **Wokey** 打开，页面地址是：
@@ -180,11 +193,12 @@ plugins:
 
 - 从管理面板里打开时复用面板"记住密码"保存的管理密钥；直接打开时手动输入，只保存在页面内存里。
 - **凭据管理** 页：
-  - 顶部一条统计条：可用余额，以及近 24 小时、7 天、30 天消费。余额按账户去重，同一账户的多个 Key 只算一次。
-  - Key 以卡片网格展示（宽屏一行三张，窄屏单列）。每张卡片从上到下依次是：名称（默认是认证文件名，不带 `.json`）、状态、打码后的 Key；注册的模型数、前缀、出口代理；余额、24h / 7d / 30d 消费和限额进度条（卡片够宽时余额和消费放在信息右边）；底部是请求统计和操作按钮。
+  - 顶部一条统计条：可用余额，以及近 24 小时、7 天、30 天消费。余额按账户去重，同一账户的多个 Key 只算一次。有 Key 配了发卡令牌时，可用余额后面多一格"收益"，同一个令牌只算一次，返佣写在下面。
+  - Key 以卡片网格展示（宽屏一行三张，窄屏单列）。每张卡片从上到下依次是：名称（默认是认证文件名，不带 `.json`）、状态、打码后的 Key；注册的模型数、前缀、出口代理；余额、24h / 7d / 30d 消费和限额进度条（卡片够宽时余额和消费放在信息右边）；配了发卡令牌时限额条下面还有一行收益；底部是请求统计和操作按钮。
   - 卡片上可以编辑、启用/停用、删除（删除需要 4 秒内再点一次确认）；可以按名称、Key 或文件名搜索。
   - 打开页面时自动查询启用的 Key 的余额，"刷新余额"重新查询全部。
-- 添加和编辑在弹窗里进行：名称、出口代理、模型前缀、优先级，以及"全部模型 / 只注册选中的模型"，选模型时可以搜索、按价格和上下文长度对比。添加 Key 时默认先调用 Wokey 校验 Key 是否有效；名称留空时用认证文件名。
+- 添加和编辑在弹窗里进行：名称、出口代理、模型前缀、优先级、发卡令牌，以及"全部模型 / 只注册选中的模型"，选模型时可以搜索、按价格和上下文长度对比。添加 Key 时默认先调用 Wokey 校验 Key 是否有效；名称留空时用认证文件名。
+- 发卡令牌只显示打码后的样子。编辑时留空表示不改，勾选"移除已保存的令牌"才会删掉；填了新令牌会先调用发卡接口校验，通过才保存（添加时勾了"跳过 Key 校验"则不校验）。
 - **模型目录** 页：Wokey 公开模型的提供方、上下文长度、价格，以及每个模型在 CPA 里注册的名字和服务它的 Key 数。
 - **配置概览** 页：插件配置的当前生效值（可以展开成 YAML）、CPA 的强制前缀开关和全局代理。强制前缀没开时会提示同名模型会进入公共号池。
 - 支持 English / 中文。
@@ -201,7 +215,7 @@ GET   /v0/management/plugins/wokey/models           模型目录（价格为每�
 POST  /v0/management/plugins/wokey/models/refresh   强制重新拉取模型目录
 POST  /v0/management/plugins/wokey/credentials      添加 Key
 PATCH /v0/management/plugins/wokey/credentials      编辑 Key
-GET   /v0/management/plugins/wokey/credentials/quota?auth_index=...   账户余额和 Key 消费
+GET   /v0/management/plugins/wokey/credentials/quota?auth_index=...   账户余额、Key 消费，以及发卡令牌对应的收益
 ```
 
 `/v0/management` 路由由 CPA 宿主先校验管理密钥，通过后才转发给插件。
@@ -220,20 +234,20 @@ curl -X PATCH -H "Authorization: Bearer $MANAGEMENT_KEY" \
   http://127.0.0.1:8317/v0/management/plugins/wokey/credentials
 ```
 
-编辑接口只修改请求里出现的字段：`null` 表示恢复默认（`models` 恢复为全部模型，`prefix` 恢复为插件默认前缀，`priority` 清除），空字符串表示清除（`label`、`note`、`proxy_url`、`base_url`）。`api_key` 不能修改，换 Key 请新增一个再删掉旧的。
+编辑接口只修改请求里出现的字段：`null` 表示恢复默认（`models` 恢复为全部模型，`prefix` 恢复为插件默认前缀，`priority` 清除），空字符串表示清除（`label`、`note`、`proxy_url`、`base_url`、`issuer_token`）。`api_key` 不能修改，换 Key 请新增一个再删掉旧的。
 
 ## 安全说明
 
 - 读取和修改 Key 的接口都需要 CPA 管理密钥；公开的只有不含数据的页面外壳和 logo。
 - 管理页设置了 `frame-ancestors 'self'`，其他站点不能嵌入。
-- 接口和页面只显示打码后的 Key 和隐藏了密码的代理地址。
+- 接口和页面只显示打码后的 Key、打码后的发卡令牌和隐藏了密码的代理地址。
 
 ## 本地构建
 
 ```bash
 go test ./...
 CGO_ENABLED=1 go build -buildmode=c-shared \
-  -ldflags '-X main.pluginVersion=0.1.4-dev' \
+  -ldflags '-X main.pluginVersion=0.1.5-dev' \
   -o wokey.dylib .
 ```
 

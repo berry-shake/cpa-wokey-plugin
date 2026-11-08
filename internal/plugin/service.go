@@ -67,6 +67,8 @@ type Service struct {
 	catalog *catalog
 	clients *clientCache
 	streams streamGroup
+	// issuerBase is the issuing API root; tests point it at a fake server.
+	issuerBase string
 
 	loopOnce sync.Once
 	kick     chan struct{}
@@ -83,15 +85,16 @@ func New(version string, host HostCaller) *Service {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Service{
-		version: version,
-		host:    host,
-		now:     time.Now,
-		ctx:     ctx,
-		cancel:  cancel,
-		cfg:     defaultConfig(),
-		catalog: newCatalog(),
-		clients: newClientCache(),
-		kick:    make(chan struct{}, 1),
+		version:    version,
+		host:       host,
+		now:        time.Now,
+		ctx:        ctx,
+		cancel:     cancel,
+		cfg:        defaultConfig(),
+		catalog:    newCatalog(),
+		clients:    newClientCache(),
+		issuerBase: defaultIssuerBaseURL,
+		kick:       make(chan struct{}, 1),
 	}
 }
 
