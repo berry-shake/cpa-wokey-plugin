@@ -296,7 +296,7 @@
     .meters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-content: start; gap: 10px 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
     @container (min-width: 340px) {
       .cred-body { grid-template-columns: minmax(0, 1fr) minmax(0, 0.72fr); column-gap: 14px; }
-      .cred-body > .cap, .cred-body > .earn, .cred-body > .usage-note { grid-column: 1 / -1; }
+      .cred-body > .cap, .cred-body > .usage-note { grid-column: 1 / -1; }
       .cred-body > .meters, .cred-body > .usage-state { padding: 0 0 0 14px; border-top: none; border-left: 1px solid var(--border-subtle); }
       .cred-body > .meters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .cred-body > .usage-state { align-content: flex-start; }
@@ -314,9 +314,7 @@
     .fill { display: block; height: 100%; border-radius: inherit; background: var(--success); }
     .cap.warn .fill { background: var(--warning); }
     .cap.bad .fill { background: var(--danger); }
-    .earn .cap-head span { min-width: 0; overflow-wrap: anywhere; }
-    .earn .cap-head strong { color: var(--text-primary); }
-    .earn .cap-head strong.warn-text { color: var(--warning); }
+    .facts .amount { font-weight: 650; font-variant-numeric: tabular-nums; }
     .usage-note { font-size: 12px; overflow-wrap: anywhere; }
     .usage-state { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 44px; color: var(--text-muted); font-size: 12.5px; }
     .cred-meta { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; min-width: 0; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
@@ -923,7 +921,6 @@
       'usage.referrer': 'referral {v}',
       'usage.noProvider': 'no Provider account',
       'usage.frozen': 'settlement frozen',
-      'usage.earnError': 'Earnings: {msg}',
       'usage.capLeft': '{left} of {limit} left',
       'usage.keyError': 'Key usage: {msg}',
       'usage.notLoaded': 'Balance not checked yet.',
@@ -1119,7 +1116,6 @@
       'usage.referrer': '返佣 {v}',
       'usage.noProvider': '没有 Provider 账号',
       'usage.frozen': '结算已冻结',
-      'usage.earnError': '收益查询失败：{msg}',
       'usage.capLeft': '剩余 {left} / {limit}',
       'usage.keyError': 'Key 用量：{msg}',
       'usage.notLoaded': '还没有查询余额。',
@@ -1834,17 +1830,24 @@
       el('div', { class: 'track', role: 'progressbar', 'aria-label': label, 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': Math.round(fraction * 100) }, fill));
   }
 
-  // Provider earnings from the issuing API, kept apart from the API balance.
-  function earnBlock(issuer) {
-    const hasProvider = issuer.provider_usd !== undefined && issuer.provider_usd !== null;
-    const notes = [t('usage.earnings')];
-    if (!hasProvider) notes.push(t('usage.noProvider'));
-    if (issuer.provider_frozen) notes.push(t('usage.frozen'));
-    if (Number(issuer.referrer_usd) > 0) notes.push(t('usage.referrer', { v: fmtUSD(issuer.referrer_usd) }));
-    return el('div', { class: 'earn' },
-      el('div', { class: 'cap-head' },
-        el('span', { text: notes.join(' · ') }),
-        el('strong', { class: issuer.provider_frozen ? 'warn-text' : null, text: hasProvider ? fmtUSD(issuer.provider_usd) : '—' })));
+  // The earnings fact of a key with an issuing token: Provider earnings from
+  // the issuing API, kept apart from the API balance.
+  function earnValue(q) {
+    const d = q && q.data;
+    if (d && d.issuer) {
+      const issuer = d.issuer;
+      const hasProvider = issuer.provider_usd !== undefined && issuer.provider_usd !== null;
+      const notes = [];
+      if (!hasProvider) notes.push(t('usage.noProvider'));
+      if (issuer.provider_frozen) notes.push(t('usage.frozen'));
+      if (Number(issuer.referrer_usd) > 0) notes.push(t('usage.referrer', { v: fmtUSD(issuer.referrer_usd) }));
+      return [
+        el('span', { class: 'amount' + (issuer.provider_frozen ? ' warn-text' : ''), text: hasProvider ? fmtUSD(issuer.provider_usd) : '—' }),
+        notes.length ? el('span', { class: 'sub', text: ' · ' + notes.join(' · ') }) : null,
+      ];
+    }
+    if (d && d.issuer_error) return [el('span', { class: 'danger-text', text: t('usage.failed', { msg: d.issuer_error }) })];
+    return [el('span', { class: 'sub', text: q && q.state === 'loading' ? t('usage.loading') : '—' })];
   }
 
   // One figure of a card's usage row: label, value, optional note below.
@@ -1888,8 +1891,6 @@
     meters.appendChild(meter(t('usage.spent30d'), k ? fmtUSD(k.monthly_usd) : '—'));
     box.push(meters);
     if (k && k.limit_usd !== undefined && k.limit_remaining_usd !== undefined) box.push(capBlock(k));
-    if (d.issuer) box.push(earnBlock(d.issuer));
-    else if (d.issuer_error) box.push(el('div', { class: 'usage-note danger-text', text: t('usage.earnError', { msg: d.issuer_error }) }));
     if (!k && d.key_error) box.push(el('div', { class: 'usage-note danger-text', text: t('usage.keyError', { msg: d.key_error }) }));
     if (q.state === 'error') box.push(el('div', { class: 'usage-note danger-text', text: t('usage.failed', { msg: q.error }) }));
     return box;
@@ -1919,10 +1920,11 @@
       if (cred.priority) fact(t('card.priority'), String(cred.priority));
       if (cred.note) fact(t('card.note'), cred.note);
     }
+    const q = ui.quota[cred.auth_index];
+    if (!cred.read_error && cred.issuer_token_masked) fact(t('usage.earnings'), ...earnValue(q));
     const stateNote = cred.read_error || cred.status_message || '';
     if (stateNote) fact(t('card.status'), el('span', { class: cred.read_error ? 'danger-text' : 'warn-text', text: stateNote }));
 
-    const q = ui.quota[cred.auth_index];
     const meta = el('div', { class: 'cred-meta' },
       cred.success || cred.failed ? el('span', { text: t('card.requests', { ok: cred.success || 0, failed: cred.failed || 0 }) }) : null,
       q && q.data && q.data.fetched_at ? el('span', { text: t('usage.fetched', { time: formatTime(q.data.fetched_at) }) }) : null,
