@@ -76,7 +76,7 @@ plugins:
       models-refresh-minutes: 60          # 模型目录轮询间隔（分钟），0 = 不轮询，只按需加载
       request-timeout-seconds: 600        # 非流式请求超时
       stream-idle-timeout-seconds: 300    # 流式响应多久没有新数据就中断
-      data-dir: plugins/wokey-data        # 插件数据目录（请求日志数据库 requests.db），相对路径按 CPA 的工作目录算
+      data-dir: plugins/wokey-data        # 插件数据目录（请求日志数据库 wokey.db），相对路径按 CPA 的工作目录算
       log-retention: 100000               # 请求日志最多保留多少条（上限 1000000），0 = 不记录
       log-retention-days: 30              # 请求日志保留多少天，0 = 不按天数清理，只受条数限制
 ```
@@ -218,7 +218,7 @@ Wokey 在这个接口里会顺带结算冷却期已满的作废礼品卡，除�
 - **配置概览** 页：插件配置的当前生效值（可以展开成 YAML）、CPA 的强制前缀开关和全局代理。强制前缀没开时会提示同名模型会进入公共号池。
 - 支持 English / 中文。
 
-请求日志存在 SQLite 数据库 `<data-dir>/requests.db`（默认 `plugins/wokey-data/requests.db`，WAL 模式，旁边会有 `-wal` 和 `-shm` 文件），查询、筛选和统计都在数据库里做。超过 `log-retention` 条或早于 `log-retention-days` 天的记录会自动删掉。用的是纯 Go 的 SQLite（modernc.org/sqlite），不依赖系统的 libsqlite3。
+请求日志存在 SQLite 数据库 `<data-dir>/wokey.db`（默认 `plugins/wokey-data/wokey.db`，WAL 模式，旁边会有 `-wal` 和 `-shm` 文件），查询、筛选和统计都在数据库里做。超过 `log-retention` 条或早于 `log-retention-days` 天的记录会自动删掉。用的是纯 Go 的 SQLite（modernc.org/sqlite），不依赖系统的 libsqlite3。
 
 从旧版本升级时，原来的 `requests.jsonl` 会在第一次启动时导入数据库，导入成功后删除。
 

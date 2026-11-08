@@ -114,6 +114,37 @@ func TestRequestLogImportsJSONL(t *testing.T) {
 	}
 }
 
+func TestRequestLogRenamesOldDatabase(t *testing.T) {
+	src, dir := t.TempDir(), t.TempDir()
+	old := newRequestLog(nil)
+	defer old.close()
+	old.configure(src, 100, 0)
+	for i := 0; i < 3; i++ {
+		old.add(logEntry{Model: "m", Status: "success"})
+	}
+	// Copy the files while the database is still open, so the rows are only
+	// in the WAL, as after a container stop that skipped the checkpoint.
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		raw, errRead := os.ReadFile(filepath.Join(src, requestLogDB+suffix))
+		if errRead != nil {
+			t.Fatal(errRead)
+		}
+		if errWrite := os.WriteFile(filepath.Join(dir, legacyRequestDB+suffix), raw, 0o600); errWrite != nil {
+			t.Fatal(errWrite)
+		}
+	}
+
+	log := newRequestLog(nil)
+	defer log.close()
+	log.configure(dir, 100, 0)
+	if page := log.query(logQuery{}); page.Total != 3 || page.Items[0].ID != "3" || page.Error != "" {
+		t.Fatalf("renamed = %+v", page)
+	}
+	if _, errStat := os.Stat(filepath.Join(dir, legacyRequestDB)); !os.IsNotExist(errStat) {
+		t.Fatal("old database left behind")
+	}
+}
+
 func TestParseLogTime(t *testing.T) {
 	if got, errParse := parseLogTime(""); errParse != nil || !got.IsZero() {
 		t.Fatalf("empty = %v, %v", got, errParse)

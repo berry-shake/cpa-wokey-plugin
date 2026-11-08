@@ -17,7 +17,10 @@ import (
 )
 
 const (
-	requestLogDB = "requests.db"
+	requestLogDB = "wokey.db"
+	// legacyRequestDB is the database name used by early 0.1.7 builds; it is
+	// renamed to requestLogDB on open.
+	legacyRequestDB = "requests.db"
 	// legacyRequestLog is the JSONL file used before SQLite; it is imported
 	// once and then removed.
 	legacyRequestLog = "requests.jsonl"
@@ -65,7 +68,7 @@ var requestSearchColumns = []string{"CAST(id AS TEXT)", "model", "upstream_model
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
-// requestLog stores request log entries in SQLite (requests.db in the data
+// requestLog stores request log entries in SQLite (wokey.db in the data
 // dir; in memory when the dir is empty). It keeps at most retention rows and,
 // when days > 0, nothing older than that many days. retention 0 turns logging
 // off.
@@ -112,6 +115,7 @@ func (l *requestLog) openLocked() {
 			l.failLocked("open request log: " + errDir.Error())
 			return
 		}
+		l.renameLegacyDBLocked()
 		dsn = "file:" + filepath.ToSlash(filepath.Join(l.dir, requestLogDB))
 	}
 	db, errOpen := sql.Open("sqlite", dsn+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)")
@@ -131,6 +135,26 @@ func (l *requestLog) openLocked() {
 	}
 	l.db = db
 	l.importLegacyLocked()
+}
+
+// renameLegacyDBLocked moves a database saved under the old name to the
+// current one. The WAL files go first, so a move cut short is finished on the
+// next open instead of leaving committed rows behind in an orphaned WAL.
+func (l *requestLog) renameLegacyDBLocked() {
+	current := filepath.Join(l.dir, requestLogDB)
+	legacy := filepath.Join(l.dir, legacyRequestDB)
+	if _, errStat := os.Stat(current); !errors.Is(errStat, os.ErrNotExist) {
+		return
+	}
+	if _, errStat := os.Stat(legacy); errStat != nil {
+		return
+	}
+	for _, suffix := range []string{"-wal", "-shm", ""} {
+		if errRename := os.Rename(legacy+suffix, current+suffix); errRename != nil && !errors.Is(errRename, os.ErrNotExist) {
+			l.warnf("rename old request log: " + errRename.Error())
+			return
+		}
+	}
 }
 
 func (l *requestLog) failLocked(message string) {
