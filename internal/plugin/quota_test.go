@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"strings"
 	"testing"
@@ -24,30 +25,46 @@ func TestQuotaFromAccountWithCap(t *testing.T) {
 		Balance: &balanceInfo{AvailableUSD: 42.5, ReservedUSD: 0.75},
 		Key:     &keyInfo{Label: "main", UsageUSD: 7.5, DailyUSD: 0.5, WeeklyUSD: 3, MonthlyUSD: 7.5, LimitUSD: &limit, LimitRemaining: &remaining, LimitResetLabel: "monthly"},
 	})
-	got := metricValues(resp)
-	want := map[string]float64{"spent_24h": 0.5, "spent_7d": 3, "spent_30d": 7.5}
-	if len(got) != len(want) {
-		t.Fatalf("summary = %v", got)
+	// With a balance the windows are bars, not plain numbers.
+	if len(resp.Summary) != 0 {
+		t.Fatalf("summary = %+v", resp.Summary)
 	}
-	for key, value := range want {
-		if got[key] != value {
-			t.Errorf("%s = %v, want %v", key, got[key], value)
-		}
-	}
-	for _, metric := range resp.Summary {
-		if metric.Format != "currency" || metric.Currency != "USD" {
-			t.Errorf("metric %s format = %s/%s", metric.Key, metric.Format, metric.Currency)
-		}
-	}
-	if len(resp.Groups) != 1 || len(resp.Groups[0].Buckets) != 1 {
+	if len(resp.Groups) != 2 || len(resp.Groups[0].Buckets) != 3 || len(resp.Groups[1].Buckets) != 1 {
 		t.Fatalf("groups = %+v", resp.Groups)
 	}
-	bucket := resp.Groups[0].Buckets[0]
-	if bucket.Window != "monthly" || bucket.RemainingFraction != 0.25 || !strings.Contains(bucket.Description, "$2.50 of $10.00") {
-		t.Fatalf("bucket = %+v", bucket)
+	want := []struct {
+		window   string
+		fraction float64
+		spent    string
+	}{{"24h", 42.5 / 43, "$0.50 spent"}, {"7d", 42.5 / 45.5, "$3.00 spent"}, {"30d", 0.85, "$7.50 spent"}}
+	for i, w := range want {
+		bucket := resp.Groups[0].Buckets[i]
+		if bucket.Window != w.window || math.Abs(bucket.RemainingFraction-w.fraction) > 1e-9 ||
+			!strings.Contains(bucket.Description, w.spent) || !strings.Contains(bucket.Description, "$42.50 balance") {
+			t.Errorf("bucket %d = %+v", i, bucket)
+		}
+	}
+	bucket := resp.Groups[1].Buckets[0]
+	if resp.Groups[1].DisplayName != "Key spend cap" || bucket.Window != "monthly" || bucket.RemainingFraction != 0.25 || !strings.Contains(bucket.Description, "$2.50 of $10.00") {
+		t.Fatalf("cap bucket = %+v", bucket)
 	}
 	if resp.Subscription != nil {
 		t.Fatalf("subscription = %+v", resp.Subscription)
+	}
+}
+
+func TestQuotaFromAccountEmptyBalance(t *testing.T) {
+	// No money left reads as an empty bar, with or without recent spend.
+	for _, spent := range []float64{0, 4} {
+		resp := quotaFromAccount(accountInfo{Balance: &balanceInfo{AvailableUSD: -1}, Key: &keyInfo{DailyUSD: spent, WeeklyUSD: spent, MonthlyUSD: spent}})
+		if len(resp.Groups) != 1 {
+			t.Fatalf("spent %v: groups = %+v", spent, resp.Groups)
+		}
+		for _, bucket := range resp.Groups[0].Buckets {
+			if bucket.RemainingFraction != 0 {
+				t.Errorf("spent %v: bucket = %+v", spent, bucket)
+			}
+		}
 	}
 }
 
@@ -128,7 +145,8 @@ func TestQuotaFetch(t *testing.T) {
 		t.Fatalf("quota: %+v", envelope.Error)
 	}
 	resp := mustDecode[pluginapi.QuotaFetchResponse](t, envelope.Result)
-	if got := metricValues(resp); len(got) != 3 || got["spent_24h"] != 0.25 || got["spent_30d"] != 1.5 || len(resp.Groups) != 1 {
+	if len(resp.Summary) != 0 || len(resp.Groups) != 2 || len(resp.Groups[0].Buckets) != 3 ||
+		resp.Groups[0].Buckets[2].RemainingFraction != 42.5/44 || !strings.Contains(resp.Groups[0].Buckets[0].Description, "$0.25 spent") {
 		t.Fatalf("quota = %+v", resp)
 	}
 

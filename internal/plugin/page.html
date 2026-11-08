@@ -155,7 +155,7 @@
       gap: 12px;
       flex-wrap: wrap;
     }
-    .card-header h2 { margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    .card-header h2 { margin: 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
     .card-header .hint { font-size: 12px; color: var(--text-muted); }
     .card-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
     .card-body { padding: 14px 18px; }
@@ -183,6 +183,7 @@
       background: transparent;
       color: var(--text-secondary);
       font: inherit;
+      font-size: 13.5px;
       font-weight: 600;
       cursor: pointer;
       transition: background-color 0.15s, color 0.15s;
@@ -226,7 +227,7 @@
       border-radius: var(--radius-sm);
       background: var(--bg-inset);
       color: var(--text-primary);
-      font-size: 13px;
+      font-size: 12.5px;
     }
     .notice.stack { flex-direction: column; align-items: stretch; gap: 6px; }
     .notice-text { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -242,72 +243,64 @@
     .catalog-notice { margin: 12px 18px 0; }
     .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 18px; border-bottom: 1px solid var(--border-subtle); }
     .count { margin-left: auto; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
-    .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-    .summary-item {
-      min-width: 0;
-      padding: 12px 16px;
+    .strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       background: var(--bg-elevated);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-md);
-      box-shadow: var(--shadow-sm);
     }
-    .summary-label { font-size: 12px; color: var(--text-muted); }
-    .summary-value { margin-top: 2px; font-size: 20px; font-weight: 700; line-height: 1.3; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-    .summary-note { margin-top: 2px; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
+    .strip-item { min-width: 0; padding: 8px 16px; border-left: 1px solid var(--border-subtle); }
+    .strip-item:first-child { border-left: none; }
+    .strip-label { font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .strip-line { display: flex; align-items: baseline; gap: 2px 8px; flex-wrap: wrap; min-width: 0; }
+    .strip-value { font-size: 14px; font-weight: 700; line-height: 1.35; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .strip-note { font-size: 11.5px; color: var(--text-muted); overflow-wrap: anywhere; }
+    .summary { box-shadow: var(--shadow-sm); }
+    .summary .strip-value { font-size: 16px; }
+    .summary .strip-note { font-size: 12px; }
+    .meters .strip-item { padding: 6px 14px; }
     .cred-list { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; }
     .cred {
-      display: grid;
-      grid-template-columns: minmax(220px, 0.9fr) minmax(0, 2fr);
-      gap: 12px 28px;
       min-width: 0;
-      padding: 14px 18px 12px;
+      padding: 12px 16px;
       background: var(--bg-inset);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-md);
     }
-    .cred-main { min-width: 0; }
-    .cred-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    .cred-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 650; }
+    .cred-head { display: flex; align-items: center; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; }
+    .cred-title { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 260px; }
+    .cred-name { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 650; }
     .cred.off .cred-name { color: var(--text-secondary); }
-    .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; margin: 10px 0 0; font-size: 12.5px; }
-    .facts dt { color: var(--text-muted); }
-    .facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-    .cred-usage { min-width: 0; }
-    .meters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; }
-    .meter { min-width: 0; }
-    .meter-label { font-size: 12px; color: var(--text-muted); }
-    .meter-value { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-    .meter-note { font-size: 11.5px; color: var(--text-muted); overflow-wrap: anywhere; }
-    .cap { grid-column: 1 / -1; }
+    .cred-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 11.5px; color: var(--text-muted); }
+    .cred-tools { display: flex; align-items: center; justify-content: flex-end; gap: 6px 14px; flex-wrap: wrap; margin-left: auto; }
+    .cred-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 10px 24px; align-items: start; margin-top: 10px; }
+    .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 4px 20px; margin: 0; font-size: 12.5px; }
+    .fact { display: flex; gap: 8px; min-width: 0; }
+    .fact.wide { grid-column: 1 / -1; }
+    .fact dt { flex: none; color: var(--text-muted); }
+    .fact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+    .cred-usage { min-width: 0; display: grid; gap: 8px; }
     .cap-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-muted); }
     .cap-head strong { color: var(--success); font-variant-numeric: tabular-nums; }
     .cap.warn .cap-head strong { color: var(--warning); }
     .cap.bad .cap-head strong { color: var(--danger); }
-    .track { height: 6px; margin-top: 6px; border-radius: 4px; background: var(--border-subtle); overflow: hidden; }
+    .track { height: 6px; margin-top: 4px; border-radius: 4px; background: var(--border-subtle); overflow: hidden; }
     .fill { display: block; height: 100%; border-radius: inherit; background: var(--success); }
     .cap.warn .fill { background: var(--warning); }
     .cap.bad .fill { background: var(--danger); }
-    .usage-state { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 44px; color: var(--text-muted); font-size: 13px; }
-    .cred-bottom {
-      grid-column: 1 / -1;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px 12px;
-      flex-wrap: wrap;
-      padding-top: 10px;
-      border-top: 1px solid var(--border-subtle);
-    }
+    .usage-note { font-size: 12px; overflow-wrap: anywhere; }
+    .usage-state { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: 44px; color: var(--text-muted); font-size: 12.5px; }
     .cred-meta { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; min-width: 0; font-size: 12px; color: var(--text-muted); overflow-wrap: anywhere; }
-    .empty-state { padding: 40px 20px; text-align: center; color: var(--text-muted); }
-    .empty-state strong { display: block; margin-bottom: 4px; color: var(--text-primary); font-size: 15px; }
+    .empty-state { padding: 40px 20px; text-align: center; color: var(--text-muted); font-size: 12.5px; }
+    .empty-state strong { display: block; margin-bottom: 4px; color: var(--text-primary); font-size: 14px; }
     .empty-state .btn { margin-top: 16px; }
     .config-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
     .config-side { display: grid; gap: 16px; min-width: 0; }
     .kv { display: grid; grid-template-columns: minmax(120px, auto) minmax(0, 1fr); margin: 0; }
     .kv dt, .kv dd { margin: 0; padding: 9px 0; border-bottom: 1px solid var(--border-subtle); }
-    .kv dt { padding-right: 16px; color: var(--text-secondary); font-size: 13px; }
-    .kv dd { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+    .kv dt { padding-right: 16px; color: var(--text-muted); font-size: 12px; }
+    .kv dd { min-width: 0; font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; }
     .kv dd .sub { font-weight: 400; }
     .kv > :nth-last-child(-n+2) { border-bottom: none; }
     .head-side { display: flex; align-items: center; gap: 8px; }
@@ -372,7 +365,7 @@
       background: var(--text-primary);
       color: var(--bg-elevated);
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
-      font-size: 13px;
+      font-size: 12.5px;
       overflow-wrap: anywhere;
     }
     .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
@@ -406,6 +399,7 @@
     }
     .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
+    td { font-size: 12.5px; }
     th, td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border-subtle); }
     th {
       font-size: 11px;
@@ -443,7 +437,7 @@
       width: 100%; min-height: 36px; padding: 7px 11px;
       border: 1px solid var(--border-strong); border-radius: var(--radius-md);
       background: var(--bg-inset); color: var(--text-primary);
-      font: inherit; font-size: 13.5px;
+      font: inherit; font-size: 13px;
     }
     .input.mono { font-family: var(--font-mono); font-size: 13px; }
     .input:focus { outline: none; border-color: var(--accent); }
@@ -455,7 +449,7 @@
     .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
     .field > label, .field > .label { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
     .field .help { font-size: 12px; color: var(--text-muted); }
-    .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); cursor: pointer; }
+    .check { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-secondary); cursor: pointer; }
     .models-mode { display: flex; gap: 18px; flex-wrap: wrap; margin: 14px 0 8px; }
     .picker { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden; }
     .picker.disabled .picker-list { opacity: 0.55; }
@@ -482,7 +476,9 @@
     footer a:hover { color: var(--text-primary); }
     @media (max-width: 860px) {
       .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .cred { grid-template-columns: 1fr; }
+      .summary .strip-item:nth-child(odd) { border-left: none; }
+      .summary .strip-item:nth-child(n+3) { border-top: 1px solid var(--border-subtle); }
+      .cred-body { grid-template-columns: 1fr; }
       .config-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 720px) {
@@ -493,6 +489,8 @@
       .input.search { flex-basis: 100%; width: 100%; }
       .count { margin-left: 0; }
       .meters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .meters .strip-item:nth-child(odd) { border-left: none; }
+      .meters .strip-item:nth-child(n+3) { border-top: 1px solid var(--border-subtle); }
       .modal-head, .modal-body { padding-left: 16px; padding-right: 16px; }
       .modal-foot { padding: 12px 16px; }
       .pick-row { grid-template-columns: 20px 1fr; }
@@ -539,7 +537,7 @@
   <div class="app hidden" data-requires-auth>
     <div class="tabbar">
       <div class="tabs" role="tablist" id="tabs" aria-label="Views">
-        <button class="tab" type="button" role="tab" id="tab-keys" data-tab="keys" aria-controls="panel-keys" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 8.65-8.65M15.5 7.5l3 3M13 10l2 2"/></svg><span data-i18n="tab.keys">API keys</span><span class="tab-count" id="tab-count-keys"></span></button>
+        <button class="tab" type="button" role="tab" id="tab-keys" data-tab="keys" aria-controls="panel-keys" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m10.85 12.15 8.65-8.65M15.5 7.5l3 3M13 10l2 2"/></svg><span data-i18n="tab.keys">Credentials</span><span class="tab-count" id="tab-count-keys"></span></button>
         <button class="tab" type="button" role="tab" id="tab-models" data-tab="models" aria-controls="panel-models" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 4.5-9 4.5-9-4.5L12 3Z"/><path d="m3 12 9 4.5 9-4.5M3 16.5 12 21l9-4.5"/></svg><span data-i18n="tab.models">Model catalog</span><span class="tab-count" id="tab-count-models"></span></button>
         <button class="tab" type="button" role="tab" id="tab-config" data-tab="config" aria-controls="panel-config" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg><span data-i18n="tab.config">Configuration</span></button>
       </div>
@@ -555,11 +553,11 @@
     </div>
 
     <section class="panel" role="tabpanel" id="panel-keys" aria-labelledby="tab-keys">
-      <div class="summary" id="key-summary" hidden></div>
+      <div class="summary strip" id="key-summary" hidden></div>
       <section class="card">
         <div class="card-header">
           <div class="card-title">
-            <h2 data-i18n="keys.title">API keys</h2>
+            <h2 data-i18n="keys.title">Credentials</h2>
             <span class="hint" data-i18n="keys.hint">Delete and enable/disable use CPA's auth file API</span>
           </div>
           <div class="actions">
@@ -719,7 +717,6 @@
 
   <footer>
     <span data-i18n="footer.text">Powered by the Wokey plugin</span> ·
-    <a href="https://wokey.ai/docs/usage" target="_blank" rel="noopener noreferrer" data-i18n="footer.docs">Wokey docs</a> ·
     <a href="https://github.com/berry-shake/cpa-wokey-plugin" target="_blank" rel="noopener noreferrer" data-i18n="footer.source">Source</a>
   </footer>
 </main>
@@ -746,7 +743,7 @@
       'login.failed': 'Sign-in failed: {msg}',
       'login.expired': 'The management key was rejected: {msg}',
       'tabs.label': 'Views',
-      'tab.keys': 'API keys',
+      'tab.keys': 'Credentials',
       'tab.models': 'Model catalog',
       'tab.config': 'Configuration',
       'checkedAt': 'Updated {time}',
@@ -773,7 +770,7 @@
       'actions.refresh': 'Refresh',
       'actions.reloadCatalog': 'Reload model catalog',
       'actions.add': 'Add API key',
-      'keys.title': 'API keys',
+      'keys.title': 'Credentials',
       'keys.hint': 'Delete and enable/disable use CPA\'s auth file API',
       'keys.notLoaded': 'Not loaded yet.',
       'keys.listError': 'Cannot list credentials: {msg}',
@@ -919,7 +916,6 @@
       'actions.reloadQuota': 'Refresh balances',
       'form.close': 'Close',
       'footer.text': 'Powered by the Wokey plugin',
-      'footer.docs': 'Wokey docs',
       'footer.source': 'Source',
     },
     zh: {
@@ -939,7 +935,7 @@
       'login.failed': '登录失败：{msg}',
       'login.expired': '管理密钥被拒绝：{msg}',
       'tabs.label': '管理视图',
-      'tab.keys': 'API Key',
+      'tab.keys': '凭据管理',
       'tab.models': '模型目录',
       'tab.config': '配置概览',
       'checkedAt': '更新于 {time}',
@@ -966,7 +962,7 @@
       'actions.refresh': '刷新',
       'actions.reloadCatalog': '重新拉取模型目录',
       'actions.add': '添加 API Key',
-      'keys.title': 'API Key',
+      'keys.title': '凭据管理',
       'keys.hint': '删除和启用/停用走 CPA 原生认证文件接口',
       'keys.notLoaded': '尚未加载。',
       'keys.listError': '无法列出凭证：{msg}',
@@ -1112,7 +1108,6 @@
       'actions.reloadQuota': '刷新余额',
       'form.close': '关闭',
       'footer.text': '由 Wokey 插件驱动',
-      'footer.docs': 'Wokey 文档',
       'footer.source': '源代码',
     },
   };
@@ -1723,10 +1718,7 @@
       reserved += Number(b.reserved_usd) || 0;
     }
     const blank = loading ? '…' : '—';
-    const item = (label, value, note) => keySummary.appendChild(el('div', { class: 'summary-item' },
-      el('div', { class: 'summary-label', text: label }),
-      el('div', { class: 'summary-value', text: value }),
-      note ? el('div', { class: 'summary-note', text: note }) : null));
+    const item = (label, value, note) => keySummary.appendChild(statItem(label, value, note));
 
     let keysNote = '';
     if (cooling) keysNote = t('summary.cooling', { n: cooling });
@@ -1756,11 +1748,13 @@
       .some((value) => String(value || '').toLowerCase().includes(filter));
   }
 
-  function meter(label, value, note, noteClass) {
-    return el('div', { class: 'meter' },
-      el('div', { class: 'meter-label', text: label }),
-      el('div', { class: 'meter-value', text: value }),
-      note ? el('div', { class: 'meter-note' + (noteClass ? ' ' + noteClass : ''), text: note, title: note }) : null);
+  // One cell of a stat strip: label above, value with an optional note beside it.
+  function statItem(label, value, note, noteClass) {
+    return el('div', { class: 'strip-item' },
+      el('div', { class: 'strip-label', text: label, title: label }),
+      el('div', { class: 'strip-line' },
+        el('span', { class: 'strip-value', text: value }),
+        note ? el('span', { class: 'strip-note' + (noteClass ? ' ' + noteClass : ''), text: note, title: note }) : null));
   }
 
   function capBlock(key) {
@@ -1797,23 +1791,21 @@
       box.appendChild(state);
       return box;
     }
-    const meters = el('div', { class: 'meters' });
+    const meters = el('div', { class: 'strip meters' });
     if (d.balance) {
       const reserved = Number(d.balance.reserved_usd) > 0 ? t('usage.reserved', { v: fmtUSD(d.balance.reserved_usd) }) : t('usage.balanceNote');
-      meters.appendChild(meter(t('usage.balance'), fmtUSD(d.balance.available_usd), reserved));
+      meters.appendChild(statItem(t('usage.balance'), fmtUSD(d.balance.available_usd), reserved));
     } else {
-      meters.appendChild(meter(t('usage.balance'), '—', d.balance_error || '', 'danger-text'));
+      meters.appendChild(statItem(t('usage.balance'), '—', d.balance_error || '', 'danger-text'));
     }
-    if (d.key) {
-      meters.appendChild(meter(t('usage.spent24h'), fmtUSD(d.key.daily_usd)));
-      meters.appendChild(meter(t('usage.spent7d'), fmtUSD(d.key.weekly_usd)));
-      meters.appendChild(meter(t('usage.spent30d'), fmtUSD(d.key.monthly_usd)));
-      if (d.key.limit_usd !== undefined && d.key.limit_remaining_usd !== undefined) meters.appendChild(capBlock(d.key));
-    } else if (d.key_error) {
-      meters.appendChild(el('div', { class: 'cap meter-note danger-text', text: t('usage.keyError', { msg: d.key_error }) }));
-    }
+    const k = d.key;
+    meters.appendChild(statItem(t('usage.spent24h'), k ? fmtUSD(k.daily_usd) : '—'));
+    meters.appendChild(statItem(t('usage.spent7d'), k ? fmtUSD(k.weekly_usd) : '—'));
+    meters.appendChild(statItem(t('usage.spent30d'), k ? fmtUSD(k.monthly_usd) : '—'));
     box.appendChild(meters);
-    if (q.state === 'error') box.appendChild(el('div', { class: 'sub danger-text', text: t('usage.failed', { msg: q.error }) }));
+    if (k && k.limit_usd !== undefined && k.limit_remaining_usd !== undefined) box.appendChild(capBlock(k));
+    if (!k && d.key_error) box.appendChild(el('div', { class: 'usage-note danger-text', text: t('usage.keyError', { msg: d.key_error }) }));
+    if (q.state === 'error') box.appendChild(el('div', { class: 'usage-note danger-text', text: t('usage.failed', { msg: q.error }) }));
     return box;
   }
 
@@ -1822,10 +1814,11 @@
     const models = Array.isArray(cred.models) ? cred.models : [];
     const missing = Array.isArray(cred.missing_models) ? cred.missing_models : [];
     const facts = el('dl', { class: 'facts' });
-    const fact = (label, ...value) => {
-      facts.appendChild(el('dt', { text: label }));
-      facts.appendChild(el('dd', null, ...value));
-    };
+    const addFact = (wide, label, value) => facts.appendChild(el('div', { class: 'fact' + (wide ? ' wide' : '') },
+      el('dt', { text: label }), el('dd', null, ...value)));
+    const fact = (label, ...value) => addFact(false, label, value);
+    // Free text (notes, error messages) can be long, so it gets a full row.
+    const wideFact = (label, ...value) => addFact(true, label, value);
     if (cred.label) fact(t('card.key'), el('span', { class: 'mono', text: cred.key_masked }));
     if (!cred.read_error) {
       fact(t('card.models'),
@@ -1837,16 +1830,16 @@
         el('span', { class: 'sub', text: ' · ' + t(cred.prefix === null || cred.prefix === undefined ? 'prefix.default' : 'prefix.custom') }));
       let proxyText = t('proxy.inherit');
       if (cred.proxy_url) proxyText = isDirect(cred.proxy_url) ? t('proxy.direct') : cred.proxy_url;
-      fact(t('card.proxy'), el('span', { class: cred.proxy_url && !isDirect(cred.proxy_url) ? 'mono' : null, text: proxyText }));
+      const proxyURL = !!cred.proxy_url && !isDirect(cred.proxy_url);
+      (proxyURL ? wideFact : fact)(t('card.proxy'), el('span', { class: proxyURL ? 'mono' : null, text: proxyText }));
       if (cred.priority) fact(t('card.priority'), String(cred.priority));
-      if (cred.note) fact(t('card.note'), cred.note);
+      if (cred.note) wideFact(t('card.note'), cred.note);
     }
     const stateNote = cred.read_error || cred.status_message || '';
-    if (stateNote) fact(t('card.status'), el('span', { class: cred.read_error ? 'danger-text' : 'warn-text', text: stateNote }));
+    if (stateNote) wideFact(t('card.status'), el('span', { class: cred.read_error ? 'danger-text' : 'warn-text', text: stateNote }));
 
     const q = ui.quota[cred.auth_index];
     const meta = el('div', { class: 'cred-meta' },
-      el('span', { class: 'mono', text: cred.name, title: cred.name }),
       cred.success || cred.failed ? el('span', { text: t('card.requests', { ok: cred.success || 0, failed: cred.failed || 0 }) }) : null,
       q && q.data && q.data.fetched_at ? el('span', { text: t('usage.fetched', { time: formatTime(q.data.fetched_at) }) }) : null,
       !cred.read_error && q && q.data ? el('button', { type: 'button', class: 'btn-link', text: t(q.state === 'loading' ? 'usage.loading' : 'usage.refresh'), disabled: q.state === 'loading', onclick: () => loadQuota(cred.auth_index) }) : null);
@@ -1858,13 +1851,13 @@
       el('button', { type: 'button', class: 'btn btn-danger btn-sm' + (armed ? ' armed' : ''), text: t(armed ? 'row.confirmDelete' : 'row.delete'), onclick: (ev) => deleteCredential(cred, ev.currentTarget) }));
 
     return el('article', { class: 'cred' + (cred.disabled ? ' off' : '') },
-      el('div', { class: 'cred-main' },
+      el('div', { class: 'cred-head' },
         el('div', { class: 'cred-title' },
           el('span', { class: 'cred-name', text: displayName(cred), title: displayName(cred) }),
-          el('span', { class: 'badge ' + badgeClass, text: t(badgeKey) })),
-        facts),
-      usageBlock(cred),
-      el('div', { class: 'cred-bottom' }, meta, actions));
+          el('span', { class: 'badge ' + badgeClass, text: t(badgeKey) }),
+          el('span', { class: 'cred-file', text: cred.name, title: cred.name })),
+        el('div', { class: 'cred-tools' }, meta, actions)),
+      el('div', { class: 'cred-body' }, facts, usageBlock(cred)));
   }
 
   function renderKeys() {

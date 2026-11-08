@@ -150,23 +150,46 @@ func (s *Service) fetchAccount(cred credential) (accountInfo, *pluginabi.Error) 
 	return info, nil
 }
 
-// quotaFromAccount renders account info for CPA's quota panel: the key's
-// rolling 24h / 7d / 30d spend, plus a progress bar when the key has a spend
-// cap. Wokey has no shorter window, and the account balance is shown on the
-// plugin's own management page instead.
+// quotaFromAccount renders account info for CPA's quota panel. Each rolling
+// window (24h / 7d / 30d; Wokey has no shorter one) becomes a bar showing how
+// much of the money held at the window's start is left:
+// balance / (balance + spent in the window). Top-ups during the window and
+// several keys sharing one balance make it approximate. Without a balance the
+// spend is shown as plain numbers. A key with a spend cap gets its own bar.
 func quotaFromAccount(info accountInfo) pluginapi.QuotaFetchResponse {
-	usd := func(key, label string, value float64) pluginapi.QuotaMetric {
-		return pluginapi.QuotaMetric{Key: key, Label: label, Value: value, Format: "currency", Currency: "USD"}
-	}
 	var out pluginapi.QuotaFetchResponse
 	key := info.Key
 	if key == nil {
 		return out
 	}
-	out.Summary = append(out.Summary,
-		usd("spent_24h", "24h", key.DailyUSD),
-		usd("spent_7d", "7d", key.WeeklyUSD),
-		usd("spent_30d", "30d", key.MonthlyUSD))
+	windows := []struct {
+		key, label string
+		spent      float64
+	}{
+		{"spent_24h", "24h", key.DailyUSD},
+		{"spent_7d", "7d", key.WeeklyUSD},
+		{"spent_30d", "30d", key.MonthlyUSD},
+	}
+	if info.Balance != nil {
+		balance := math.Max(0, info.Balance.AvailableUSD)
+		group := pluginapi.QuotaGroup{DisplayName: "Spend vs balance"}
+		for _, window := range windows {
+			fraction := 0.0
+			if start := balance + math.Max(0, window.spent); start > 0 {
+				fraction = balance / start
+			}
+			group.Buckets = append(group.Buckets, pluginapi.QuotaBucket{
+				Window:            window.label,
+				RemainingFraction: fraction,
+				Description:       fmt.Sprintf("$%.2f spent · $%.2f balance", window.spent, info.Balance.AvailableUSD),
+			})
+		}
+		out.Groups = append(out.Groups, group)
+	} else {
+		for _, window := range windows {
+			out.Summary = append(out.Summary, pluginapi.QuotaMetric{Key: window.key, Label: window.label, Value: window.spent, Format: "currency", Currency: "USD"})
+		}
+	}
 	if key.LimitUSD != nil && key.LimitRemaining != nil {
 		fraction := 0.0
 		if *key.LimitUSD > 0 {
