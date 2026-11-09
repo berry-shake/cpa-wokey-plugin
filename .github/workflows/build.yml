@@ -10,10 +10,39 @@ permissions:
   contents: read
 
 jobs:
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Test
+        run: npm test
+      - name: Build
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-ui
+          path: web/dist/index.html
+          if-no-files-found: error
+
   test:
+    needs: web
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-ui
+          path: internal/web/dist
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -29,7 +58,7 @@ jobs:
         run: go test ./...
 
   build:
-    needs: test
+    needs: [web, test]
     strategy:
       fail-fast: false
       matrix:
@@ -57,6 +86,10 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-ui
+          path: internal/web/dist
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -72,6 +105,10 @@ jobs:
         if: matrix.goos == 'windows'
         shell: pwsh
         run: Add-Content $env:GITHUB_PATH 'C:\msys64\mingw64\bin'
+      - name: Check management page
+        shell: bash
+        # The page is embedded; without it the plugin would ship the placeholder.
+        run: test -s internal/web/dist/index.html
       - name: Build shared library
         shell: bash
         env:

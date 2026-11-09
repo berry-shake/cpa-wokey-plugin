@@ -1,0 +1,191 @@
+import type { CredentialView, LogEntry } from "../api/types";
+import { fileStem } from "./format";
+
+export const LOG_SIZE_KEY = "cliproxy-wokey-log-size";
+export const LOG_SIZES = [20, 50, 100, 200];
+export const DEFAULT_LOG_SIZE = 50;
+export const LOG_RANGE_KEY = "cliproxy-wokey-log-range";
+export const LOG_RANGES = ["all", "today", "24h", "7d", "30d", "custom"] as const;
+export type LogRange = (typeof LOG_RANGES)[number];
+
+const LOCAL_MINUTE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/;
+const DAY_MS = 86400000;
+
+export function isLogRange(value: unknown): value is LogRange {
+  return (LOG_RANGES as readonly unknown[]).includes(value);
+}
+
+/** A saved page size, or the default when it is not one of LOG_SIZES. */
+export function parseLogSize(saved: string | null): number {
+  const n = Number(saved);
+  return LOG_SIZES.includes(n) ? n : DEFAULT_LOG_SIZE;
+}
+
+/** Formats a date for a datetime-local input (local time, to the minute). */
+export function localMinute(date: Date): string {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+/** The start of the next minute after now. */
+export function nextMinute(now: number): Date {
+  return new Date(Math.floor(now / 60000) * 60000 + 60000);
+}
+
+/** Checks a pair of datetime-local values; "" when they form a valid range. */
+export function customRangeError(start: string, end: string): string {
+  if (!LOCAL_MINUTE.test(start) || !LOCAL_MINUTE.test(end)) return "logs.range.incomplete";
+  const from = new Date(start).getTime();
+  const to = new Date(end).getTime();
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return "logs.range.incomplete";
+  return from < to ? "" : "logs.range.order";
+}
+
+export interface RangeSelection {
+  range: LogRange;
+  /** Applied custom bounds (datetime-local values). */
+  start: string;
+  end: string;
+}
+
+/**
+ * Turns the selected range into from/to query parameters. Relative ranges
+ * are computed against now; null means the custom range is not usable.
+ */
+export function logRangeParams(sel: RangeSelection, now: number): Record<string, string> | null {
+  switch (sel.range) {
+    case "custom":
+      if (customRangeError(sel.start, sel.end)) return null;
+      return { from: new Date(sel.start).toISOString(), to: new Date(sel.end).toISOString() };
+    case "today": {
+      const start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+      return { from: start.toISOString() };
+    }
+    case "24h":
+    case "7d":
+    case "30d": {
+      const days = { "24h": 1, "7d": 7, "30d": 30 }[sel.range];
+      return { from: new Date(nextMinute(now).getTime() - days * DAY_MS).toISOString() };
+    }
+    default:
+      return {};
+  }
+}
+
+/**
+ * The range to start with: the saved one when valid. The custom bounds
+ * default to the last 24 hours and take the saved ones only when they form a
+ * valid range.
+ */
+export function restoreLogRange(savedJSON: string | null, now: number): RangeSelection {
+  const end = nextMinute(now);
+  const sel: RangeSelection = { range: "all", start: localMinute(new Date(end.getTime() - DAY_MS)), end: localMinute(end) };
+  try {
+    const saved = JSON.parse(savedJSON || "null") as { range?: unknown; start?: unknown; end?: unknown } | null;
+    if (saved && isLogRange(saved.range)) {
+      sel.range = saved.range;
+      if (!customRangeError(String(saved.start || ""), String(saved.end || ""))) {
+        sel.start = saved.start as string;
+        sel.end = saved.end as string;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return sel;
+}
+
+export type LatTone = "" | "good" | "warn" | "bad";
+
+/** Colours a timing the way ClinePassBridge does. */
+export function latTone(ms: number | null | undefined, kind: "ttft" | "total", outTokens: number): LatTone {
+  if (!(typeof ms === "number" && ms > 0)) return "";
+  const sec = ms / 1000;
+  if (kind === "ttft") return sec < 5 ? "good" : sec < 10 ? "warn" : "bad";
+  if (outTokens >= 100) {
+    const rate = outTokens / sec;
+    return rate >= 30 ? "good" : rate >= 15 ? "warn" : "bad";
+  }
+  return sec < 10 ? "good" : sec < 30 ? "warn" : "bad";
+}
+
+export interface PagerView {
+  pages: number;
+  /** Zero-based page of the offset. */
+  current: number;
+}
+
+export function pagerView(total: number, offset: number, size: number): PagerView {
+  const pages = Math.max(1, Math.ceil(total / size));
+  return { pages, current: Math.min(pages - 1, Math.floor(offset / size)) };
+}
+
+/** Page buttons to show: the first, the last and two on each side of the current page. */
+export function pagerNumbers(current: number, pages: number): number[] {
+  const set = new Set([0, pages - 1]);
+  for (let n = current - 2; n <= current + 2; n++) if (n >= 0 && n < pages) set.add(n);
+  return [...set].sort((a, b) => a - b);
+}
+
+/** The offset that keeps the first entry of the page in view after a size change. */
+export function offsetForSize(offset: number, size: number): number {
+  return Math.floor(offset / size) * size;
+}
+
+/** The offset of the last page, for a page that went past the end. */
+export function lastPageOffset(total: number, size: number): number {
+  return Math.floor((total - 1) / size) * size;
+}
+
+/**
+ * The 1-based page a jump box asks for, clamped to the pages; null when the
+ * box is empty or not a number.
+ */
+export function jumpTarget(value: string, pages: number): number | null {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n) || value === "") return null;
+  return Math.min(pages, Math.max(1, n));
+}
+
+/** CPA's request ID in full; "—" for entries without one. */
+export function logRequestID(e: Pick<LogEntry, "request_id">): string {
+  return String(e.request_id || "").trim() || "—";
+}
+
+/**
+ * The current credential behind an entry, found by its auth file; entries
+ * of deleted credentials have none.
+ */
+export function logCred(e: Pick<LogEntry, "auth_id">, creds: CredentialView[]): CredentialView | null {
+  return e.auth_id ? creds.find((c) => c.id === e.auth_id || c.name === e.auth_id) || null : null;
+}
+
+export function logAuthIndex(e: Pick<LogEntry, "auth_id">, creds: CredentialView[]): string {
+  const cred = logCred(e, creds);
+  return (cred && cred.auth_index) || "—";
+}
+
+/**
+ * The masked key of an entry. Early 0.1.7 builds stored the auth file name
+ * in its place, so those entries take it from the credential.
+ */
+export function logKey(e: Pick<LogEntry, "auth_id" | "credential">, creds: CredentialView[]): string {
+  if (e.credential && e.credential !== e.auth_id) return e.credential;
+  const cred = logCred(e, creds);
+  return (cred && cred.key_masked) || "";
+}
+
+/** Names the key behind an entry by its auth file, without the extension. */
+export function logCredential(e: Pick<LogEntry, "auth_id" | "credential">, creds: CredentialView[]): string {
+  return fileStem(e.auth_id) || logKey(e, creds) || "—";
+}
+
+/** Cache hit share of one entry (0..1); null without input tokens. */
+export function cacheRate(e: Pick<LogEntry, "input_tokens" | "cached_tokens">): number | null {
+  return e.input_tokens > 0 ? e.cached_tokens / e.input_tokens : null;
+}
+
+/** Whether a log query narrows the full log (any range, status or search). */
+export function isFiltered(range: LogRange, status: string, search: string): boolean {
+  return range !== "all" || status !== "all" || search.trim() !== "";
+}
