@@ -68,8 +68,6 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 main {
-  max-width: 1400px;
-  margin: 0 auto;
   padding: 16px 24px 20px;
   display: flex;
   flex-direction: column;
@@ -254,6 +252,8 @@ header.hero { display: flex; flex-direction: column; align-items: stretch; gap: 
 .summary .strip-note { font-size: 12px; }
 .summary.has-earn { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .cred-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; padding: 14px 18px; }
+/* The page fills wide screens; keep cards wide enough for the side-by-side layout there. */
+@media (min-width: 1440px) { .cred-list { grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); } }
 .cred-list > .empty, .cred-list > .empty-state { grid-column: 1 / -1; }
 .cred {
   display: flex;
