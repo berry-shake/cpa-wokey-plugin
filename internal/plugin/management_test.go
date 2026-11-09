@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/berry-shake/cpa-wokey-plugin/internal/credential"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
@@ -62,10 +63,10 @@ func TestAddCredential(t *testing.T) {
 	if status != http.StatusCreated || out["ok"] != true {
 		t.Fatalf("add: %d %v", status, out)
 	}
-	name := authFileNameForKey(testGoodKey)
+	name := credential.FileNameForKey(testGoodKey)
 	cred := credentialOf(t, out)
 	// Wokey's own key label is not copied: the name defaults to the file name.
-	if cred["name"] != name || cred["label"] != "" || cred["key_masked"] != maskKey(testGoodKey) {
+	if cred["name"] != name || cred["label"] != "" || cred["key_masked"] != credential.MaskKey(testGoodKey) {
 		t.Fatalf("credential = %v", cred)
 	}
 	if got := stringList(out["unknown_models"]); !reflect.DeepEqual(got, []string{"ghost"}) {
@@ -76,11 +77,11 @@ func TestAddCredential(t *testing.T) {
 	}
 
 	fields := host.fields(name)
-	if _, hasLabel := fields[keyLabel]; hasLabel || fields[keyAPIKey] != testGoodKey || fields[keyType] != ProviderID {
+	if _, hasLabel := fields[credential.KeyLabel]; hasLabel || fields[credential.KeyAPIKey] != testGoodKey || fields[credential.KeyType] != ProviderID {
 		t.Fatalf("auth file = %v", fields)
 	}
-	if fields[keyModelRevision] == nil || fields[keyModelRevision] != svc.catalog.current().Revision {
-		t.Fatalf("model_revision = %v, catalog %s", fields[keyModelRevision], svc.catalog.current().Revision)
+	if fields[credential.KeyModelRevision] == nil || fields[credential.KeyModelRevision] != svc.catalog.Current().Revision {
+		t.Fatalf("model_revision = %v, catalog %s", fields[credential.KeyModelRevision], svc.catalog.Current().Revision)
 	}
 	// Without force-model-prefix CPA registers both the bare and the prefixed
 	// ID; the page still counts two models.
@@ -112,10 +113,10 @@ func TestAddCredential(t *testing.T) {
 		t.Fatalf("skip_verify: %d %v", status, out)
 	}
 	cred = credentialOf(t, out)
-	if cred["label"] != "" || cred["key_masked"] != maskKey("sk-offline-key-123456") || cred["effective_prefix"] != "" || cred["proxy_url"] != "direct" || cred["all_models"] != true {
+	if cred["label"] != "" || cred["key_masked"] != credential.MaskKey("sk-offline-key-123456") || cred["effective_prefix"] != "" || cred["proxy_url"] != "direct" || cred["all_models"] != true {
 		t.Fatalf("skip_verify credential = %v", cred)
 	}
-	if got := host.file(authFileNameForKey("sk-offline-key-123456")).models; !reflect.DeepEqual(got, []string{"model-a", "model-b"}) {
+	if got := host.file(credential.FileNameForKey("sk-offline-key-123456")).models; !reflect.DeepEqual(got, []string{"model-a", "model-b"}) {
 		t.Fatalf("bare registration = %v", got)
 	}
 }
@@ -161,7 +162,7 @@ func TestUpdateCredential(t *testing.T) {
 	if status != http.StatusCreated {
 		t.Fatalf("add: %d %v", status, out)
 	}
-	name := authFileNameForKey(testGoodKey)
+	name := credential.FileNameForKey(testGoodKey)
 	index := host.file(name).index
 
 	body := `{"auth_index":"` + index + `","label":"main","models":["model-a","ghost"],"prefix":"","proxy_url":"http://user:pass@proxy.example:3128","priority":5,"note":"n"}`
@@ -186,11 +187,11 @@ func TestUpdateCredential(t *testing.T) {
 		t.Fatalf("registered = %v", got)
 	}
 	fields := host.fields(name)
-	if fields[keyProxyURL] != "http://user:pass@proxy.example:3128" || fields[keyAPIKey] != testGoodKey || fields[keyNote] != "n" {
+	if fields[credential.KeyProxyURL] != "http://user:pass@proxy.example:3128" || fields[credential.KeyAPIKey] != testGoodKey || fields[credential.KeyNote] != "n" {
 		t.Fatalf("auth file = %v", fields)
 	}
-	if fields[keyPrefix] != "" {
-		t.Fatalf("prefix = %#v", fields[keyPrefix])
+	if fields[credential.KeyPrefix] != "" {
+		t.Fatalf("prefix = %#v", fields[credential.KeyPrefix])
 	}
 	if prefix, ok := cred["prefix"].(string); !ok || prefix != "" {
 		t.Fatalf("view prefix = %#v", cred["prefix"])
@@ -203,12 +204,12 @@ func TestUpdateCredential(t *testing.T) {
 		t.Fatalf("reset: %d %v", status, out)
 	}
 	fields = host.fields(name)
-	for _, key := range []string{keyModels, keyPrefix, keyPriority, keyProxyURL} {
+	for _, key := range []string{credential.KeyModels, credential.KeyPrefix, credential.KeyPriority, credential.KeyProxyURL} {
 		if _, ok := fields[key]; ok {
 			t.Errorf("%s not cleared: %v", key, fields[key])
 		}
 	}
-	if fields[keyLabel] != "main" || fields[keyNote] != "n" {
+	if fields[credential.KeyLabel] != "main" || fields[credential.KeyNote] != "n" {
 		t.Fatalf("untouched fields changed: %v", fields)
 	}
 	// With force-model-prefix only the prefixed IDs are registered.
@@ -253,7 +254,7 @@ func TestStatusView(t *testing.T) {
 	if _, errRefresh := svc.refreshCatalog(false); errRefresh != nil {
 		t.Fatal(errRefresh)
 	}
-	revision := svc.catalog.current().Revision
+	revision := svc.catalog.Current().Revision
 	host.seed("wokey-a.json", ProviderID, map[string]any{"type": "wokey", "api_key": testGoodKey, "label": "A", "models": []string{"model-a", "gone"}, "model_revision": revision})
 	host.seed("wokey-b.json", ProviderID, map[string]any{"type": "wokey", "api_key": "sk-b-0000000000", "disabled": true, "model_revision": revision})
 	host.seed("codex.json", "codex", map[string]any{"type": "codex"})
@@ -274,7 +275,7 @@ func TestStatusView(t *testing.T) {
 		t.Fatalf("credentials = %v", creds)
 	}
 	a := creds[0].(map[string]any)
-	if a["label"] != "A" || a["key_masked"] != maskKey(testGoodKey) || !reflect.DeepEqual(stringList(a["missing_models"]), []string{"gone"}) {
+	if a["label"] != "A" || a["key_masked"] != credential.MaskKey(testGoodKey) || !reflect.DeepEqual(stringList(a["missing_models"]), []string{"gone"}) {
 		t.Fatalf("a = %v", a)
 	}
 	if b := creds[1].(map[string]any); b["disabled"] != true || b["all_models"] != true {
@@ -296,8 +297,8 @@ func TestSyncRegistrationsAfterCatalogChange(t *testing.T) {
 	if status, out := manage(t, svc, http.MethodPost, credentialsPath, `{"api_key":"`+testGoodKey+`"}`); status != http.StatusCreated {
 		t.Fatalf("add: %d %v", status, out)
 	}
-	enabled := authFileNameForKey(testGoodKey)
-	first := svc.catalog.current().Revision
+	enabled := credential.FileNameForKey(testGoodKey)
+	first := svc.catalog.Current().Revision
 	host.seed("wokey-off.json", ProviderID, map[string]any{"type": "wokey", "api_key": "sk-off-0000000000", "disabled": true, "model_revision": first})
 
 	// An unchanged catalog touches nothing.
@@ -318,7 +319,7 @@ func TestSyncRegistrationsAfterCatalogChange(t *testing.T) {
 		t.Fatalf("enabled credential not re-registered: %v", got)
 	}
 	for _, name := range []string{enabled, "wokey-off.json"} {
-		if got := host.fields(name)[keyModelRevision]; got != snapshot.Revision {
+		if got := host.fields(name)[credential.KeyModelRevision]; got != snapshot.Revision {
 			t.Errorf("%s model_revision = %v", name, got)
 		}
 	}
@@ -448,22 +449,6 @@ func TestManagementRouting(t *testing.T) {
 	}
 }
 
-func TestAuthSaveName(t *testing.T) {
-	cases := []struct {
-		name, path, want string
-	}{
-		{"wokey-1.json", "", "wokey-1.json"},
-		{"", "/auths/sub/wokey-2.JSON", "wokey-2.JSON"},
-		{"label only", `C:\auths\wokey-3.json`, "wokey-3.json"},
-		{"x", "/auths/x", ""},
-	}
-	for _, tc := range cases {
-		if got := authSaveName(tc.name, tc.path); got != tc.want {
-			t.Errorf("authSaveName(%q, %q) = %q, want %q", tc.name, tc.path, got, tc.want)
-		}
-	}
-}
-
 func TestRedactProxy(t *testing.T) {
 	if got := redactProxy("socks5://u:secret@h:1080"); strings.Contains(got, "secret") || !strings.Contains(got, "u:") {
 		t.Fatalf("redact = %q", got)
@@ -480,7 +465,7 @@ func TestDefaultPrefixChangeReRegisters(t *testing.T) {
 	if status, out := manage(t, svc, http.MethodPost, credentialsPath, `{"api_key":"`+testGoodKey+`"}`); status != http.StatusCreated {
 		t.Fatalf("add: %d %v", status, out)
 	}
-	name := authFileNameForKey(testGoodKey)
+	name := credential.FileNameForKey(testGoodKey)
 	if got := host.file(name).models; !reflect.DeepEqual(got, []string{"wokey/model-a", "wokey/model-b"}) {
 		t.Fatalf("registered = %v", got)
 	}
@@ -499,7 +484,7 @@ func TestDefaultPrefixChangeReRegisters(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if _, ok := host.fields(name)[keyPrefix]; ok {
+	if _, ok := host.fields(name)[credential.KeyPrefix]; ok {
 		t.Fatal("the default prefix must not be written into the file")
 	}
 }

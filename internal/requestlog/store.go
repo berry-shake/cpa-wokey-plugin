@@ -1,4 +1,4 @@
-package plugin
+package requestlog
 
 import (
 	"bufio"
@@ -75,11 +75,11 @@ var requestSearchColumns = []string{"CAST(id AS TEXT)", "request_id", "model", "
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
-// requestLog stores request log entries in SQLite (wokey.db in the data
+// Log stores request log entries in SQLite (wokey.db in the data
 // dir; in memory when the dir is empty). It keeps at most retention rows and,
 // when days > 0, nothing older than that many days. retention 0 turns logging
 // off.
-type requestLog struct {
+type Log struct {
 	mu        sync.Mutex // guards the fields below and serialises writes
 	db        *sql.DB
 	dir       string
@@ -91,13 +91,15 @@ type requestLog struct {
 	now       func() time.Time
 }
 
-func newRequestLog(warn func(string)) *requestLog {
-	return &requestLog{warn: warn, now: time.Now}
+// New returns a log that is off until Configure is called; warn receives
+// storage problems.
+func New(warn func(string)) *Log {
+	return &Log{warn: warn, now: time.Now}
 }
 
-// configure points the log at a data dir and applies the retention limits,
+// Configure points the log at a data dir and applies the retention limits,
 // opening (or reopening) the database when the dir changes.
-func (l *requestLog) configure(dir string, retention, days int) {
+func (l *Log) Configure(dir string, retention, days int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.retention, l.days = retention, max(days, 0)
@@ -114,7 +116,7 @@ func (l *requestLog) configure(dir string, retention, days int) {
 	l.pruneLocked()
 }
 
-func (l *requestLog) openLocked() {
+func (l *Log) openLocked() {
 	l.openErr = ""
 	dsn := "file::memory:"
 	if l.dir != "" {
@@ -152,7 +154,7 @@ func (l *requestLog) openLocked() {
 // renameLegacyDBLocked moves a database saved under the old name to the
 // current one. The WAL files go first, so a move cut short is finished on the
 // next open instead of leaving committed rows behind in an orphaned WAL.
-func (l *requestLog) renameLegacyDBLocked() {
+func (l *Log) renameLegacyDBLocked() {
 	current := filepath.Join(l.dir, requestLogDB)
 	legacy := filepath.Join(l.dir, legacyRequestDB)
 	if _, errStat := os.Stat(current); !errors.Is(errStat, os.ErrNotExist) {
@@ -200,14 +202,14 @@ func migrateRequestSchema(db *sql.DB) error {
 	return nil
 }
 
-func (l *requestLog) failLocked(message string) {
+func (l *Log) failLocked(message string) {
 	l.openErr = message
 	l.warnf(message)
 }
 
 // importLegacyLocked moves entries from the old JSONL log into the database
 // and removes the file once they are committed.
-func (l *requestLog) importLegacyLocked() {
+func (l *Log) importLegacyLocked() {
 	if l.dir == "" {
 		return
 	}
@@ -227,7 +229,7 @@ func (l *requestLog) importLegacyLocked() {
 	scanner := bufio.NewScanner(bytes.NewReader(raw))
 	scanner.Buffer(make([]byte, 64<<10), 4<<20)
 	for scanner.Scan() {
-		var entry logEntry
+		var entry Entry
 		if json.Unmarshal(scanner.Bytes(), &entry) != nil {
 			continue // torn tail or a bad line
 		}
@@ -248,7 +250,7 @@ func (l *requestLog) importLegacyLocked() {
 	}
 }
 
-func insertArgs(e logEntry) []any {
+func insertArgs(e Entry) []any {
 	var ttft, rate any
 	if e.TTFTMS != nil {
 		ttft = *e.TTFTMS
@@ -265,7 +267,8 @@ func insertArgs(e logEntry) []any {
 		e.ReasoningTokens, rate, e.ErrorCode, e.Error, e.ErrorPhase, e.RequestID}
 }
 
-func (l *requestLog) add(entry logEntry) {
+// Add stores one entry, pruning old rows as needed.
+func (l *Log) Add(entry Entry) {
 	if l == nil {
 		return
 	}
@@ -292,7 +295,7 @@ func (l *requestLog) add(entry logEntry) {
 }
 
 // pruneLocked drops rows past the age limit and the row cap.
-func (l *requestLog) pruneLocked() {
+func (l *Log) pruneLocked() {
 	l.inserts = 0
 	if l.db == nil {
 		return
@@ -305,13 +308,14 @@ func (l *requestLog) pruneLocked() {
 	}
 }
 
-func (l *requestLog) execLocked(query string, args ...any) {
+func (l *Log) execLocked(query string, args ...any) {
 	if _, errExec := l.db.Exec(query, args...); errExec != nil {
 		l.warnf("prune request log: " + errExec.Error())
 	}
 }
 
-func (l *requestLog) clear() error {
+// Clear deletes every entry.
+func (l *Log) Clear() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.db == nil {
@@ -326,26 +330,28 @@ func (l *requestLog) clear() error {
 	return nil
 }
 
-func (l *requestLog) close() {
+// Close closes the database.
+func (l *Log) Close() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.closeLocked()
 }
 
-func (l *requestLog) closeLocked() {
+func (l *Log) closeLocked() {
 	if l.db != nil {
 		_ = l.db.Close()
 		l.db = nil
 	}
 }
 
-func (l *requestLog) warnf(message string) {
+func (l *Log) warnf(message string) {
 	if l.warn != nil {
 		l.warn("wokey: " + message)
 	}
 }
 
-type logQuery struct {
+// Query selects entries for the request log tab.
+type Query struct {
 	Search string
 	Status string
 	// From and To bound the request start time (From inclusive, To
@@ -356,7 +362,8 @@ type logQuery struct {
 	Offset int
 }
 
-type logSummary struct {
+// Summary totals every entry matching a query.
+type Summary struct {
 	Requests        int      `json:"requests"`
 	Success         int      `json:"success"`
 	Failed          int      `json:"failed"`
@@ -367,17 +374,18 @@ type logSummary struct {
 	TokensPerSecond *float64 `json:"output_tokens_per_second"`
 }
 
-type logPage struct {
-	Items         []logEntry `json:"items"`
-	Total         int        `json:"total"`
-	Offset        int        `json:"offset"`
-	Retention     int        `json:"retention"`
-	RetentionDays int        `json:"retention_days"`
-	Summary       logSummary `json:"summary"`
-	Error         string     `json:"error,omitempty"`
+// Page is one page of query results.
+type Page struct {
+	Items         []Entry `json:"items"`
+	Total         int     `json:"total"`
+	Offset        int     `json:"offset"`
+	Retention     int     `json:"retention"`
+	RetentionDays int     `json:"retention_days"`
+	Summary       Summary `json:"summary"`
+	Error         string  `json:"error,omitempty"`
 }
 
-func (q logQuery) where() (string, []any) {
+func (q Query) where() (string, []any) {
 	var conds []string
 	var args []any
 	if q.Status != "" && q.Status != "all" {
@@ -407,12 +415,12 @@ func (q logQuery) where() (string, []any) {
 	return " WHERE " + strings.Join(conds, " AND "), args
 }
 
-// query returns matching entries newest first, plus a summary over all
+// Query returns matching entries newest first, plus a summary over all
 // matching entries.
-func (l *requestLog) query(q logQuery) logPage {
+func (l *Log) Query(q Query) Page {
 	l.mu.Lock()
 	db := l.db
-	page := logPage{Items: []logEntry{}, Retention: l.retention, RetentionDays: l.days, Error: l.openErr}
+	page := Page{Items: []Entry{}, Retention: l.retention, RetentionDays: l.days, Error: l.openErr}
 	l.mu.Unlock()
 	if db == nil {
 		return page
@@ -462,8 +470,8 @@ func (l *requestLog) query(q logQuery) logPage {
 	return page
 }
 
-func scanEntry(rows *sql.Rows) (logEntry, error) {
-	var e logEntry
+func scanEntry(rows *sql.Rows) (Entry, error) {
+	var e Entry
 	var id, timeMS int64
 	var stream int
 	var ttft sql.NullInt64

@@ -1,7 +1,7 @@
 // Command wokey builds the CLIProxyAPI plugin that turns Wokey API keys into
-// CPA auth-file credentials. All behavior lives in internal/plugin; this file
-// only adapts the C ABI and keeps the host API so the plugin can call back
-// into CPA (auth files, stream emission, logging).
+// CPA auth-file credentials. All behavior lives under internal/, wired up by
+// internal/plugin; this file only adapts the C ABI and keeps the host API so
+// the plugin can call back into CPA (auth files, stream emission, logging).
 package main
 
 /*

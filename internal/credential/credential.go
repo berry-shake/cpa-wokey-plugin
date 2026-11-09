@@ -1,4 +1,6 @@
-package plugin
+// Package credential reads and builds Wokey auth files: one file per API key,
+// {"type":"wokey","api_key":...}, plus the CPA auth data derived from it.
+package credential
 
 import (
 	"bytes"
@@ -7,36 +9,40 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/berry-shake/cpa-wokey-plugin/internal/config"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/jsonfield"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/wokey"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
 // Auth file keys. They are snake_case because CPA canonicalizes credential
 // metadata keys to snake_case when it persists an auth.
 const (
-	keyType          = "type"
-	keyAPIKey        = "api_key"
-	keyLabel         = "label"
-	keyBaseURL       = "base_url"
-	keyPrefix        = "prefix"
-	keyModels        = "models"
-	keyProxyURL      = "proxy_url"
-	keyPriority      = "priority"
-	keyDisabled      = "disabled"
-	keyNote          = "note"
-	keyModelRevision = "model_revision"
-	keyIssuerToken   = "issuer_token"
+	KeyType          = "type"
+	KeyAPIKey        = "api_key"
+	KeyLabel         = "label"
+	KeyBaseURL       = "base_url"
+	KeyPrefix        = "prefix"
+	KeyModels        = "models"
+	KeyProxyURL      = "proxy_url"
+	KeyPriority      = "priority"
+	KeyDisabled      = "disabled"
+	KeyNote          = "note"
+	KeyModelRevision = "model_revision"
+	KeyIssuerToken   = "issuer_token"
 )
 
 // refreshHorizon is how far ahead auth.parse and auth.refresh schedule the next
 // refresh. API keys do not expire, so this only keeps CPA from polling.
 const refreshHorizon = 365 * 24 * time.Hour
 
-// credential is the view of one Wokey auth file the runtime needs.
-type credential struct {
+// Credential is the view of one Wokey auth file the runtime needs.
+type Credential struct {
 	APIKey  string
 	Label   string
 	BaseURL string
@@ -56,14 +62,14 @@ type credential struct {
 	IssuerToken string
 }
 
-// credentialFromMaps merges the persisted auth file with CPA's mutable auth
+// FromMaps merges the persisted auth file with CPA's mutable auth
 // metadata (metadata wins, as it does when CPA persists the auth) and extracts
 // the fields the plugin uses.
-func credentialFromMaps(storageJSON []byte, metadata map[string]any) (credential, map[string]any, error) {
+func FromMaps(storageJSON []byte, metadata map[string]any) (Credential, map[string]any, error) {
 	merged := make(map[string]any)
 	if len(bytes.TrimSpace(storageJSON)) > 0 {
 		if errUnmarshal := json.Unmarshal(storageJSON, &merged); errUnmarshal != nil {
-			return credential{}, nil, fmt.Errorf("decode auth storage: %w", errUnmarshal)
+			return Credential{}, nil, fmt.Errorf("decode auth storage: %w", errUnmarshal)
 		}
 		if merged == nil {
 			merged = make(map[string]any)
@@ -72,25 +78,26 @@ func credentialFromMaps(storageJSON []byte, metadata map[string]any) (credential
 	for key, value := range metadata {
 		merged[key] = value
 	}
-	return credentialFromMap(merged), merged, nil
+	return FromMap(merged), merged, nil
 }
 
-func credentialFromMap(fields map[string]any) credential {
-	cred := credential{
-		APIKey:        stringField(fields, keyAPIKey, "api-key", "key"),
-		Label:         stringField(fields, keyLabel),
-		BaseURL:       stringField(fields, keyBaseURL, "base-url"),
-		ProxyURL:      stringField(fields, keyProxyURL, "proxy-url"),
-		ModelRevision: stringField(fields, keyModelRevision),
-		IssuerToken:   stringField(fields, keyIssuerToken, "issuer-token"),
+// FromMap extracts the credential from an auth file's fields.
+func FromMap(fields map[string]any) Credential {
+	cred := Credential{
+		APIKey:        jsonfield.String(fields, KeyAPIKey, "api-key", "key"),
+		Label:         jsonfield.String(fields, KeyLabel),
+		BaseURL:       jsonfield.String(fields, KeyBaseURL, "base-url"),
+		ProxyURL:      jsonfield.String(fields, KeyProxyURL, "proxy-url"),
+		ModelRevision: jsonfield.String(fields, KeyModelRevision),
+		IssuerToken:   jsonfield.String(fields, KeyIssuerToken, "issuer-token"),
 	}
-	if raw, ok := fields[keyPrefix]; ok && raw != nil {
+	if raw, ok := fields[KeyPrefix]; ok && raw != nil {
 		if text, okText := raw.(string); okText {
-			prefix := normalizePrefix(text)
+			prefix := config.NormalizePrefix(text)
 			cred.Prefix = &prefix
 		}
 	}
-	cred.Models, cred.AllModels = modelSelection(fields[keyModels])
+	cred.Models, cred.AllModels = modelSelection(fields[KeyModels])
 	return cred
 }
 
@@ -100,7 +107,7 @@ func modelSelection(raw any) ([]string, bool) {
 	items, ok := raw.([]any)
 	if !ok {
 		if typed, okTyped := raw.([]string); okTyped {
-			return normalizeModelList(typed), false
+			return NormalizeModels(typed), false
 		}
 		return nil, true
 	}
@@ -110,10 +117,11 @@ func modelSelection(raw any) ([]string, bool) {
 			out = append(out, text)
 		}
 	}
-	return normalizeModelList(out), false
+	return NormalizeModels(out), false
 }
 
-func normalizeModelList(models []string) []string {
+// NormalizeModels trims, de-duplicates and sorts model IDs.
+func NormalizeModels(models []string) []string {
 	seen := make(map[string]struct{}, len(models))
 	out := make([]string, 0, len(models))
 	for _, model := range models {
@@ -131,74 +139,38 @@ func normalizeModelList(models []string) []string {
 	return out
 }
 
-func stringField(fields map[string]any, keys ...string) string {
-	for _, key := range keys {
-		if value, ok := fields[key].(string); ok {
-			if trimmed := strings.TrimSpace(value); trimmed != "" {
-				return trimmed
-			}
-		}
-	}
-	return ""
+// IsWokey reports whether an auth file belongs to this plugin.
+func IsWokey(fields map[string]any) bool {
+	return strings.EqualFold(jsonfield.String(fields, KeyType), wokey.ProviderID)
 }
 
-func boolField(fields map[string]any, key string) bool {
-	switch value := fields[key].(type) {
-	case bool:
-		return value
-	case string:
-		return strings.EqualFold(strings.TrimSpace(value), "true")
-	default:
-		return false
-	}
-}
-
-func intField(fields map[string]any, key string) int {
-	switch value := fields[key].(type) {
-	case float64:
-		return int(value)
-	case int:
-		return value
-	case json.Number:
-		parsed, _ := value.Int64()
-		return int(parsed)
-	default:
-		return 0
-	}
-}
-
-// isWokeyAuthJSON reports whether an auth file belongs to this plugin.
-func isWokeyAuthJSON(fields map[string]any) bool {
-	return strings.EqualFold(stringField(fields, keyType), ProviderID)
-}
-
-// effectivePrefix returns the model prefix for a credential.
-func (c credential) effectivePrefix(cfg Config) string {
+// EffectivePrefix returns the model prefix for a credential.
+func (c Credential) EffectivePrefix(cfg config.Config) string {
 	return c.prefixOr(cfg.ModelPrefix)
 }
 
 // prefixOr returns the file's own prefix, or defaultPrefix when it has none.
-func (c credential) prefixOr(defaultPrefix string) string {
+func (c Credential) prefixOr(defaultPrefix string) string {
 	if c.Prefix != nil {
 		return *c.Prefix
 	}
 	return defaultPrefix
 }
 
-// effectiveBaseURL returns the upstream origin for a credential.
-func (c credential) effectiveBaseURL(cfg Config) string {
+// EffectiveBaseURL returns the upstream origin for a credential.
+func (c Credential) EffectiveBaseURL(cfg config.Config) string {
 	if c.BaseURL != "" {
-		if normalized, errBase := normalizeBaseURL(c.BaseURL); errBase == nil {
+		if normalized, errBase := config.NormalizeBaseURL(c.BaseURL); errBase == nil {
 			return normalized
 		}
 	}
 	return cfg.BaseURL
 }
 
-// parseAuthFile turns a raw auth file into CPA auth data. Files whose type is
+// ParseAuthFile turns a raw auth file into CPA auth data. Files whose type is
 // not wokey are left to other providers. defaultPrefix is the plugin's
 // model-prefix, used for files without their own prefix field.
-func parseAuthFile(req pluginapi.AuthParseRequest, now time.Time, defaultPrefix string) (pluginapi.AuthParseResponse, error) {
+func ParseAuthFile(req pluginapi.AuthParseRequest, now time.Time, defaultPrefix string) (pluginapi.AuthParseResponse, error) {
 	raw := bytes.TrimSpace(req.RawJSON)
 	if len(raw) == 0 {
 		return pluginapi.AuthParseResponse{Handled: false}, nil
@@ -207,22 +179,22 @@ func parseAuthFile(req pluginapi.AuthParseRequest, now time.Time, defaultPrefix 
 	if errUnmarshal := json.Unmarshal(raw, &fields); errUnmarshal != nil || fields == nil {
 		return pluginapi.AuthParseResponse{Handled: false}, nil
 	}
-	if !isWokeyAuthJSON(fields) {
+	if !IsWokey(fields) {
 		return pluginapi.AuthParseResponse{Handled: false}, nil
 	}
-	auth, errAuth := authDataFromFields(fields, raw, req.FileName, now, defaultPrefix)
+	auth, errAuth := AuthData(fields, raw, req.FileName, now, defaultPrefix)
 	if errAuth != nil {
 		return pluginapi.AuthParseResponse{}, errAuth
 	}
 	return pluginapi.AuthParseResponse{Handled: true, Auth: auth}, nil
 }
 
-// authDataFromFields builds CPA auth data. Prefix carries the effective model
+// AuthData builds CPA auth data. Prefix carries the effective model
 // prefix so CPA registers "<prefix>/<model>" with its native prefix handling;
 // an empty value lets CPA fall back to the file's own prefix field, which is
 // then empty as well.
-func authDataFromFields(fields map[string]any, raw []byte, fileName string, now time.Time, defaultPrefix string) (pluginapi.AuthData, error) {
-	cred := credentialFromMap(fields)
+func AuthData(fields map[string]any, raw []byte, fileName string, now time.Time, defaultPrefix string) (pluginapi.AuthData, error) {
+	cred := FromMap(fields)
 	if cred.APIKey == "" {
 		return pluginapi.AuthData{}, fmt.Errorf("wokey auth file %s has no api_key", strings.TrimSpace(fileName))
 	}
@@ -230,29 +202,29 @@ func authDataFromFields(fields map[string]any, raw []byte, fileName string, now 
 	for key, value := range fields {
 		metadata[key] = value
 	}
-	metadata[keyType] = ProviderID
+	metadata[KeyType] = wokey.ProviderID
 	label := cred.Label
 	if label == "" {
 		label = fileStem(fileName)
 	}
 	if label == "" {
-		label = maskKey(cred.APIKey)
+		label = MaskKey(cred.APIKey)
 	}
 	return pluginapi.AuthData{
-		Provider:         ProviderID,
+		Provider:         wokey.ProviderID,
 		FileName:         strings.TrimSpace(fileName),
 		Label:            label,
 		Prefix:           cred.prefixOr(defaultPrefix),
 		ProxyURL:         cred.ProxyURL,
-		Disabled:         boolField(fields, keyDisabled),
+		Disabled:         jsonfield.Bool(fields, KeyDisabled),
 		StorageJSON:      bytes.Clone(raw),
 		Metadata:         metadata,
 		NextRefreshAfter: now.Add(refreshHorizon),
 	}, nil
 }
 
-// maskKey keeps enough of a key to tell keys apart without revealing it.
-func maskKey(key string) string {
+// MaskKey keeps enough of a key to tell keys apart without revealing it.
+func MaskKey(key string) string {
 	key = strings.TrimSpace(key)
 	if len(key) <= 10 {
 		if len(key) <= 2 {
@@ -263,15 +235,16 @@ func maskKey(key string) string {
 	return key[:6] + "…" + key[len(key)-4:]
 }
 
-// keyFingerprint is a short, stable, non-reversible identifier for a key. It
+// Fingerprint is a short, stable, non-reversible identifier for a key. It
 // names new auth files so the same key is never added twice.
-func keyFingerprint(key string) string {
+func Fingerprint(key string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(key)))
 	return hex.EncodeToString(sum[:])[:10]
 }
 
-func authFileNameForKey(key string) string {
-	return ProviderID + "-" + keyFingerprint(key) + ".json"
+// FileNameForKey names the auth file for a new key.
+func FileNameForKey(key string) string {
+	return wokey.ProviderID + "-" + Fingerprint(key) + ".json"
 }
 
 // fileStem is an auth file's name without directory and extension
@@ -282,4 +255,35 @@ func fileStem(fileName string) string {
 		name = name[i+1:]
 	}
 	return strings.TrimSuffix(name, path.Ext(name))
+}
+
+// DecodeFields decodes an auth file and keeps numbers as json.Number, so
+// re-saving a file does not change values the plugin does not own.
+func DecodeFields(raw []byte) (map[string]any, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var fields map[string]any
+	if errDecode := dec.Decode(&fields); errDecode != nil {
+		return nil, fmt.Errorf("decode auth file: %w", errDecode)
+	}
+	if fields == nil {
+		return nil, fmt.Errorf("auth file is not a JSON object")
+	}
+	return fields, nil
+}
+
+// SaveName derives the bare file name host.auth.save accepts from an auth
+// file's name or path.
+func SaveName(name, path string) string {
+	for _, candidate := range []string{name, path} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		base := filepath.Base(strings.ReplaceAll(candidate, "\\", "/"))
+		if strings.HasSuffix(strings.ToLower(base), ".json") {
+			return base
+		}
+	}
+	return ""
 }

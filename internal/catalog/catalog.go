@@ -1,4 +1,6 @@
-package plugin
+// Package catalog caches Wokey's public model catalog and turns it into CPA
+// model registrations.
+package catalog
 
 import (
 	"context"
@@ -14,14 +16,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/berry-shake/cpa-wokey-plugin/internal/wokey"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
 // maxCatalogBytes bounds the /v1/models response (the real one is ~20 KB).
 const maxCatalogBytes = 8 << 20
 
-// upstreamModel is one entry of Wokey's public GET /v1/models catalog.
-type upstreamModel struct {
+// Model is one entry of Wokey's public GET /v1/models catalog.
+type Model struct {
 	ID                  string   `json:"id"`
 	OwnedBy             string   `json:"owned_by"`
 	Object              string   `json:"object"`
@@ -39,15 +42,15 @@ type upstreamModel struct {
 	Pricing map[string]string `json:"pricing"`
 }
 
-type upstreamModelList struct {
-	Object string          `json:"object"`
-	Data   []upstreamModel `json:"data"`
+type modelList struct {
+	Object string  `json:"object"`
+	Data   []Model `json:"data"`
 }
 
-// catalogSnapshot is an immutable view of the cached catalog.
-type catalogSnapshot struct {
-	Models    []upstreamModel
-	byID      map[string]upstreamModel
+// Snapshot is an immutable view of the cached catalog.
+type Snapshot struct {
+	Models    []Model
+	byID      map[string]Model
 	Revision  string
 	ETag      string
 	FetchedAt time.Time
@@ -55,47 +58,51 @@ type catalogSnapshot struct {
 	LastError string
 }
 
-func (c catalogSnapshot) empty() bool { return len(c.Models) == 0 }
+// Empty reports whether no catalog has been loaded.
+func (c Snapshot) Empty() bool { return len(c.Models) == 0 }
 
-func (c catalogSnapshot) lookup(id string) (upstreamModel, bool) {
+// Lookup finds a model by its upstream ID.
+func (c Snapshot) Lookup(id string) (Model, bool) {
 	model, ok := c.byID[id]
 	return model, ok
 }
 
-// catalog caches Wokey's model list. Refreshes use If-None-Match so an
+// Catalog caches Wokey's model list. Refreshes use If-None-Match so an
 // unchanged catalog costs a 304.
-type catalog struct {
+type Catalog struct {
 	mu       sync.RWMutex
-	snapshot catalogSnapshot
+	snapshot Snapshot
 	// fetchMu serializes upstream fetches so concurrent model.for_auth calls
 	// during startup share one request.
 	fetchMu sync.Mutex
 }
 
-func newCatalog() *catalog {
-	return &catalog{snapshot: catalogSnapshot{byID: map[string]upstreamModel{}}}
+// New returns an empty catalog.
+func New() *Catalog {
+	return &Catalog{snapshot: Snapshot{byID: map[string]Model{}}}
 }
 
-func (c *catalog) current() catalogSnapshot {
+// Current returns the cached snapshot.
+func (c *Catalog) Current() Snapshot {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.snapshot
 }
 
-// fetch loads the catalog through client. With force it ignores the cached
+// Fetch loads the catalog through client. With force it ignores the cached
 // ETag. It returns the new snapshot and whether the model set changed.
-func (c *catalog) fetch(ctx context.Context, client *http.Client, baseURL, userAgent string, force bool, now time.Time) (catalogSnapshot, bool, error) {
+func (c *Catalog) Fetch(ctx context.Context, client *http.Client, baseURL, userAgent string, force bool, now time.Time) (Snapshot, bool, error) {
 	c.fetchMu.Lock()
 	defer c.fetchMu.Unlock()
 
-	previous := c.current()
+	previous := c.Current()
 	req, errReq := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/v1/models", nil)
 	if errReq != nil {
 		return previous, false, errReq
 	}
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", userAgent)
-	if !force && previous.ETag != "" && !previous.empty() {
+	if !force && previous.ETag != "" && !previous.Empty() {
 		req.Header.Set("If-None-Match", previous.ETag)
 	}
 	resp, errDo := client.Do(req)
@@ -118,12 +125,12 @@ func (c *catalog) fetch(ctx context.Context, client *http.Client, baseURL, userA
 	if resp.StatusCode != http.StatusOK {
 		return c.recordError(previous, now, fmt.Errorf("GET /v1/models returned %d: %s", resp.StatusCode, truncate(string(body), 300)))
 	}
-	var list upstreamModelList
+	var list modelList
 	if errUnmarshal := json.Unmarshal(body, &list); errUnmarshal != nil {
 		return c.recordError(previous, now, fmt.Errorf("decode /v1/models: %w", errUnmarshal))
 	}
-	models := make([]upstreamModel, 0, len(list.Data))
-	byID := make(map[string]upstreamModel, len(list.Data))
+	models := make([]Model, 0, len(list.Data))
+	byID := make(map[string]Model, len(list.Data))
 	for _, model := range list.Data {
 		model.ID = strings.TrimSpace(model.ID)
 		if model.ID == "" {
@@ -139,7 +146,7 @@ func (c *catalog) fetch(ctx context.Context, client *http.Client, baseURL, userA
 		return c.recordError(previous, now, fmt.Errorf("/v1/models returned no models"))
 	}
 	sort.Slice(models, func(i, j int) bool { return strings.ToLower(models[i].ID) < strings.ToLower(models[j].ID) })
-	next := catalogSnapshot{
+	next := Snapshot{
 		Models:    models,
 		byID:      byID,
 		Revision:  catalogRevision(models),
@@ -153,7 +160,7 @@ func (c *catalog) fetch(ctx context.Context, client *http.Client, baseURL, userA
 	return next, next.Revision != previous.Revision, nil
 }
 
-func (c *catalog) recordError(previous catalogSnapshot, now time.Time, err error) (catalogSnapshot, bool, error) {
+func (c *Catalog) recordError(previous Snapshot, now time.Time, err error) (Snapshot, bool, error) {
 	c.mu.Lock()
 	c.snapshot.CheckedAt = now
 	c.snapshot.LastError = err.Error()
@@ -165,7 +172,7 @@ func (c *catalog) recordError(previous catalogSnapshot, now time.Time, err error
 
 // catalogRevision hashes the parts of the catalog that end up in CPA's model
 // registry. Price changes do not alter it, so they never trigger re-registration.
-func catalogRevision(models []upstreamModel) string {
+func catalogRevision(models []Model) string {
 	hash := sha256.New()
 	for _, model := range models {
 		_, _ = fmt.Fprintf(hash, "%s\x00%s\x00%d\x00%d\x00%s\x00%s\x00%s\n",
@@ -177,23 +184,23 @@ func catalogRevision(models []upstreamModel) string {
 	return hex.EncodeToString(hash.Sum(nil))[:16]
 }
 
-// modelInfosForCredential builds the CPA model list for one credential: every
-// catalog model, or the selected subset. Selected IDs missing from the catalog
-// are still registered (with minimal metadata) so a catalog outage or a
-// renamed model does not silently drop routes the user picked. IDs are the
-// bare upstream IDs; CPA adds the auth's prefix itself.
-func modelInfosForCredential(snapshot catalogSnapshot, cred credential) []pluginapi.ModelInfo {
-	var selected []upstreamModel
-	if cred.AllModels {
-		selected = snapshot.Models
+// ModelInfos builds the CPA model list for one credential: every catalog
+// model when all is set, otherwise the selected IDs. Selected IDs missing
+// from the catalog are still registered (with minimal metadata) so a catalog
+// outage or a renamed model does not silently drop routes the user picked.
+// IDs are the bare upstream IDs; CPA adds the auth's prefix itself.
+func (c Snapshot) ModelInfos(all bool, ids []string) []pluginapi.ModelInfo {
+	var selected []Model
+	if all {
+		selected = c.Models
 	} else {
-		selected = make([]upstreamModel, 0, len(cred.Models))
-		for _, id := range cred.Models {
-			if model, ok := snapshot.lookup(id); ok {
+		selected = make([]Model, 0, len(ids))
+		for _, id := range ids {
+			if model, ok := c.Lookup(id); ok {
 				selected = append(selected, model)
 				continue
 			}
-			selected = append(selected, upstreamModel{ID: id, Object: "model", OwnedBy: ProviderID})
+			selected = append(selected, Model{ID: id, Object: "model", OwnedBy: wokey.ProviderID})
 		}
 	}
 	out := make([]pluginapi.ModelInfo, 0, len(selected))
@@ -203,21 +210,21 @@ func modelInfosForCredential(snapshot catalogSnapshot, cred credential) []plugin
 	return out
 }
 
-func toModelInfo(model upstreamModel) pluginapi.ModelInfo {
+func toModelInfo(model Model) pluginapi.ModelInfo {
 	displayName := strings.TrimSpace(model.Name)
 	if displayName == "" {
 		displayName = model.ID
 	}
 	ownedBy := strings.TrimSpace(model.OwnedBy)
 	if ownedBy == "" {
-		ownedBy = ProviderID
+		ownedBy = wokey.ProviderID
 	}
 	return pluginapi.ModelInfo{
 		ID:                        model.ID,
 		Object:                    "model",
 		Created:                   model.Created,
 		OwnedBy:                   ownedBy,
-		Type:                      ProviderID,
+		Type:                      wokey.ProviderID,
 		DisplayName:               displayName,
 		Name:                      model.ID,
 		Description:               "Wokey · " + displayName,
@@ -234,15 +241,15 @@ func toModelInfo(model upstreamModel) pluginapi.ModelInfo {
 	}
 }
 
-// upstreamModelID maps the model CPA hands the executor back to Wokey's ID.
+// UpstreamID maps the model CPA hands the executor back to Wokey's ID.
 // CPA strips the auth prefix before calling the executor; the prefix is
 // still removed here in case a model arrives with it.
-func upstreamModelID(model, prefix string, snapshot catalogSnapshot) string {
+func (c Snapshot) UpstreamID(model, prefix string) string {
 	model = stripThinkingSuffix(strings.TrimSpace(model))
 	if prefix != "" && strings.HasPrefix(model, prefix+"/") {
 		return strings.TrimPrefix(model, prefix+"/")
 	}
-	if _, ok := snapshot.lookup(model); ok {
+	if _, ok := c.Lookup(model); ok {
 		return model
 	}
 	// Wokey IDs contain no slash; a prefix we do not know (for example from a
@@ -266,8 +273,8 @@ func stripThinkingSuffix(model string) string {
 	return strings.TrimSpace(model[:open])
 }
 
-// pricePerMillion converts Wokey's per-token decimal string to USD per 1M tokens.
-func pricePerMillion(perToken string) (float64, bool) {
+// PricePerMillion converts Wokey's per-token decimal string to USD per 1M tokens.
+func PricePerMillion(perToken string) (float64, bool) {
 	perToken = strings.TrimSpace(perToken)
 	if perToken == "" {
 		return 0, false

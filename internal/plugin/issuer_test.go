@@ -7,45 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/berry-shake/cpa-wokey-plugin/internal/credential"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
-
-func TestValidIssuerToken(t *testing.T) {
-	for token, want := range map[string]bool{
-		"wkt_abc123":    true,
-		"wkt_":          false,
-		"sk-wk-abc":     false,
-		"WKT_abc":       false,
-		"wkt_a b":       false,
-		"":              false,
-		" wkt_abc123":   false,
-		"wkt_abc\t123":  false,
-		testIssuerToken: true,
-	} {
-		if got := validIssuerToken(token); got != want {
-			t.Errorf("validIssuerToken(%q) = %v, want %v", token, got, want)
-		}
-	}
-}
-
-func TestIssuerInfoFrom(t *testing.T) {
-	var withProvider, noProvider map[string]any
-	_ = json.Unmarshal([]byte(`{"provider":{"availableUsd":"9.56639200","settlementFrozen":true},"referrer":{"availableUsd":"1.25000000"},
-		"api":{"enabled":true,"eligible":true,"availableUsd":"0.33","disqualifiedBy":null}}`), &withProvider)
-	_ = json.Unmarshal([]byte(`{"provider":null,"referrer":{"availableUsd":"0.00000000"},"api":{"enabled":false}}`), &noProvider)
-
-	info := issuerInfoFrom(withProvider, testIssuerToken)
-	if info.ProviderUSD == nil || math.Abs(*info.ProviderUSD-9.566392) > 1e-9 || !info.ProviderFrozen || info.ReferrerUSD != 1.25 {
-		t.Fatalf("with provider = %+v", info)
-	}
-	if info.Account != keyFingerprint(testIssuerToken) || strings.Contains(info.Account, "wkt_") {
-		t.Fatalf("account = %q", info.Account)
-	}
-	info = issuerInfoFrom(noProvider, testIssuerToken2)
-	if info.ProviderUSD != nil || info.ProviderFrozen || info.ReferrerUSD != 0 {
-		t.Fatalf("without provider = %+v", info)
-	}
-}
 
 func TestCredentialQuotaIssuerBalance(t *testing.T) {
 	upstream := newFakeWokey(t)
@@ -73,6 +37,10 @@ func TestCredentialQuotaIssuerBalance(t *testing.T) {
 	}
 
 	earnerAccount := issuer["account"]
+	// The account is a fingerprint of the issuing token, never the token.
+	if account, _ := earnerAccount.(string); account != credential.Fingerprint(testIssuerToken) || strings.Contains(account, "wkt_") {
+		t.Fatalf("account = %v", earnerAccount)
+	}
 	status, out = manage(t, svc, http.MethodGet, quotaPath+"?auth_index="+p2p.index, "")
 	issuer, _ = out["issuer"].(map[string]any)
 	if status != http.StatusOK || issuer == nil || issuer["provider_usd"] != float64(0) || issuer["account"] == earnerAccount {
@@ -104,7 +72,7 @@ func TestCredentialQuotaIssuerBalance(t *testing.T) {
 func TestIssuerTokenAddAndEdit(t *testing.T) {
 	upstream := newFakeWokey(t)
 	svc, host := newTestService(t, upstream)
-	name := authFileNameForKey(testGoodKey)
+	name := credential.FileNameForKey(testGoodKey)
 
 	// A token Wokey rejects is a client error, and nothing is saved.
 	status, out := manage(t, svc, http.MethodPost, credentialsPath, `{"api_key":"`+testGoodKey+`","issuer_token":"wkt_revoked_000000"}`)
@@ -117,10 +85,10 @@ func TestIssuerTokenAddAndEdit(t *testing.T) {
 		t.Fatalf("add: %d %v", status, out)
 	}
 	cred := credentialOf(t, out)
-	if cred["issuer_token_masked"] != maskKey(testIssuerToken) || strings.Contains(string(mustJSON(t, out)), testIssuerToken) {
+	if cred["issuer_token_masked"] != credential.MaskKey(testIssuerToken) || strings.Contains(string(mustJSON(t, out)), testIssuerToken) {
 		t.Fatalf("token leaked or missing: %v", out)
 	}
-	if host.fields(name)[keyIssuerToken] != testIssuerToken {
+	if host.fields(name)[credential.KeyIssuerToken] != testIssuerToken {
 		t.Fatalf("auth file = %v", host.fields(name))
 	}
 	index := cred["auth_index"].(string)
@@ -130,27 +98,27 @@ func TestIssuerTokenAddAndEdit(t *testing.T) {
 	if status, out = manage(t, svc, http.MethodPatch, credentialsPath, `{"auth_index":"`+index+`","label":"main"}`); status != http.StatusOK {
 		t.Fatalf("edit label: %d %v", status, out)
 	}
-	if host.fields(name)[keyIssuerToken] != testIssuerToken || upstream.issuerCallCount() != calls {
+	if host.fields(name)[credential.KeyIssuerToken] != testIssuerToken || upstream.issuerCallCount() != calls {
 		t.Fatalf("label edit touched the token: %v, calls %d -> %d", host.fields(name), calls, upstream.issuerCallCount())
 	}
 	// A new token is checked before it is saved.
 	if status, out = manage(t, svc, http.MethodPatch, credentialsPath, `{"auth_index":"`+index+`","issuer_token":"wkt_revoked_000000"}`); status != http.StatusBadRequest || out["error"] != "issuer_token_verification_failed" {
 		t.Fatalf("edit rejected token: %d %v", status, out)
 	}
-	if host.fields(name)[keyIssuerToken] != testIssuerToken {
+	if host.fields(name)[credential.KeyIssuerToken] != testIssuerToken {
 		t.Fatalf("rejected token was saved: %v", host.fields(name))
 	}
 	if status, out = manage(t, svc, http.MethodPatch, credentialsPath, `{"auth_index":"`+index+`","issuer_token":"`+testIssuerToken2+`"}`); status != http.StatusOK {
 		t.Fatalf("edit token: %d %v", status, out)
 	}
-	if host.fields(name)[keyIssuerToken] != testIssuerToken2 {
+	if host.fields(name)[credential.KeyIssuerToken] != testIssuerToken2 {
 		t.Fatalf("token not replaced: %v", host.fields(name))
 	}
 	// An empty token removes it.
 	if status, out = manage(t, svc, http.MethodPatch, credentialsPath, `{"auth_index":"`+index+`","issuer_token":""}`); status != http.StatusOK {
 		t.Fatalf("clear token: %d %v", status, out)
 	}
-	if _, has := host.fields(name)[keyIssuerToken]; has || credentialOf(t, out)["issuer_token_masked"] != nil {
+	if _, has := host.fields(name)[credential.KeyIssuerToken]; has || credentialOf(t, out)["issuer_token_masked"] != nil {
 		t.Fatalf("token not removed: %v / %v", host.fields(name), out)
 	}
 }

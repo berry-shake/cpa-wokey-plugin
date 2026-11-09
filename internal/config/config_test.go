@@ -1,4 +1,4 @@
-package plugin
+package config
 
 import (
 	"testing"
@@ -6,11 +6,11 @@ import (
 )
 
 func TestParseConfigDefaults(t *testing.T) {
-	cfg, warnings := parseConfig(nil)
+	cfg, warnings := Parse(nil)
 	if len(warnings) != 0 {
 		t.Fatalf("warnings = %v", warnings)
 	}
-	if cfg != defaultConfig() {
+	if cfg != Default() {
 		t.Fatalf("cfg = %+v, want defaults", cfg)
 	}
 	if cfg.BaseURL != "https://api.wokey.ai" || cfg.ModelPrefix != "wokey" {
@@ -28,7 +28,7 @@ models-refresh-minutes: 0
 request-timeout-seconds: 30
 stream-idle-timeout-seconds: 45
 `)
-	cfg, warnings := parseConfig(raw)
+	cfg, warnings := Parse(raw)
 	if len(warnings) != 0 {
 		t.Fatalf("warnings = %v", warnings)
 	}
@@ -47,14 +47,14 @@ stream-idle-timeout-seconds: 45
 }
 
 func TestParseConfigEmptyPrefixRegistersBareIDs(t *testing.T) {
-	cfg, _ := parseConfig([]byte(`model-prefix: ""`))
+	cfg, _ := Parse([]byte(`model-prefix: ""`))
 	if cfg.ModelPrefix != "" {
 		t.Fatalf("ModelPrefix = %q, want empty", cfg.ModelPrefix)
 	}
 }
 
 func TestParseConfigInvalidValuesFallBack(t *testing.T) {
-	cfg, warnings := parseConfig([]byte(`
+	cfg, warnings := Parse([]byte(`
 base-url: ftp://example.com
 models-refresh-minutes: -1
 request-timeout-seconds: 0
@@ -63,12 +63,12 @@ stream-idle-timeout-seconds: -5
 	if len(warnings) != 4 {
 		t.Fatalf("warnings = %v, want 4", warnings)
 	}
-	if cfg != defaultConfig() {
+	if cfg != Default() {
 		t.Fatalf("cfg = %+v, want defaults", cfg)
 	}
 
-	cfg, warnings = parseConfig([]byte("base-url: [unterminated"))
-	if len(warnings) != 1 || cfg != defaultConfig() {
+	cfg, warnings = Parse([]byte("base-url: [unterminated"))
+	if len(warnings) != 1 || cfg != Default() {
 		t.Fatalf("broken YAML: cfg=%+v warnings=%v", cfg, warnings)
 	}
 }
@@ -83,14 +83,14 @@ func TestNormalizeBaseURL(t *testing.T) {
 		" https://api.wokey.ai/v1#frag": "https://api.wokey.ai",
 	}
 	for in, want := range cases {
-		got, errBase := normalizeBaseURL(in)
+		got, errBase := NormalizeBaseURL(in)
 		if errBase != nil || got != want {
-			t.Errorf("normalizeBaseURL(%q) = %q, %v; want %q", in, got, errBase, want)
+			t.Errorf("NormalizeBaseURL(%q) = %q, %v; want %q", in, got, errBase, want)
 		}
 	}
 	for _, bad := range []string{"api.wokey.ai", "ftp://api.wokey.ai", "https://"} {
-		if _, errBase := normalizeBaseURL(bad); errBase == nil {
-			t.Errorf("normalizeBaseURL(%q) accepted", bad)
+		if _, errBase := NormalizeBaseURL(bad); errBase == nil {
+			t.Errorf("NormalizeBaseURL(%q) accepted", bad)
 		}
 	}
 }

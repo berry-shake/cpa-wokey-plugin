@@ -1,83 +1,14 @@
 package plugin
 
 import (
-	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/berry-shake/cpa-wokey-plugin/internal/wokey"
 )
-
-func collectEvents(t *testing.T, body string, sse bool) []string {
-	t.Helper()
-	var events []string
-	errPump := pumpStream(strings.NewReader(body), sse, func(payload []byte) error {
-		events = append(events, string(payload))
-		return nil
-	}, func() {})
-	if errPump != nil {
-		t.Fatalf("pump: %v", errPump)
-	}
-	return events
-}
-
-func TestPumpStreamSSE(t *testing.T) {
-	body := ": keepalive\n\n" +
-		"event: message_start\r\ndata: {\"a\":1}\r\n\r\n" +
-		": ping\n" +
-		"data: {\"b\":2}\n\n\n" +
-		"data: [DONE]\n\n" +
-		"data: {\"tail\":true}"
-	got := collectEvents(t, body, true)
-	want := []string{
-		"event: message_start\ndata: {\"a\":1}\n\n",
-		"data: {\"b\":2}\n\n",
-		"data: [DONE]\n\n",
-		"data: {\"tail\":true}\n\n",
-	}
-	if strings.Join(got, "|") != strings.Join(want, "|") {
-		t.Fatalf("events = %q", got)
-	}
-}
-
-func TestPumpStreamRaw(t *testing.T) {
-	got := collectEvents(t, `{"not":"sse"}`, false)
-	if strings.Join(got, "") != `{"not":"sse"}` {
-		t.Fatalf("raw = %q", got)
-	}
-}
-
-func TestPumpStreamStopsOnEmitError(t *testing.T) {
-	stop := errors.New("client gone")
-	calls := 0
-	errPump := pumpStream(strings.NewReader("data: 1\n\ndata: 2\n\n"), true, func([]byte) error {
-		calls++
-		return stop
-	}, func() {})
-	if !errors.Is(errPump, stop) || calls != 1 {
-		t.Fatalf("err=%v calls=%d", errPump, calls)
-	}
-}
-
-func TestIsDoneEvent(t *testing.T) {
-	for _, event := range []string{"data: [DONE]\n\n", "data:[DONE]", "  data: [DONE]  \n"} {
-		if !isDoneEvent([]byte(event)) {
-			t.Errorf("isDoneEvent(%q) = false", event)
-		}
-	}
-	for _, event := range []string{"event: done\ndata: [DONE]\n\n", "data: {}\n\n", "data: [DONE] x"} {
-		if isDoneEvent([]byte(event)) {
-			t.Errorf("isDoneEvent(%q) = true", event)
-		}
-	}
-}
-
-func TestIsEventStream(t *testing.T) {
-	if !isEventStream("text/event-stream; charset=utf-8") || isEventStream("application/json") || isEventStream("") {
-		t.Fatal("isEventStream")
-	}
-}
 
 func sseHandler(events ...string) http.HandlerFunc {
 	return func(rw http.ResponseWriter, _ *http.Request) {
@@ -109,7 +40,7 @@ func waitClosed(t *testing.T, host *fakeHost, streamID string) rpcStreamCloseReq
 
 func TestExecuteStreamMessages(t *testing.T) {
 	upstream := newFakeWokey(t)
-	upstream.handle(endpointMessages, sseHandler(
+	upstream.handle(wokey.EndpointMessages, sseHandler(
 		": keepalive\n\n",
 		"event: message_start\ndata: {\"type\":\"message_start\"}\n\n",
 		"event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
@@ -140,7 +71,7 @@ func TestExecuteStreamMessages(t *testing.T) {
 func TestExecuteStreamChatAddsUsageAndBuffersWithoutBridge(t *testing.T) {
 	upstream := newFakeWokey(t)
 	seen := make(chan observedRequest, 1)
-	upstream.handle(endpointChat, observe(seen, sseHandler("data: {\"id\":1}\n\n", "data: [DONE]\n\n")))
+	upstream.handle(wokey.EndpointChat, observe(seen, sseHandler("data: {\"id\":1}\n\n", "data: [DONE]\n\n")))
 	svc, _ := newTestService(t, upstream)
 
 	req := rpcExecutorRequest{ExecutorRequest: executorRequest("openai", "wokey/model-a", `{"model":"wokey/model-a","stream":true}`)}
@@ -161,7 +92,7 @@ func TestExecuteStreamChatAddsUsageAndBuffersWithoutBridge(t *testing.T) {
 
 func TestExecuteStreamHTTPErrorIsSynchronous(t *testing.T) {
 	upstream := newFakeWokey(t)
-	upstream.handle(endpointResponses, func(rw http.ResponseWriter, _ *http.Request) {
+	upstream.handle(wokey.EndpointResponses, func(rw http.ResponseWriter, _ *http.Request) {
 		writeJSON(rw, http.StatusPaymentRequired, map[string]any{"error": map[string]any{"code": "insufficient_balance", "message": "top up"}})
 	})
 	svc, host := newTestService(t, upstream)
@@ -181,7 +112,7 @@ func TestExecuteStreamIdleTimeout(t *testing.T) {
 	upstream := newFakeWokey(t)
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
-	upstream.handle(endpointChat, func(rw http.ResponseWriter, r *http.Request) {
+	upstream.handle(wokey.EndpointChat, func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-Type", "text/event-stream")
 		rw.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(rw, "data: {\"id\":1}\n\n")
@@ -201,5 +132,67 @@ func TestExecuteStreamIdleTimeout(t *testing.T) {
 	closeReq := waitClosed(t, host, "s3")
 	if closeReq.ErrorDetail == nil || closeReq.ErrorDetail.Code != "stream_idle_timeout" || closeReq.ErrorDetail.HTTPStatus != http.StatusGatewayTimeout {
 		t.Fatalf("close = %+v", closeReq)
+	}
+}
+
+func TestExecuteStreamEarlyErrorFailsCall(t *testing.T) {
+	upstream := newFakeWokey(t)
+	upstream.handle(wokey.EndpointMessages, sseHandler(
+		": keepalive\n\n",
+		"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\n",
+		"event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"slow down\"}}\n\n",
+	))
+	svc, host := newTestService(t, upstream)
+
+	req := rpcExecutorRequest{ExecutorRequest: executorRequest("claude", "wokey/model-a", `{"model":"wokey/model-a","stream":true}`), StreamID: "e1"}
+	if envelope := decodeEnvelope(t, svc.executeStream(req)); !envelope.OK {
+		t.Fatalf("open: %+v", envelope.Error)
+	}
+	closeReq := waitClosed(t, host, "e1")
+	if closeReq.ErrorDetail == nil || closeReq.ErrorDetail.HTTPStatus != http.StatusTooManyRequests || closeReq.ErrorDetail.Code != "rate_limit_error" {
+		t.Fatalf("close = %+v", closeReq)
+	}
+	host.mu.Lock()
+	defer host.mu.Unlock()
+	if len(host.emits["e1"]) != 0 {
+		t.Fatalf("nothing must be emitted before the error: %q", host.emits["e1"])
+	}
+}
+
+func TestExecuteStreamTruncatedAfterOutput(t *testing.T) {
+	upstream := newFakeWokey(t)
+	upstream.handle(wokey.EndpointResponses, sseHandler(
+		"event: response.created\ndata: {\"type\":\"response.created\",\"response\":{}}\n\n",
+		"event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"Hel\"}\n\n",
+	))
+	svc, host := newTestService(t, upstream)
+
+	req := rpcExecutorRequest{ExecutorRequest: executorRequest("openai-response", "wokey/model-a", `{"model":"wokey/model-a","stream":true}`), StreamID: "t1"}
+	if envelope := decodeEnvelope(t, svc.executeStream(req)); !envelope.OK {
+		t.Fatalf("open: %+v", envelope.Error)
+	}
+	closeReq := waitClosed(t, host, "t1")
+	if closeReq.ErrorDetail == nil || closeReq.ErrorDetail.Code != "stream_truncated" || closeReq.ErrorDetail.HTTPStatus != http.StatusBadGateway {
+		t.Fatalf("close = %+v", closeReq)
+	}
+	host.mu.Lock()
+	defer host.mu.Unlock()
+	if len(host.emits["t1"]) != 2 {
+		t.Fatalf("emitted %q", host.emits["t1"])
+	}
+}
+
+func TestExecuteStreamWithoutBridgeReportsEarlyError(t *testing.T) {
+	upstream := newFakeWokey(t)
+	upstream.handle(wokey.EndpointChat, sseHandler(
+		"data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n\n",
+		"data: {\"error\":{\"code\":\"upstream_overloaded\",\"message\":\"busy\"}}\n\n",
+	))
+	svc, _ := newTestService(t, upstream)
+
+	req := rpcExecutorRequest{ExecutorRequest: executorRequest("openai", "wokey/model-a", `{"model":"wokey/model-a","stream":true}`)}
+	envelope := decodeEnvelope(t, svc.executeStream(req))
+	if envelope.OK || envelope.Error.HTTPStatus != http.StatusServiceUnavailable || envelope.Error.Code != "upstream_overloaded" {
+		t.Fatalf("envelope = %+v / %+v", envelope, envelope.Error)
 	}
 }

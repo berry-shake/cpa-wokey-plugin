@@ -6,54 +6,25 @@ import (
 	"strings"
 	"time"
 
+	"github.com/berry-shake/cpa-wokey-plugin/internal/jsonfield"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/requestlog"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/streamgate"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
-// logEntry is one executed request as shown on the request log tab.
-type logEntry struct {
-	ID string `json:"id"`
-	// RequestID is CPA's request ID (the one in CPA's logs); empty for
-	// entries written before 0.1.7 learned it or when CPA did not send it.
-	RequestID       string    `json:"request_id,omitempty"`
-	Time            time.Time `json:"time"`
-	Endpoint        string    `json:"endpoint"`
-	Model           string    `json:"model"`
-	UpstreamModel   string    `json:"upstream_model,omitempty"`
-	ServedModel     string    `json:"served_model,omitempty"`
-	ReasoningEffort string    `json:"reasoning_effort,omitempty"`
-	Stream          bool      `json:"stream"`
-	Status          string    `json:"status"` // "success" or "error"
-	HTTPStatus      int       `json:"http_status,omitempty"`
-	Credential      string    `json:"credential,omitempty"`
-	AuthID          string    `json:"auth_id,omitempty"`
-	DurationMS      int64     `json:"duration_ms"`
-	TTFTMS          *int64    `json:"ttft_ms,omitempty"`
-	InputTokens     int64     `json:"input_tokens"`
-	OutputTokens    int64     `json:"output_tokens"`
-	CachedTokens    int64     `json:"cached_tokens"`
-	CacheWrite      int64     `json:"cache_write_tokens,omitempty"`
-	ReasoningTokens int64     `json:"reasoning_tokens,omitempty"`
-	TokensPerSecond *float64  `json:"output_tokens_per_second,omitempty"`
-	ErrorCode       string    `json:"error_code,omitempty"`
-	Error           string    `json:"error,omitempty"`
-	// ErrorPhase is "request" (before any output reached the client) or
-	// "stream" (after output started).
-	ErrorPhase string `json:"error_phase,omitempty"`
-}
-
 // callRecord collects one call's log entry while it runs.
 type callRecord struct {
-	log   *requestLog
+	log   *requestlog.Log
 	start time.Time
-	entry logEntry
+	entry requestlog.Entry
 	usage usageTotals
 	first time.Time
 }
 
 func (s *Service) startRecord(call *upstreamCall, stream bool) *callRecord {
 	now := time.Now()
-	return &callRecord{log: s.reqlog, start: now, entry: logEntry{
+	return &callRecord{log: s.reqlog, start: now, entry: requestlog.Entry{
 		Time:            now,
 		Endpoint:        call.endpoint,
 		Model:           call.model,
@@ -69,7 +40,7 @@ func (s *Service) startRecord(call *upstreamCall, stream bool) *callRecord {
 // recordFailure logs a call that failed before prepareCall produced a call.
 func (s *Service) recordFailure(req pluginapi.ExecutorRequest, endpoint string, stream bool, perr *pluginabi.Error) {
 	now := time.Now()
-	rec := &callRecord{log: s.reqlog, start: now, entry: logEntry{
+	rec := &callRecord{log: s.reqlog, start: now, entry: requestlog.Entry{
 		Time:      now,
 		Endpoint:  endpoint,
 		Model:     clientModel(req, req.Model),
@@ -81,11 +52,11 @@ func (s *Service) recordFailure(req pluginapi.ExecutorRequest, endpoint string, 
 }
 
 // observe looks at a stream event that went through the gate.
-func (r *callRecord) observe(kind streamEventKind, event []byte) {
-	if kind == streamContent && r.first.IsZero() {
+func (r *callRecord) observe(kind streamgate.Kind, event []byte) {
+	if kind == streamgate.Content && r.first.IsZero() {
 		r.first = time.Now()
 	}
-	_, data := sseEventFields(event)
+	_, data := streamgate.EventFields(event)
 	if len(data) > 0 && data[0] == '{' {
 		r.observeJSON(data)
 	}
@@ -96,12 +67,12 @@ func (r *callRecord) observeJSON(data []byte) {
 	if json.Unmarshal(data, &payload) != nil {
 		return
 	}
-	if model := anyString(payload["model"]); model != "" {
+	if model := jsonfield.Text(payload["model"]); model != "" {
 		r.entry.ServedModel = model
 	}
 	for _, key := range []string{"message", "response"} {
 		if inner, ok := payload[key].(map[string]any); ok {
-			if model := anyString(inner["model"]); model != "" {
+			if model := jsonfield.Text(inner["model"]); model != "" {
 				r.entry.ServedModel = model
 			}
 			r.usage.merge(inner["usage"])
@@ -143,7 +114,7 @@ func (r *callRecord) finish(perr *pluginabi.Error, phase string) {
 		entry.Status = "success"
 		entry.HTTPStatus = 200
 	}
-	r.log.add(entry)
+	r.log.Add(entry)
 }
 
 // usageTotals reads the usage objects of the three protocols. Later events
@@ -206,21 +177,21 @@ func reasoningEffort(body []byte) string {
 	if json.Unmarshal(body, &payload) != nil {
 		return ""
 	}
-	if effort := anyString(payload["reasoning_effort"]); effort != "" {
+	if effort := jsonfield.Text(payload["reasoning_effort"]); effort != "" {
 		return effort
 	}
 	if reasoning, ok := payload["reasoning"].(map[string]any); ok {
-		if effort := anyString(reasoning["effort"]); effort != "" {
+		if effort := jsonfield.Text(reasoning["effort"]); effort != "" {
 			return effort
 		}
 	}
 	if output, ok := payload["output_config"].(map[string]any); ok {
-		if effort := anyString(output["effort"]); effort != "" {
+		if effort := jsonfield.Text(output["effort"]); effort != "" {
 			return effort
 		}
 	}
 	if thinking, ok := payload["thinking"].(map[string]any); ok {
-		kind := anyString(thinking["type"])
+		kind := jsonfield.Text(thinking["type"])
 		if budget := number(thinking["budget_tokens"]); budget > 0 {
 			return "budget " + strconv.FormatInt(budget, 10)
 		}

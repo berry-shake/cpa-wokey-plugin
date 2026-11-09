@@ -1,4 +1,4 @@
-package plugin
+package wokey
 
 import (
 	"encoding/json"
@@ -7,13 +7,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/berry-shake/cpa-wokey-plugin/internal/jsonfield"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 )
 
-// maxErrorBodyBytes bounds the upstream error text copied into a plugin error.
-const maxErrorBodyBytes = 2048
+// MaxErrorBodyBytes bounds the upstream error text copied into a plugin error.
+const MaxErrorBodyBytes = 2048
 
-// upstreamError converts a non-2xx Wokey response into a plugin error whose
+// UpstreamError converts a non-2xx Wokey response into a plugin error whose
 // HTTP status drives CPA's credential cooldown:
 //
 //   - 401/402 and account-level 403s keep their status, so CPA cools the key down.
@@ -22,13 +23,13 @@ const maxErrorBodyBytes = 2048
 //     cool the model on this key for 12 hours).
 //   - 529 upstream_overloaded becomes 503 (transient).
 //   - 429 keeps Retry-After so CPA waits exactly that long.
-func upstreamError(status int, header http.Header, body []byte, endpoint string) *pluginabi.Error {
+func UpstreamError(status int, header http.Header, body []byte, endpoint string) *pluginabi.Error {
 	code, message := parseUpstreamErrorBody(body)
 	mapped := status
 	switch {
 	case status == http.StatusForbidden && (code == "request_blocked" || code == "model_denylisted"):
 		mapped = http.StatusBadRequest
-	case status == http.StatusNotFound && endpoint != endpointCountTokens:
+	case status == http.StatusNotFound && endpoint != EndpointCountTokens:
 		mapped = http.StatusBadRequest
 	case status == 529:
 		mapped = http.StatusServiceUnavailable
@@ -43,7 +44,7 @@ func upstreamError(status int, header http.Header, body []byte, endpoint string)
 		code = "upstream_" + strconv.Itoa(status)
 	}
 	if message == "" {
-		message = truncate(string(body), maxErrorBodyBytes)
+		message = truncate(string(body), MaxErrorBodyBytes)
 	}
 	if message == "" {
 		message = http.StatusText(status)
@@ -72,13 +73,13 @@ func parseUpstreamErrorBody(body []byte) (string, string) {
 	if errUnmarshal := json.Unmarshal(body, &parsed); errUnmarshal != nil {
 		return "", ""
 	}
-	code := anyString(parsed.Code)
+	code := jsonfield.Text(parsed.Code)
 	message := strings.TrimSpace(parsed.Message)
 	switch inner := parsed.Error.(type) {
 	case map[string]any:
-		if value := anyString(inner["code"]); value != "" {
+		if value := jsonfield.Text(inner["code"]); value != "" {
 			code = value
-		} else if value := anyString(inner["type"]); value != "" && code == "" {
+		} else if value := jsonfield.Text(inner["type"]); value != "" && code == "" {
 			code = value
 		}
 		if value, ok := inner["message"].(string); ok && strings.TrimSpace(value) != "" {
@@ -89,18 +90,7 @@ func parseUpstreamErrorBody(body []byte) (string, string) {
 			message = strings.TrimSpace(inner)
 		}
 	}
-	return code, truncate(message, maxErrorBodyBytes)
-}
-
-func anyString(value any) string {
-	switch typed := value.(type) {
-	case string:
-		return strings.TrimSpace(typed)
-	case float64:
-		return strconv.FormatFloat(typed, 'f', -1, 64)
-	default:
-		return ""
-	}
+	return code, truncate(message, MaxErrorBodyBytes)
 }
 
 // retryAfterSeconds parses Retry-After as delta seconds or an HTTP date.
@@ -123,8 +113,8 @@ func retryAfterSeconds(raw string, now time.Time) int {
 	return 0
 }
 
-// transportError reports a network failure reaching Wokey as a transient 502.
-func transportError(err error) *pluginabi.Error {
+// TransportError reports a network failure reaching Wokey as a transient 502.
+func TransportError(err error) *pluginabi.Error {
 	return &pluginabi.Error{
 		Code:       "upstream_unreachable",
 		Message:    "wokey: " + err.Error(),
@@ -133,15 +123,21 @@ func transportError(err error) *pluginabi.Error {
 	}
 }
 
-func requestError(code, message string) *pluginabi.Error {
+// RequestError reports a request the plugin rejects before calling Wokey.
+func RequestError(code, message string) *pluginabi.Error {
 	return &pluginabi.Error{Code: code, Message: message, HTTPStatus: http.StatusBadRequest}
 }
 
-func authError(message string) *pluginabi.Error {
+// AuthError reports an unusable credential, so CPA cools it down.
+func AuthError(message string) *pluginabi.Error {
 	return &pluginabi.Error{Code: "invalid_credential", Message: message, HTTPStatus: http.StatusUnauthorized}
 }
 
-func errorEnvelopeFrom(err *pluginabi.Error) []byte {
-	raw, _ := json.Marshal(pluginabi.Envelope{OK: false, Error: err})
-	return raw
+// truncate trims text and cuts it to limit bytes, marking the cut.
+func truncate(text string, limit int) string {
+	text = strings.TrimSpace(text)
+	if len(text) <= limit {
+		return text
+	}
+	return text[:limit] + "…"
 }

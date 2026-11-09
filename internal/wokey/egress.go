@@ -1,4 +1,4 @@
-package plugin
+package wokey
 
 import (
 	"fmt"
@@ -10,17 +10,18 @@ import (
 	"time"
 )
 
-// proxySetting is a resolved egress choice for one upstream call.
-type proxySetting struct {
+// Egress is a resolved egress choice for one upstream call: an explicit
+// proxy, a direct connection or the process environment.
+type Egress struct {
 	// key identifies the cached client: "env", "direct" or the proxy URL.
 	key string
 	url *url.URL
 }
 
-// resolveProxy mirrors CPA's proxy semantics: the auth file proxy_url wins,
+// ResolveEgress mirrors CPA's proxy semantics: the auth file proxy_url wins,
 // then the global proxy-url from the CPA config, then the process environment.
 // "direct" or "none" disables proxying explicitly.
-func resolveProxy(authProxy, globalProxy string) (proxySetting, error) {
+func ResolveEgress(authProxy, globalProxy string) (Egress, error) {
 	for _, candidate := range []string{authProxy, globalProxy} {
 		candidate = strings.TrimSpace(candidate)
 		if candidate == "" {
@@ -28,15 +29,15 @@ func resolveProxy(authProxy, globalProxy string) (proxySetting, error) {
 		}
 		switch strings.ToLower(candidate) {
 		case "direct", "none":
-			return proxySetting{key: "direct"}, nil
+			return Egress{key: "direct"}, nil
 		}
 		parsed, errParse := parseProxyURL(candidate)
 		if errParse != nil {
-			return proxySetting{}, errParse
+			return Egress{}, errParse
 		}
-		return proxySetting{key: parsed.String(), url: parsed}, nil
+		return Egress{key: parsed.String(), url: parsed}, nil
 	}
-	return proxySetting{key: "env"}, nil
+	return Egress{key: "env"}, nil
 }
 
 func parseProxyURL(raw string) (*url.URL, error) {
@@ -55,9 +56,9 @@ func parseProxyURL(raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
-// validateProxyValue checks a proxy_url value entered through the management
+// ValidateProxy checks a proxy_url value entered through the management
 // page. Empty, direct and none are accepted.
-func validateProxyValue(raw string) error {
+func ValidateProxy(raw string) error {
 	raw = strings.TrimSpace(raw)
 	switch strings.ToLower(raw) {
 	case "", "direct", "none":
@@ -67,18 +68,20 @@ func validateProxyValue(raw string) error {
 	return errParse
 }
 
-// clientCache keeps one HTTP client per egress so connections are reused
+// Clients keeps one HTTP client per egress so connections are reused
 // across requests that share a proxy.
-type clientCache struct {
+type Clients struct {
 	mu      sync.Mutex
 	clients map[string]*http.Client
 }
 
-func newClientCache() *clientCache {
-	return &clientCache{clients: make(map[string]*http.Client)}
+// NewClients returns an empty client cache.
+func NewClients() *Clients {
+	return &Clients{clients: make(map[string]*http.Client)}
 }
 
-func (c *clientCache) client(setting proxySetting) *http.Client {
+// Client returns the shared client for an egress, creating it on first use.
+func (c *Clients) Client(setting Egress) *http.Client {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if client, ok := c.clients[setting.key]; ok {
@@ -111,7 +114,8 @@ func (c *clientCache) client(setting proxySetting) *http.Client {
 	return client
 }
 
-func (c *clientCache) closeIdle() {
+// CloseIdle closes idle connections of every cached client.
+func (c *Clients) CloseIdle() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for _, client := range c.clients {

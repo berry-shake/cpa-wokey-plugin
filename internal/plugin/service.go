@@ -17,6 +17,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/berry-shake/cpa-wokey-plugin/internal/catalog"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/config"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/credential"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/requestlog"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/wokey"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
@@ -25,7 +30,7 @@ const (
 	// PluginID is the store/runtime identifier; ProviderID is the CPA provider
 	// key and the auth file type. They are the same string.
 	PluginID   = "wokey"
-	ProviderID = "wokey"
+	ProviderID = wokey.ProviderID
 
 	displayName = "Wokey"
 	repository  = "https://github.com/berry-shake/cpa-wokey-plugin"
@@ -58,15 +63,15 @@ type Service struct {
 	cancel context.CancelFunc
 
 	mu        sync.RWMutex
-	cfg       Config
+	cfg       config.Config
 	hostProxy string
 	// hostForcePrefix mirrors CPA's routing.force-model-prefix; hostKnown
 	// is false until a request carrying the host summary arrives.
 	hostForcePrefix bool
 	hostKnown       bool
 
-	catalog *catalog
-	clients *clientCache
+	catalog *catalog.Catalog
+	clients *wokey.Clients
 	streams streamGroup
 	// issuerBase is the issuing API root; tests point it at a fake server.
 	issuerBase string
@@ -80,7 +85,7 @@ type Service struct {
 	// authIDs holds the CPA auth IDs seen as Wokey credentials, so the
 	// request interceptor only touches requests routed to this plugin.
 	authIDs sync.Map
-	reqlog  *requestLog
+	reqlog  *requestlog.Log
 }
 
 // New builds a service. host may be nil in tests.
@@ -95,13 +100,13 @@ func New(version string, host HostCaller) *Service {
 		now:        time.Now,
 		ctx:        ctx,
 		cancel:     cancel,
-		cfg:        defaultConfig(),
-		catalog:    newCatalog(),
-		clients:    newClientCache(),
-		issuerBase: defaultIssuerBaseURL,
+		cfg:        config.Default(),
+		catalog:    catalog.New(),
+		clients:    wokey.NewClients(),
+		issuerBase: wokey.DefaultIssuerBaseURL,
 		kick:       make(chan struct{}, 1),
 	}
-	svc.reqlog = newRequestLog(func(message string) { svc.logf("warn", message, nil) })
+	svc.reqlog = requestlog.New(func(message string) { svc.logf("warn", message, nil) })
 	return svc
 }
 
@@ -109,8 +114,8 @@ func New(version string, host HostCaller) *Service {
 func (s *Service) Close() {
 	s.cancel()
 	s.streams.waitTimeout(3 * time.Second)
-	s.clients.closeIdle()
-	s.reqlog.close()
+	s.clients.CloseIdle()
+	s.reqlog.Close()
 }
 
 type rpcLifecycleRequest struct {
@@ -178,7 +183,7 @@ func (s *Service) Call(method string, request []byte) []byte {
 			return ErrorEnvelope("invalid_request", "decode auth parse request: "+errUnmarshal.Error())
 		}
 		s.rememberHost(req.Host)
-		resp, errParse := parseAuthFile(req, s.now(), s.config().ModelPrefix)
+		resp, errParse := credential.ParseAuthFile(req, s.now(), s.config().ModelPrefix)
 		if errParse != nil {
 			return ErrorEnvelope("invalid_auth", errParse.Error())
 		}
@@ -265,7 +270,7 @@ func (s *Service) Call(method string, request []byte) []byte {
 func (s *Service) register(request []byte) rpcRegistration {
 	var lifecycle rpcLifecycleRequest
 	_ = json.Unmarshal(request, &lifecycle)
-	cfg, warnings := parseConfig(lifecycle.ConfigYAML)
+	cfg, warnings := config.Parse(lifecycle.ConfigYAML)
 	s.mu.Lock()
 	previous := s.cfg
 	s.cfg = cfg
@@ -273,7 +278,7 @@ func (s *Service) register(request []byte) rpcRegistration {
 	for _, warning := range warnings {
 		s.logf("warn", "wokey: "+warning, nil)
 	}
-	s.reqlog.configure(cfg.DataDir, cfg.LogRetention, cfg.LogRetentionDays)
+	s.reqlog.Configure(cfg.DataDir, cfg.LogRetention, cfg.LogRetentionDays)
 	s.loopOnce.Do(func() { go s.refreshLoop() })
 	if previous.ModelPrefix != cfg.ModelPrefix || previous.BaseURL != cfg.BaseURL {
 		// The default auth prefix is applied when CPA parses an auth file,
@@ -294,7 +299,7 @@ func (s *Service) register(request []byte) rpcRegistration {
 			Author:           "berry-shake",
 			GitHubRepository: repository,
 			Logo:             logoPath,
-			ConfigFields:     configFields(),
+			ConfigFields:     config.Fields(),
 		},
 		Capabilities: rpcCapabilities{
 			AuthProvider:          true,
@@ -313,19 +318,6 @@ func (s *Service) register(request []byte) rpcRegistration {
 	}
 }
 
-func configFields() []pluginapi.ConfigField {
-	return []pluginapi.ConfigField{
-		{Name: "base-url", Type: pluginapi.ConfigFieldTypeString, Default: defaultBaseURL, Description: "Wokey API origin. Auth files may override it with base_url."},
-		{Name: "model-prefix", Type: pluginapi.ConfigFieldTypeString, Default: defaultModelPrefix, Description: `Default CPA prefix for Wokey keys ("wokey" -> wokey/claude-fable-5). Empty adds no prefix. An auth file's own prefix field wins.`},
-		{Name: "models-refresh-minutes", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultModelsRefreshMinutes, Description: "How often to poll Wokey's model catalog; 0 disables polling."},
-		{Name: "request-timeout-seconds", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultRequestTimeoutSeconds, Description: "Timeout for non-streaming requests and for stream response headers."},
-		{Name: "stream-idle-timeout-seconds", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultStreamIdleSeconds, Description: "Abort a stream after this long without upstream bytes."},
-		{Name: "data-dir", Type: pluginapi.ConfigFieldTypeString, Default: defaultDataDir, Description: "Directory for plugin data such as the request log database (wokey.db), relative to CPA's working directory."},
-		{Name: "log-retention", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultLogRetention, Description: "Most requests the request log keeps; 0 disables it."},
-		{Name: "log-retention-days", Type: pluginapi.ConfigFieldTypeInteger, Default: defaultLogRetentionDays, Description: "Drop request log entries older than this many days; 0 keeps them until log-retention is reached."},
-	}
-}
-
 // negotiateSchemaVersion answers with the newest schema both sides support;
 // a host that advertises nothing only knows schema 1.
 func negotiateSchemaVersion(host uint32) uint32 {
@@ -335,7 +327,7 @@ func negotiateSchemaVersion(host uint32) uint32 {
 	return min(host, maxSchemaVersion)
 }
 
-func (s *Service) config() Config {
+func (s *Service) config() config.Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cfg
@@ -373,12 +365,12 @@ func (s *Service) userAgent() string {
 func (s *Service) refreshAuth(req pluginapi.AuthRefreshRequest) []byte {
 	s.rememberHost(req.Host)
 	s.noteWokeyAuth(req.AuthID)
-	_, merged, errCred := credentialFromMaps(req.StorageJSON, req.Metadata)
+	_, merged, errCred := credential.FromMaps(req.StorageJSON, req.Metadata)
 	if errCred != nil {
 		return ErrorEnvelope("invalid_auth", errCred.Error())
 	}
 	raw, _ := json.Marshal(merged)
-	auth, errAuth := authDataFromFields(merged, raw, "", s.now(), s.config().ModelPrefix)
+	auth, errAuth := credential.AuthData(merged, raw, "", s.now(), s.config().ModelPrefix)
 	if errAuth != nil {
 		return ErrorEnvelope("invalid_auth", errAuth.Error())
 	}
@@ -390,144 +382,20 @@ func (s *Service) refreshAuth(req pluginapi.AuthRefreshRequest) []byte {
 func (s *Service) modelsForAuth(req pluginapi.AuthModelRequest) pluginapi.ModelResponse {
 	s.rememberHost(req.Host)
 	s.noteWokeyAuth(req.AuthID)
-	cred, _, errCred := credentialFromMaps(req.StorageJSON, req.Metadata)
+	cred, _, errCred := credential.FromMaps(req.StorageJSON, req.Metadata)
 	if errCred != nil {
 		s.logf("warn", "wokey: cannot read credential for model registration", map[string]any{"auth_id": req.AuthID, "error": errCred.Error()})
 		return pluginapi.ModelResponse{Provider: ProviderID}
 	}
-	snapshot := s.catalog.current()
-	if snapshot.empty() {
+	snapshot := s.catalog.Current()
+	if snapshot.Empty() {
 		snapshot = s.loadCatalogFor(cred)
 	}
-	models := modelInfosForCredential(snapshot, cred)
+	models := snapshot.ModelInfos(cred.AllModels, cred.Models)
 	if req.AuthID != "" {
 		s.registered.Store(req.AuthID, snapshot.Revision)
 	}
 	return pluginapi.ModelResponse{Provider: ProviderID, Models: models}
-}
-
-// loadCatalogFor fetches the catalog synchronously through the credential's
-// own egress, so a key that needs a proxy can still discover models.
-func (s *Service) loadCatalogFor(cred credential) catalogSnapshot {
-	ctx, cancel := context.WithTimeout(s.ctx, catalogLoadTimeout)
-	defer cancel()
-	setting, errProxy := resolveProxy(cred.ProxyURL, s.globalProxy())
-	if errProxy != nil {
-		return s.catalog.current()
-	}
-	snapshot, _, errFetch := s.catalog.fetch(ctx, s.clients.client(setting), cred.effectiveBaseURL(s.config()), s.userAgent(), false, s.now())
-	if errFetch != nil {
-		s.logf("warn", "wokey: model catalog unavailable", map[string]any{"error": errFetch.Error()})
-	}
-	return snapshot
-}
-
-func (s *Service) kickRefresh() {
-	select {
-	case s.kick <- struct{}{}:
-	default:
-	}
-}
-
-// refreshLoop polls the catalog and pushes changes to CPA.
-func (s *Service) refreshLoop() {
-	timer := time.NewTimer(time.Hour)
-	timer.Stop()
-	for {
-		select {
-		case <-s.ctx.Done():
-			timer.Stop()
-			return
-		case <-s.kick:
-		case <-timer.C:
-		}
-		s.refreshCatalog(false)
-		if interval := s.config().ModelsRefreshInterval; interval > 0 {
-			timer.Reset(interval)
-		}
-	}
-}
-
-// refreshCatalog fetches the catalog (trying the global egress first, then
-// each distinct credential proxy) and re-registers credentials whose models
-// were built from an older catalog.
-func (s *Service) refreshCatalog(force bool) (catalogSnapshot, error) {
-	ctx, cancel := context.WithTimeout(s.ctx, catalogLoadTimeout)
-	defer cancel()
-	entries, _ := s.listWokeyAuths()
-	proxies := []string{""}
-	seen := map[string]bool{"": true}
-	for _, entry := range entries {
-		if entry.readError == "" && !seen[entry.cred.ProxyURL] {
-			seen[entry.cred.ProxyURL] = true
-			proxies = append(proxies, entry.cred.ProxyURL)
-		}
-	}
-	var (
-		snapshot catalogSnapshot
-		errFetch error
-	)
-	for _, proxy := range proxies {
-		setting, errProxy := resolveProxy(proxy, s.globalProxy())
-		if errProxy != nil {
-			continue
-		}
-		snapshot, _, errFetch = s.catalog.fetch(ctx, s.clients.client(setting), s.config().BaseURL, s.userAgent(), force, s.now())
-		if errFetch == nil {
-			break
-		}
-	}
-	if errFetch != nil {
-		s.logf("warn", "wokey: model catalog refresh failed", map[string]any{"error": errFetch.Error()})
-		return snapshot, errFetch
-	}
-	s.syncRegistrations(snapshot, entries)
-	return snapshot, nil
-}
-
-// syncRegistrations re-saves auth files whose registered models predate the
-// current catalog. Saving makes CPA re-parse the file and call model.for_auth
-// again. model_revision records the catalog a file was last synced with; the
-// in-memory registered map catches enabled credentials whose models were built
-// from an older catalog. Disabled credentials are not registered by CPA, so
-// only their file revision is checked and they are touched once per change.
-func (s *Service) syncRegistrations(snapshot catalogSnapshot, entries []wokeyAuth) {
-	if snapshot.Revision == "" {
-		return
-	}
-	for _, entry := range entries {
-		if entry.readError != "" || !isWokeyAuthJSON(entry.fields) {
-			continue
-		}
-		stale := entry.cred.ModelRevision != snapshot.Revision
-		if !entry.Disabled {
-			if registered, known := s.registered.Load(entry.ID); known && registered != snapshot.Revision {
-				stale = true
-			}
-		}
-		if !stale {
-			continue
-		}
-		name := authSaveName(entry.Name, entry.Path)
-		if name == "" {
-			continue
-		}
-		fields := cloneFields(entry.fields)
-		fields[keyModelRevision] = snapshot.Revision
-		if errSave := s.saveAuthFile(name, fields); errSave != nil {
-			s.logf("warn", "wokey: model sync save failed", map[string]any{"auth": name, "error": errSave.Error()})
-			continue
-		}
-		s.logf("info", "wokey: refreshed registered models", map[string]any{"auth": name, "revision": snapshot.Revision})
-	}
-}
-
-func cloneFields(fields map[string]any) map[string]any {
-	out := make(map[string]any, len(fields)+1)
-	for key, value := range fields {
-		out[key] = value
-	}
-	return out
 }
 
 // hostCall invokes a host callback and decodes its result into out (if non-nil).
@@ -585,4 +453,9 @@ func okEnvelope(result any) []byte {
 // ErrorEnvelope builds a failure envelope for RPC and ABI initialization errors.
 func ErrorEnvelope(code, message string) []byte {
 	return errorEnvelopeFrom(&pluginabi.Error{Code: code, Message: message})
+}
+
+func errorEnvelopeFrom(err *pluginabi.Error) []byte {
+	raw, _ := json.Marshal(pluginabi.Envelope{OK: false, Error: err})
+	return raw
 }

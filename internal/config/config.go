@@ -1,4 +1,4 @@
-package plugin
+package config
 
 import (
 	"fmt"
@@ -59,7 +59,7 @@ type rawConfig struct {
 	LogRetentionDays      *int    `yaml:"log-retention-days"`
 }
 
-func defaultConfig() Config {
+func Default() Config {
 	return Config{
 		BaseURL:               defaultBaseURL,
 		ModelPrefix:           defaultModelPrefix,
@@ -72,11 +72,11 @@ func defaultConfig() Config {
 	}
 }
 
-// parseConfig reads the plugin config subtree. Invalid values fall back to the
+// Parse reads the plugin config subtree. Invalid values fall back to the
 // defaults instead of failing registration, because a broken plugin config
 // should not take every Wokey credential offline.
-func parseConfig(raw []byte) (Config, []string) {
-	cfg := defaultConfig()
+func Parse(raw []byte) (Config, []string) {
+	cfg := Default()
 	var warnings []string
 	if len(strings.TrimSpace(string(raw))) == 0 {
 		return cfg, nil
@@ -86,14 +86,14 @@ func parseConfig(raw []byte) (Config, []string) {
 		return cfg, []string{"invalid plugin config, using defaults: " + errUnmarshal.Error()}
 	}
 	if base := strings.TrimSpace(parsed.BaseURL); base != "" {
-		if normalized, errBase := normalizeBaseURL(base); errBase != nil {
+		if normalized, errBase := NormalizeBaseURL(base); errBase != nil {
 			warnings = append(warnings, "ignoring base-url: "+errBase.Error())
 		} else {
 			cfg.BaseURL = normalized
 		}
 	}
 	if parsed.ModelPrefix != nil {
-		cfg.ModelPrefix = normalizePrefix(*parsed.ModelPrefix)
+		cfg.ModelPrefix = NormalizePrefix(*parsed.ModelPrefix)
 	}
 	if parsed.ModelsRefreshMinutes != nil {
 		if minutes := *parsed.ModelsRefreshMinutes; minutes >= 0 {
@@ -136,10 +136,10 @@ func parseConfig(raw []byte) (Config, []string) {
 	return cfg, warnings
 }
 
-// normalizeBaseURL accepts an http(s) origin, optionally with a path prefix,
+// NormalizeBaseURL accepts an http(s) origin, optionally with a path prefix,
 // and strips a trailing slash and a trailing /v1 so endpoint paths can be
 // appended uniformly.
-func normalizeBaseURL(raw string) (string, error) {
+func NormalizeBaseURL(raw string) (string, error) {
 	parsed, errParse := url.Parse(strings.TrimSpace(raw))
 	if errParse != nil {
 		return "", errParse
@@ -158,8 +158,8 @@ func normalizeBaseURL(raw string) (string, error) {
 	return strings.TrimRight(parsed.String(), "/"), nil
 }
 
-// normalizePrefix trims whitespace and surrounding slashes so "wokey/" and
+// NormalizePrefix trims whitespace and surrounding slashes so "wokey/" and
 // "/wokey" both mean "wokey".
-func normalizePrefix(raw string) string {
+func NormalizePrefix(raw string) string {
 	return strings.Trim(strings.TrimSpace(raw), "/")
 }

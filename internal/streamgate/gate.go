@@ -1,4 +1,7 @@
-package plugin
+// Package streamgate reads Wokey streaming responses: it splits SSE bodies
+// into events and holds back the start of a stream until it is known not to
+// be an error, so CPA can still retry it on another credential.
+package streamgate
 
 import (
 	"bytes"
@@ -8,6 +11,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/berry-shake/cpa-wokey-plugin/internal/jsonfield"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/wokey"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 )
 
@@ -19,21 +24,22 @@ const maxPreludeBytes = 64 << 10
 // stream before any output was sent.
 var errStreamRejected = errors.New("upstream rejected the request inside the stream")
 
-type streamEventKind int
+// Kind classifies a stream event.
+type Kind int
 
 const (
-	// streamPrelude carries no output yet (message_start, response.created, a
+	// Prelude carries no output yet (message_start, response.created, a
 	// chat chunk with only the role, keepalive pings).
-	streamPrelude streamEventKind = iota
-	// streamContent carries output.
-	streamContent
-	// streamTerminal ends the response.
-	streamTerminal
-	// streamFailed is an error reported inside the stream.
-	streamFailed
+	Prelude Kind = iota
+	// Content carries output.
+	Content
+	// Terminal ends the response.
+	Terminal
+	// Failed is an error reported inside the stream.
+	Failed
 )
 
-// streamGate sits between the upstream SSE reader and the host stream.
+// Gate sits between the upstream SSE reader and the host stream.
 //
 // CPA reads a plugin stream until the first chunk with a payload before it
 // commits to the credential; an error before that is retried on another key.
@@ -43,7 +49,7 @@ const (
 //
 // It also records whether the response reached its terminal event, so a
 // stream that just stops is reported as truncated instead of a normal end.
-type streamGate struct {
+type Gate struct {
 	endpoint  string
 	sse       bool
 	header    http.Header
@@ -53,39 +59,40 @@ type streamGate struct {
 	open      bool
 	done      bool
 	failure   *pluginabi.Error
-	// tap, when set, sees every event with its classification.
-	tap func(streamEventKind, []byte)
+	// Tap, when set, sees every event with its classification.
+	Tap func(Kind, []byte)
 }
 
-func newStreamGate(endpoint string, sse bool, header http.Header, emit func([]byte) error) *streamGate {
-	return &streamGate{endpoint: endpoint, sse: sse, header: header, emit: emit}
+// New returns a gate for one stream; emit forwards events to the client.
+func New(endpoint string, sse bool, header http.Header, emit func([]byte) error) *Gate {
+	return &Gate{endpoint: endpoint, sse: sse, header: header, emit: emit}
 }
 
-// push takes the next upstream event (or raw chunk for non-SSE bodies).
-func (g *streamGate) push(event []byte) error {
+// Push takes the next upstream event (or raw chunk for non-SSE bodies).
+func (g *Gate) Push(event []byte) error {
 	if !g.sse {
 		g.open = true
-		if g.tap != nil {
-			g.tap(streamContent, nil)
+		if g.Tap != nil {
+			g.Tap(Content, nil)
 		}
 		return g.emit(event)
 	}
 	kind, detail := classifyStreamEvent(g.endpoint, event)
-	if g.tap != nil {
-		g.tap(kind, event)
+	if g.Tap != nil {
+		g.Tap(kind, event)
 	}
 	switch kind {
-	case streamFailed:
+	case Failed:
 		if !g.open {
 			g.held = nil
-			g.failure = upstreamError(streamErrorStatus(detail), g.header, detail, g.endpoint)
+			g.failure = wokey.UpstreamError(streamErrorStatus(detail), g.header, detail, g.endpoint)
 			return errStreamRejected
 		}
 		// After output has started the client gets the error event as is.
 		g.done = true
-	case streamTerminal:
+	case Terminal:
 		g.done = true
-	case streamPrelude:
+	case Prelude:
 		if !g.open && g.heldBytes+len(event) <= maxPreludeBytes {
 			g.held = append(g.held, event)
 			g.heldBytes += len(event)
@@ -97,13 +104,13 @@ func (g *streamGate) push(event []byte) error {
 	}
 	// "[DONE]" is kept for chat completions (CPA handles it there) and dropped
 	// for the Responses and Messages protocols, which do not define it.
-	if g.endpoint != endpointChat && isDoneEvent(event) {
+	if g.endpoint != wokey.EndpointChat && isDoneEvent(event) {
 		return nil
 	}
 	return g.emit(event)
 }
 
-func (g *streamGate) flush() error {
+func (g *Gate) flush() error {
 	g.open = true
 	held := g.held
 	g.held, g.heldBytes = nil, 0
@@ -115,9 +122,9 @@ func (g *streamGate) flush() error {
 	return nil
 }
 
-// finish reports how the stream ended: nil when the response is complete,
+// Finish reports how the stream ended: nil when the response is complete,
 // otherwise the error to close the host stream with.
-func (g *streamGate) finish(ctx context.Context, errPump error) *pluginabi.Error {
+func (g *Gate) Finish(ctx context.Context, errPump error) *pluginabi.Error {
 	switch {
 	case g.failure != nil:
 		return g.failure
@@ -144,69 +151,69 @@ func streamTruncated() *pluginabi.Error {
 	}
 }
 
-// classifyStreamEvent sorts an SSE event by protocol. For streamFailed it
-// also returns the error as a JSON body upstreamError can read.
-func classifyStreamEvent(endpoint string, event []byte) (streamEventKind, []byte) {
-	name, data := sseEventFields(event)
+// classifyStreamEvent sorts an SSE event by protocol. For Failed it
+// also returns the error as a JSON body wokey.UpstreamError can read.
+func classifyStreamEvent(endpoint string, event []byte) (Kind, []byte) {
+	name, data := EventFields(event)
 	if len(data) == 0 {
-		return streamPrelude, nil
+		return Prelude, nil
 	}
 	if bytes.Equal(data, []byte("[DONE]")) {
-		return streamTerminal, nil
+		return Terminal, nil
 	}
 	var payload map[string]any
 	if json.Unmarshal(data, &payload) != nil {
 		// Unknown data: do not hold it back.
-		return streamContent, nil
+		return Content, nil
 	}
 	eventType, _ := payload["type"].(string)
 	if eventType == "" {
 		eventType = name
 	}
 	if eventType == "error" || (payload["error"] != nil && eventType != "response.failed") {
-		return streamFailed, data
+		return Failed, data
 	}
 	switch endpoint {
-	case endpointChat:
+	case wokey.EndpointChat:
 		return classifyChatChunk(payload), nil
-	case endpointResponses:
+	case wokey.EndpointResponses:
 		switch eventType {
 		case "response.completed", "response.incomplete":
-			return streamTerminal, nil
+			return Terminal, nil
 		case "response.failed":
-			return streamFailed, responseFailure(payload)
+			return Failed, responseFailure(payload)
 		case "response.created", "response.queued", "response.in_progress", "response.output_item.added", "response.content_part.added":
-			return streamPrelude, nil
+			return Prelude, nil
 		}
-	case endpointMessages:
+	case wokey.EndpointMessages:
 		switch eventType {
 		case "message_stop":
-			return streamTerminal, nil
+			return Terminal, nil
 		case "message_delta":
 			if delta, _ := payload["delta"].(map[string]any); delta != nil && nonEmpty(delta["stop_reason"]) {
-				return streamTerminal, nil
+				return Terminal, nil
 			}
 		case "message_start", "ping", "content_block_start":
-			return streamPrelude, nil
+			return Prelude, nil
 		}
 	}
-	return streamContent, nil
+	return Content, nil
 }
 
 // classifyChatChunk treats a chunk with a finish reason as terminal and one
 // with any delta besides the role as output.
-func classifyChatChunk(payload map[string]any) streamEventKind {
+func classifyChatChunk(payload map[string]any) Kind {
 	choices, _ := payload["choices"].([]any)
-	kind := streamPrelude
+	kind := Prelude
 	for _, raw := range choices {
 		choice, _ := raw.(map[string]any)
 		if nonEmpty(choice["finish_reason"]) {
-			return streamTerminal
+			return Terminal
 		}
 		delta, _ := choice["delta"].(map[string]any)
 		for key, value := range delta {
 			if key != "role" && nonEmpty(value) {
-				kind = streamContent
+				kind = Content
 			}
 		}
 	}
@@ -225,7 +232,7 @@ func responseFailure(payload map[string]any) []byte {
 }
 
 // streamErrorStatus picks the HTTP status an in-stream error stands for, so
-// upstreamError maps it the same way as the matching HTTP error.
+// wokey.UpstreamError maps it the same way as the matching HTTP error.
 func streamErrorStatus(body []byte) int {
 	var payload map[string]any
 	_ = json.Unmarshal(body, &payload)
@@ -241,7 +248,7 @@ func streamErrorStatus(body []byte) int {
 			}
 		}
 		for _, key := range []string{"code", "type"} {
-			if value := strings.ToLower(anyString(scope[key])); value != "" {
+			if value := strings.ToLower(jsonfield.Text(scope[key])); value != "" {
 				names = append(names, value)
 			}
 		}
@@ -271,8 +278,8 @@ var streamErrorRules = []struct {
 	{http.StatusBadRequest, []string{"invalid_request", "context_length", "too_large"}},
 }
 
-// sseEventFields returns the event name and the joined data lines.
-func sseEventFields(event []byte) (string, []byte) {
+// EventFields returns the event name and the joined data lines.
+func EventFields(event []byte) (string, []byte) {
 	var name string
 	var data [][]byte
 	for _, line := range bytes.Split(event, []byte("\n")) {
@@ -302,8 +309,8 @@ func nonEmpty(value any) bool {
 	}
 }
 
-// phase tells the request log whether output had reached the client.
-func (g *streamGate) phase() string {
+// Phase tells the request log whether output had reached the client.
+func (g *Gate) Phase() string {
 	if g.open {
 		return "stream"
 	}

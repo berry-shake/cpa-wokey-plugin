@@ -13,6 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/berry-shake/cpa-wokey-plugin/internal/config"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/credential"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/jsonfield"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/wokey"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
@@ -153,11 +157,11 @@ func (h *fakeHost) save(req pluginapi.HostAuthSaveRequest) ([]byte, error) {
 	if !strings.HasSuffix(strings.ToLower(name), ".json") {
 		return failResult("auth file name must end with .json"), nil
 	}
-	defaultPrefix := defaultModelPrefix
+	defaultPrefix := config.Default().ModelPrefix
 	if h.svc != nil {
 		defaultPrefix = h.svc.config().ModelPrefix
 	}
-	parsed, errParse := parseAuthFile(pluginapi.AuthParseRequest{FileName: name, RawJSON: req.JSON}, time.Now(), defaultPrefix)
+	parsed, errParse := credential.ParseAuthFile(pluginapi.AuthParseRequest{FileName: name, RawJSON: req.JSON}, time.Now(), defaultPrefix)
 	if errParse != nil {
 		return failResult(errParse.Error()), nil
 	}
@@ -234,7 +238,7 @@ func (h *fakeHost) seed(name, provider string, fields map[string]any) *fakeAuthF
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.nextIndex++
-	file := &fakeAuthFile{index: fmt.Sprintf("idx-%d", h.nextIndex), name: name, provider: provider, raw: raw, disabled: boolField(fields, keyDisabled)}
+	file := &fakeAuthFile{index: fmt.Sprintf("idx-%d", h.nextIndex), name: name, provider: provider, raw: raw, disabled: jsonfield.Bool(fields, credential.KeyDisabled)}
 	h.files = append(h.files, file)
 	return file
 }
@@ -257,7 +261,7 @@ func (h *fakeHost) fields(name string) map[string]any {
 	if file == nil {
 		h.t.Fatalf("auth file %s not found", name)
 	}
-	fields, errDecode := decodeAuthFields(file.raw)
+	fields, errDecode := credential.DecodeFields(file.raw)
 	if errDecode != nil {
 		h.t.Fatalf("decode %s: %v", name, errDecode)
 	}
@@ -397,7 +401,7 @@ func (w *fakeWokey) serve(rw http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(rw, http.StatusOK, map[string]any{"userId": "1234", "availableUsd": 42.5, "reservedUsd": "0.75"})
-	case testIssuerPath + endpointIssuerBalance:
+	case testIssuerPath + wokey.EndpointIssuerBalance:
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		w.mu.Lock()
 		w.issuerCalls++

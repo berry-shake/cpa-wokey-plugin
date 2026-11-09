@@ -8,3 +8,7 @@ dist/
 # OS clutter
 .DS_Store
 Thumbs.db
+
+# Built management page (make web); the placeholder is committed
+!/internal/web/dist/
+/internal/web/dist/index.html

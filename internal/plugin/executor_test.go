@@ -6,8 +6,10 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
+	"github.com/berry-shake/cpa-wokey-plugin/internal/credential"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/requestlog"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/wokey"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
@@ -49,113 +51,6 @@ func TestEnsureTopLevelObject(t *testing.T) {
 	}
 }
 
-func TestEndpointForFormat(t *testing.T) {
-	cases := map[string]string{
-		"openai":           endpointChat,
-		"chat-completions": endpointChat,
-		"openai-response":  endpointResponses,
-		"responses":        endpointResponses,
-		"claude":           endpointMessages,
-		"Anthropic":        endpointMessages,
-	}
-	for format, want := range cases {
-		if got, ok := endpointForFormat(format); !ok || got != want {
-			t.Errorf("endpointForFormat(%q) = %q, %v", format, got, ok)
-		}
-	}
-	if _, ok := endpointForFormat("gemini"); ok {
-		t.Error("gemini accepted")
-	}
-}
-
-func TestUpstreamErrorMapping(t *testing.T) {
-	retry := http.Header{"Retry-After": []string{"7"}}
-	cases := []struct {
-		name      string
-		status    int
-		header    http.Header
-		body      string
-		endpoint  string
-		want      int
-		code      string
-		retryable bool
-		retryIn   int
-	}{
-		{"invalid key cools the key", 401, nil, `{"error":{"code":"invalid_api_key","message":"bad key"}}`, endpointChat, 401, "invalid_api_key", false, 0},
-		{"no balance cools the key", 402, nil, `{"error":{"type":"insufficient_balance","message":"top up"}}`, endpointMessages, 402, "insufficient_balance", false, 0},
-		{"blocked request is a client error", 403, nil, `{"error":{"code":"request_blocked","message":"blocked"}}`, endpointChat, 400, "request_blocked", false, 0},
-		{"account 403 keeps its status", 403, nil, `{"error":{"code":"key_disabled","message":"disabled"}}`, endpointChat, 403, "key_disabled", false, 0},
-		{"unknown model does not cool the key", 404, nil, `{"error":{"code":"model_not_found","message":"no model"}}`, endpointResponses, 400, "model_not_found", false, 0},
-		{"count_tokens 404 stays 404", 404, nil, `{}`, endpointCountTokens, 404, "upstream_404", false, 0},
-		{"rate limit keeps Retry-After", 429, retry, `{"code":"rate_limited","message":"slow down"}`, endpointChat, 429, "rate_limited", true, 7},
-		{"overloaded is transient", 529, nil, `{"type":"error","error":{"type":"overloaded_error","message":"busy"}}`, endpointMessages, 503, "overloaded_error", true, 0},
-		{"aborted downstream", 499, nil, ``, endpointChat, 408, "upstream_499", true, 0},
-		{"plain text body", 500, nil, `boom`, endpointChat, 500, "upstream_500", true, 0},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			header := tc.header
-			if header == nil {
-				header = http.Header{}
-			}
-			err := upstreamError(tc.status, header, []byte(tc.body), tc.endpoint)
-			if err.HTTPStatus != tc.want || err.Code != tc.code || err.Retryable != tc.retryable || err.RetryAfterSeconds != tc.retryIn {
-				t.Fatalf("got %+v", err)
-			}
-			if !strings.HasPrefix(err.Message, "wokey: ") {
-				t.Fatalf("message = %q", err.Message)
-			}
-		})
-	}
-}
-
-func TestRetryAfterSeconds(t *testing.T) {
-	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	if got := retryAfterSeconds("12", now); got != 12 {
-		t.Errorf("delta = %d", got)
-	}
-	if got := retryAfterSeconds(now.Add(90*time.Second).Format(http.TimeFormat), now); got != 90 {
-		t.Errorf("date = %d", got)
-	}
-	for _, raw := range []string{"", "-3", "soon", now.Add(-time.Minute).Format(http.TimeFormat)} {
-		if got := retryAfterSeconds(raw, now); got != 0 {
-			t.Errorf("retryAfterSeconds(%q) = %d", raw, got)
-		}
-	}
-}
-
-func TestResolveProxy(t *testing.T) {
-	cases := []struct {
-		auth, global, key string
-	}{
-		{"", "", "env"},
-		{"", "http://g.example:8080", "http://g.example:8080"},
-		{"socks5://u:p@a.example:1080", "http://g.example:8080", "socks5://u:p@a.example:1080"},
-		{"direct", "http://g.example:8080", "direct"},
-		{"NONE", "", "direct"},
-		{"", "direct", "direct"},
-	}
-	for _, tc := range cases {
-		setting, errProxy := resolveProxy(tc.auth, tc.global)
-		if errProxy != nil || setting.key != tc.key {
-			t.Errorf("resolveProxy(%q, %q) = %+v, %v; want %s", tc.auth, tc.global, setting, errProxy, tc.key)
-		}
-	}
-	if _, errProxy := resolveProxy("ftp://x.example", ""); errProxy == nil {
-		t.Error("ftp proxy accepted")
-	}
-	for _, ok := range []string{"", "direct", "none", "http://h:1", "https://h:1", "socks5h://h:1"} {
-		if errProxy := validateProxyValue(ok); errProxy != nil {
-			t.Errorf("validateProxyValue(%q) = %v", ok, errProxy)
-		}
-	}
-	for _, bad := range []string{"h:1080", "socks4://h:1", "http://"} {
-		if errProxy := validateProxyValue(bad); errProxy == nil {
-			t.Errorf("validateProxyValue(%q) accepted", bad)
-		}
-	}
-}
-
 func executorRequest(format, model, payload string) pluginapi.ExecutorRequest {
 	return pluginapi.ExecutorRequest{
 		AuthID:      "wokey-test.json",
@@ -170,13 +65,13 @@ func executorRequest(format, model, payload string) pluginapi.ExecutorRequest {
 func TestExecuteRewritesModelAndForwards(t *testing.T) {
 	upstream := newFakeWokey(t)
 	seen := make(chan observedRequest, 1)
-	upstream.handle(endpointChat, observe(seen, func(rw http.ResponseWriter, _ *http.Request) {
+	upstream.handle(wokey.EndpointChat, observe(seen, func(rw http.ResponseWriter, _ *http.Request) {
 		rw.Header().Set("X-Request-Id", "req-1")
 		rw.Header().Set("X-Internal", "secret")
 		writeJSON(rw, http.StatusOK, map[string]any{"id": "c1", "object": "chat.completion"})
 	}))
 	svc, _ := newTestService(t, upstream)
-	svc.reqlog.configure("", 10, 0)
+	svc.reqlog.Configure("", 10, 0)
 
 	req := executorRequest("openai", "wokey/model-a", `{"model":"wokey/model-a","messages":[]}`)
 	req.Headers.Set(cpaRequestIDHeader, "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b")
@@ -204,8 +99,8 @@ func TestExecuteRewritesModelAndForwards(t *testing.T) {
 	if ua := got.Header.Get("User-Agent"); ua != "cpa-wokey-plugin/test" {
 		t.Fatalf("User-Agent = %q", ua)
 	}
-	items := svc.reqlog.query(logQuery{}).Items
-	if len(items) != 1 || items[0].Credential != maskKey(testGoodKey) || items[0].AuthID != "wokey-test.json" || items[0].Model != "wokey/model-a" || items[0].UpstreamModel != "model-a" || items[0].RequestID != "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b" {
+	items := svc.reqlog.Query(requestlog.Query{}).Items
+	if len(items) != 1 || items[0].Credential != credential.MaskKey(testGoodKey) || items[0].AuthID != "wokey-test.json" || items[0].Model != "wokey/model-a" || items[0].UpstreamModel != "model-a" || items[0].RequestID != "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b" {
 		t.Fatalf("log entries = %+v", items)
 	}
 }
@@ -213,7 +108,7 @@ func TestExecuteRewritesModelAndForwards(t *testing.T) {
 func TestExecuteMessagesSetsAnthropicHeaders(t *testing.T) {
 	upstream := newFakeWokey(t)
 	seen := make(chan observedRequest, 1)
-	upstream.handle(endpointMessages, observe(seen, func(rw http.ResponseWriter, _ *http.Request) {
+	upstream.handle(wokey.EndpointMessages, observe(seen, func(rw http.ResponseWriter, _ *http.Request) {
 		writeJSON(rw, http.StatusOK, map[string]any{"type": "message"})
 	}))
 	svc, _ := newTestService(t, upstream)
@@ -228,7 +123,7 @@ func TestExecuteMessagesSetsAnthropicHeaders(t *testing.T) {
 
 func TestExecuteErrors(t *testing.T) {
 	upstream := newFakeWokey(t)
-	upstream.handle(endpointResponses, func(rw http.ResponseWriter, _ *http.Request) {
+	upstream.handle(wokey.EndpointResponses, func(rw http.ResponseWriter, _ *http.Request) {
 		rw.Header().Set("Retry-After", "3")
 		writeJSON(rw, http.StatusTooManyRequests, map[string]any{"error": map[string]any{"code": "rate_limited", "message": "slow"}})
 	})
@@ -272,7 +167,7 @@ func TestExecuteErrors(t *testing.T) {
 func TestCountTokens(t *testing.T) {
 	upstream := newFakeWokey(t)
 	seen := make(chan observedRequest, 1)
-	upstream.handle(endpointCountTokens, observe(seen, func(rw http.ResponseWriter, _ *http.Request) {
+	upstream.handle(wokey.EndpointCountTokens, observe(seen, func(rw http.ResponseWriter, _ *http.Request) {
 		writeJSON(rw, http.StatusOK, map[string]any{"input_tokens": 12})
 	}))
 	svc, _ := newTestService(t, upstream)
@@ -380,7 +275,7 @@ func TestCallDispatchRPCs(t *testing.T) {
 	if parsed := mustDecode[pluginapi.AuthParseResponse](t, envelope.Result); !envelope.OK || parsed.Auth.Prefix != "team" {
 		t.Fatalf("auth.parse prefix: %+v", envelope)
 	}
-	if revision, _ := svc.registered.Load("w.json"); revision != svc.catalog.current().Revision {
+	if revision, _ := svc.registered.Load("w.json"); revision != svc.catalog.Current().Revision {
 		t.Fatalf("registered revision = %v", revision)
 	}
 
@@ -454,7 +349,7 @@ func TestRequestInterceptorStampsWokeyRequests(t *testing.T) {
 		t.Fatalf("other provider = %+v", resp)
 	}
 	// Executing on an auth also marks it, so a reloaded plugin catches up.
-	svc.prepareCall(executorRequest("openai", "wokey/model-a", `{}`), endpointChat)
+	svc.prepareCall(executorRequest("openai", "wokey/model-a", `{}`), wokey.EndpointChat)
 	if !svc.isWokeyAuth("wokey-test.json") {
 		t.Fatal("executor auth not remembered")
 	}
