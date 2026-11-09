@@ -171,9 +171,11 @@ export function LogRow({ t, e, creds, locale }: { t: T; e: LogEntry; creds: Cred
         </div>
         <div data-label={label("effort")}>{e.reasoning_effort || "—"}</div>
         <div className="log-result" data-label={label("result")}>
-          <ResultTag t={t} e={e} />
-          <div className="sub" title={tries > 1 ? t("logs.attemptsHint", { n: tries }) : undefined}>
-            {(e.stream ? t("logs.stream") : t("logs.nonStream")) + (tries > 1 ? " · ×" + tries : "")}
+          <div className="log-result-box">
+            <ResultTag t={t} e={e} />
+            <div className="sub" title={tries > 1 ? t("logs.attemptsHint", { n: tries }) : undefined}>
+              {(e.stream ? t("logs.stream") : t("logs.nonStream")) + (tries > 1 ? " · ×" + tries : "")}
+            </div>
           </div>
         </div>
         <div className="clip" title={logKey(e, creds)} data-label={label("cred")}>{logCredential(e, creds)}</div>
