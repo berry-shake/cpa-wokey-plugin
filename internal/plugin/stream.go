@@ -52,7 +52,7 @@ func (s *Service) executeStream(req rpcExecutorRequest) []byte {
 	req.Stream = true
 	call, perr := s.prepareCall(req.ExecutorRequest, endpoint)
 	if perr != nil {
-		s.recordFailure(clientModel(req.ExecutorRequest, req.Model), endpoint, true, req.AuthID, perr)
+		s.recordFailure(req.ExecutorRequest, endpoint, true, perr)
 		return errorEnvelopeFrom(perr)
 	}
 	rec := s.startRecord(call, true)

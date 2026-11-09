@@ -40,9 +40,10 @@ const (
 )
 
 // maxSchemaVersion is the newest RPC contract implemented here. Schema 6
-// returns management JSON verbatim. It is pinned so an SDK bump cannot
-// silently opt into newer contracts.
-const maxSchemaVersion = pluginabi.SchemaVersionRawManagementResponse
+// returns management JSON verbatim; schema 7 lets the request interceptor
+// skip request bodies. It is pinned so an SDK bump cannot silently opt into
+// newer contracts.
+const maxSchemaVersion = pluginabi.SchemaVersionRequestInterceptorOmitBody
 
 // HostCaller invokes a CPA host callback and returns the raw response envelope.
 type HostCaller func(method string, request []byte) ([]byte, error)
@@ -76,7 +77,10 @@ type Service struct {
 	// ("" when built without a catalog), so catalog changes can be pushed to
 	// CPA by re-saving only the affected auth files.
 	registered sync.Map
-	reqlog     *requestLog
+	// authIDs holds the CPA auth IDs seen as Wokey credentials, so the
+	// request interceptor only touches requests routed to this plugin.
+	authIDs sync.Map
+	reqlog  *requestLog
 }
 
 // New builds a service. host may be nil in tests.
@@ -123,6 +127,11 @@ type rpcCapabilities struct {
 	ExecutorOutputFormats []string `json:"executor_output_formats,omitempty"`
 	ManagementAPI         bool     `json:"management_api"`
 	QuotaProvider         bool     `json:"quota_provider"`
+	// RequestInterceptor only reads headers and metadata, so both phases
+	// opt out of the request body.
+	RequestInterceptor               bool `json:"request_interceptor,omitempty"`
+	RequestInterceptorOmitBodyBefore bool `json:"request_interceptor_omit_body_before,omitempty"`
+	RequestInterceptorOmitBodyAfter  bool `json:"request_interceptor_omit_body_after,omitempty"`
 }
 
 type rpcRegistration struct {
@@ -228,6 +237,15 @@ func (s *Service) Call(method string, request []byte) []byte {
 		}
 		return okEnvelope(s.handleManagement(req.ManagementRequest))
 
+	case pluginabi.MethodRequestInterceptBefore:
+		return okEnvelope(pluginapi.RequestInterceptResponse{})
+	case pluginabi.MethodRequestInterceptAfter:
+		var req rpcRequestInterceptRequest
+		if errUnmarshal := json.Unmarshal(request, &req); errUnmarshal != nil {
+			return ErrorEnvelope("invalid_request", "decode request intercept request: "+errUnmarshal.Error())
+		}
+		return okEnvelope(s.interceptAfterAuth(req.RequestInterceptRequest))
+
 	case pluginabi.MethodQuotaDescribe:
 		return okEnvelope(pluginapi.QuotaDescribeResponse{SupportedProviders: []string{ProviderID}, DisplayName: displayName})
 	case pluginabi.MethodQuotaFetch:
@@ -266,8 +284,10 @@ func (s *Service) register(request []byte) rpcRegistration {
 		})
 	}
 	s.kickRefresh()
+	schema := negotiateSchemaVersion(lifecycle.SchemaVersion)
+	intercept := interceptsRequests(schema)
 	return rpcRegistration{
-		SchemaVersion: negotiateSchemaVersion(lifecycle.SchemaVersion),
+		SchemaVersion: schema,
 		Metadata: pluginapi.Metadata{
 			Name:             displayName,
 			Version:          s.version,
@@ -285,6 +305,10 @@ func (s *Service) register(request []byte) rpcRegistration {
 			ExecutorOutputFormats: executorFormats,
 			ManagementAPI:         true,
 			QuotaProvider:         true,
+
+			RequestInterceptor:               intercept,
+			RequestInterceptorOmitBodyBefore: intercept,
+			RequestInterceptorOmitBodyAfter:  intercept,
 		},
 	}
 }
@@ -348,6 +372,7 @@ func (s *Service) userAgent() string {
 
 func (s *Service) refreshAuth(req pluginapi.AuthRefreshRequest) []byte {
 	s.rememberHost(req.Host)
+	s.noteWokeyAuth(req.AuthID)
 	_, merged, errCred := credentialFromMaps(req.StorageJSON, req.Metadata)
 	if errCred != nil {
 		return ErrorEnvelope("invalid_auth", errCred.Error())
@@ -364,6 +389,7 @@ func (s *Service) refreshAuth(req pluginapi.AuthRefreshRequest) []byte {
 // modelsForAuth lists the CPA models for one Wokey credential.
 func (s *Service) modelsForAuth(req pluginapi.AuthModelRequest) pluginapi.ModelResponse {
 	s.rememberHost(req.Host)
+	s.noteWokeyAuth(req.AuthID)
 	cred, _, errCred := credentialFromMaps(req.StorageJSON, req.Metadata)
 	if errCred != nil {
 		s.logf("warn", "wokey: cannot read credential for model registration", map[string]any{"auth_id": req.AuthID, "error": errCred.Error()})

@@ -58,15 +58,18 @@ type upstreamCall struct {
 	header   http.Header
 	client   *http.Client
 	authID   string
-	// model, upstreamModel and label describe the call for the request log.
+	// model, upstreamModel, label and requestID describe the call for the
+	// request log.
 	model         string
 	upstreamModel string
 	label         string
+	requestID     string
 }
 
 // prepareCall resolves the credential, egress and upstream model for one
 // executor request.
 func (s *Service) prepareCall(req pluginapi.ExecutorRequest, endpoint string) (*upstreamCall, *pluginabi.Error) {
+	s.noteWokeyAuth(req.AuthID)
 	cred, _, errCred := credentialFromMaps(req.StorageJSON, req.AuthMetadata)
 	if errCred != nil {
 		return nil, authError("wokey: " + errCred.Error())
@@ -128,6 +131,7 @@ func (s *Service) prepareCall(req pluginapi.ExecutorRequest, endpoint string) (*
 		model:         clientModel(req, model),
 		upstreamModel: upstream,
 		label:         firstNonEmpty(cred.Label, maskKey(cred.APIKey), req.AuthID),
+		requestID:     cpaRequestID(req),
 	}, nil
 }
 
@@ -166,7 +170,7 @@ func (s *Service) countTokens(req pluginapi.ExecutorRequest) []byte {
 func (s *Service) executeBuffered(req pluginapi.ExecutorRequest, endpoint string) []byte {
 	call, perr := s.prepareCall(req, endpoint)
 	if perr != nil {
-		s.recordFailure(clientModel(req, req.Model), endpoint, false, req.AuthID, perr)
+		s.recordFailure(req, endpoint, false, perr)
 		return errorEnvelopeFrom(perr)
 	}
 	var rec *callRecord

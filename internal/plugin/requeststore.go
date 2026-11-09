@@ -52,19 +52,26 @@ CREATE TABLE IF NOT EXISTS requests (
 	tokens_per_second  REAL,
 	error_code         TEXT    NOT NULL DEFAULT '',
 	error              TEXT    NOT NULL DEFAULT '',
-	error_phase        TEXT    NOT NULL DEFAULT ''
+	error_phase        TEXT    NOT NULL DEFAULT '',
+	request_id         TEXT    NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS requests_time ON requests(time_ms);
 `
 
 const requestColumns = `time_ms, endpoint, model, upstream_model, served_model, reasoning_effort, stream, status, http_status,
 	credential, auth_id, duration_ms, ttft_ms, input_tokens, output_tokens, cached_tokens, cache_write_tokens,
-	reasoning_tokens, tokens_per_second, error_code, error, error_phase`
+	reasoning_tokens, tokens_per_second, error_code, error, error_phase, request_id`
 
-const insertRequest = `INSERT INTO requests (` + requestColumns + `) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+var insertRequest = `INSERT INTO requests (` + requestColumns + `) VALUES (?` + strings.Repeat(", ?", strings.Count(requestColumns, ",")) + `)`
+
+// requestMigrations add columns that came after the table was first created;
+// CREATE TABLE IF NOT EXISTS leaves an existing table as it is.
+var requestMigrations = []struct{ column, ddl string }{
+	{"request_id", `ALTER TABLE requests ADD COLUMN request_id TEXT NOT NULL DEFAULT ''`},
+}
 
 // requestSearchColumns are matched by the search box.
-var requestSearchColumns = []string{"CAST(id AS TEXT)", "model", "upstream_model", "served_model", "credential", "auth_id", "endpoint", "error_code", "error", "CAST(http_status AS TEXT)"}
+var requestSearchColumns = []string{"CAST(id AS TEXT)", "request_id", "model", "upstream_model", "served_model", "credential", "auth_id", "endpoint", "error_code", "error", "CAST(http_status AS TEXT)"}
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
@@ -133,6 +140,11 @@ func (l *requestLog) openLocked() {
 		l.failLocked("open request log: " + errSchema.Error())
 		return
 	}
+	if errMigrate := migrateRequestSchema(db); errMigrate != nil {
+		_ = db.Close()
+		l.failLocked("upgrade request log: " + errMigrate.Error())
+		return
+	}
 	l.db = db
 	l.importLegacyLocked()
 }
@@ -155,6 +167,37 @@ func (l *requestLog) renameLegacyDBLocked() {
 			return
 		}
 	}
+}
+
+// migrateRequestSchema adds the columns an older database lacks.
+func migrateRequestSchema(db *sql.DB) error {
+	rows, errRows := db.Query(`SELECT name FROM pragma_table_info('requests')`)
+	if errRows != nil {
+		return errRows
+	}
+	have := make(map[string]bool)
+	for rows.Next() {
+		var name string
+		if errScan := rows.Scan(&name); errScan != nil {
+			_ = rows.Close()
+			return errScan
+		}
+		have[name] = true
+	}
+	// Close before altering: the in-memory database has a single connection.
+	errIter := rows.Err()
+	_ = rows.Close()
+	if errIter != nil {
+		return errIter
+	}
+	for _, m := range requestMigrations {
+		if !have[m.column] {
+			if _, errAlter := db.Exec(m.ddl); errAlter != nil {
+				return errAlter
+			}
+		}
+	}
+	return nil
 }
 
 func (l *requestLog) failLocked(message string) {
@@ -219,7 +262,7 @@ func insertArgs(e logEntry) []any {
 	}
 	return []any{e.Time.UnixMilli(), e.Endpoint, e.Model, e.UpstreamModel, e.ServedModel, e.ReasoningEffort, stream, e.Status, e.HTTPStatus,
 		e.Credential, e.AuthID, e.DurationMS, ttft, e.InputTokens, e.OutputTokens, e.CachedTokens, e.CacheWrite,
-		e.ReasoningTokens, rate, e.ErrorCode, e.Error, e.ErrorPhase}
+		e.ReasoningTokens, rate, e.ErrorCode, e.Error, e.ErrorPhase, e.RequestID}
 }
 
 func (l *requestLog) add(entry logEntry) {
@@ -427,7 +470,7 @@ func scanEntry(rows *sql.Rows) (logEntry, error) {
 	var rate sql.NullFloat64
 	errScan := rows.Scan(&id, &timeMS, &e.Endpoint, &e.Model, &e.UpstreamModel, &e.ServedModel, &e.ReasoningEffort, &stream, &e.Status, &e.HTTPStatus,
 		&e.Credential, &e.AuthID, &e.DurationMS, &ttft, &e.InputTokens, &e.OutputTokens, &e.CachedTokens, &e.CacheWrite,
-		&e.ReasoningTokens, &rate, &e.ErrorCode, &e.Error, &e.ErrorPhase)
+		&e.ReasoningTokens, &rate, &e.ErrorCode, &e.Error, &e.ErrorPhase, &e.RequestID)
 	if errScan != nil {
 		return e, errScan
 	}

@@ -12,7 +12,10 @@ import (
 
 // logEntry is one executed request as shown on the request log tab.
 type logEntry struct {
-	ID              string    `json:"id"`
+	ID string `json:"id"`
+	// RequestID is CPA's request ID (the one in CPA's logs); empty for
+	// entries written before 0.1.7 learned it or when CPA did not send it.
+	RequestID       string    `json:"request_id,omitempty"`
 	Time            time.Time `json:"time"`
 	Endpoint        string    `json:"endpoint"`
 	Model           string    `json:"model"`
@@ -59,12 +62,21 @@ func (s *Service) startRecord(call *upstreamCall, stream bool) *callRecord {
 		Stream:          stream,
 		Credential:      call.label,
 		AuthID:          call.authID,
+		RequestID:       call.requestID,
 	}}
 }
 
 // recordFailure logs a call that failed before prepareCall produced a call.
-func (s *Service) recordFailure(model string, endpoint string, stream bool, authID string, perr *pluginabi.Error) {
-	rec := &callRecord{log: s.reqlog, start: time.Now(), entry: logEntry{Time: time.Now(), Endpoint: endpoint, Model: model, Stream: stream, AuthID: authID}}
+func (s *Service) recordFailure(req pluginapi.ExecutorRequest, endpoint string, stream bool, perr *pluginabi.Error) {
+	now := time.Now()
+	rec := &callRecord{log: s.reqlog, start: now, entry: logEntry{
+		Time:      now,
+		Endpoint:  endpoint,
+		Model:     clientModel(req, req.Model),
+		Stream:    stream,
+		AuthID:    req.AuthID,
+		RequestID: cpaRequestID(req),
+	}}
 	rec.finish(perr, "request")
 }
 

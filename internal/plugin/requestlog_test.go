@@ -1,8 +1,10 @@
 package plugin
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -206,5 +208,45 @@ func TestClientModel(t *testing.T) {
 		if got := clientModel(tc.req, tc.req.Model); got != tc.want {
 			t.Errorf("clientModel = %q, want %q", got, tc.want)
 		}
+	}
+}
+
+func TestRequestLogAddsRequestIDColumn(t *testing.T) {
+	dir := t.TempDir()
+	// A database written before request_id existed.
+	db, errOpen := sql.Open("sqlite", "file:"+filepath.ToSlash(filepath.Join(dir, requestLogDB)))
+	if errOpen != nil {
+		t.Fatal(errOpen)
+	}
+	oldSchema := strings.Replace(requestSchema, ",\n\trequest_id         TEXT    NOT NULL DEFAULT ''", "", 1)
+	if oldSchema == requestSchema {
+		t.Fatal("old schema still has request_id")
+	}
+	if _, errExec := db.Exec(oldSchema); errExec != nil {
+		t.Fatal(errExec)
+	}
+	if _, errExec := db.Exec(`INSERT INTO requests (time_ms, model, status) VALUES (?, 'old', 'success')`, time.Now().UnixMilli()); errExec != nil {
+		t.Fatal(errExec)
+	}
+	_ = db.Close()
+
+	log := newRequestLog(func(message string) { t.Errorf("warning: %s", message) })
+	defer log.close()
+	log.configure(dir, 100, 0)
+	log.add(logEntry{Model: "new", Status: "success", RequestID: "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"})
+	page := log.query(logQuery{})
+	if page.Error != "" || page.Total != 2 || page.Items[0].RequestID != "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b" || page.Items[1].RequestID != "" {
+		t.Fatalf("page = %+v", page)
+	}
+	// The 8 characters CPA prints in its log lines find the entry.
+	if found := log.query(logQuery{Search: "2e3f4a5b"}); found.Total != 1 || found.Items[0].Model != "new" {
+		t.Fatalf("search by short request ID: %+v", found)
+	}
+	// Reopening an upgraded database does not alter it again.
+	log.close()
+	log.configure("", 100, 0)
+	log.configure(dir, 100, 0)
+	if page = log.query(logQuery{}); page.Error != "" || page.Total != 2 {
+		t.Fatalf("reopen: %+v", page)
 	}
 }

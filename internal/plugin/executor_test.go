@@ -178,7 +178,9 @@ func TestExecuteRewritesModelAndForwards(t *testing.T) {
 	svc, _ := newTestService(t, upstream)
 	svc.reqlog.configure("", 10, 0)
 
-	envelope := decodeEnvelope(t, svc.execute(executorRequest("openai", "wokey/model-a", `{"model":"wokey/model-a","messages":[]}`)))
+	req := executorRequest("openai", "wokey/model-a", `{"model":"wokey/model-a","messages":[]}`)
+	req.Headers.Set(cpaRequestIDHeader, "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b")
+	envelope := decodeEnvelope(t, svc.execute(req))
 	if !envelope.OK {
 		t.Fatalf("execute failed: %+v", envelope.Error)
 	}
@@ -193,6 +195,9 @@ func TestExecuteRewritesModelAndForwards(t *testing.T) {
 	if got.Header.Get("Authorization") != "Bearer "+testGoodKey || got.Header.Get("Accept") != "application/json" || got.Body["model"] != "model-a" {
 		t.Fatalf("upstream saw %+v", got)
 	}
+	if leaked := got.Header.Get(cpaRequestIDHeader); leaked != "" {
+		t.Fatalf("the CPA request ID header reached Wokey: %q", leaked)
+	}
 	if beta := got.Header.Get("Anthropic-Beta"); beta != "" {
 		t.Fatalf("Anthropic headers must not reach the OpenAI endpoints, got %q", beta)
 	}
@@ -200,7 +205,7 @@ func TestExecuteRewritesModelAndForwards(t *testing.T) {
 		t.Fatalf("User-Agent = %q", ua)
 	}
 	items := svc.reqlog.query(logQuery{}).Items
-	if len(items) != 1 || items[0].Credential != maskKey(testGoodKey) || items[0].AuthID != "wokey-test.json" || items[0].Model != "wokey/model-a" || items[0].UpstreamModel != "model-a" {
+	if len(items) != 1 || items[0].Credential != maskKey(testGoodKey) || items[0].AuthID != "wokey-test.json" || items[0].Model != "wokey/model-a" || items[0].UpstreamModel != "model-a" || items[0].RequestID != "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b" {
 		t.Fatalf("log entries = %+v", items)
 	}
 }
@@ -329,6 +334,14 @@ func TestRegisterCapabilities(t *testing.T) {
 	if !caps.AuthProvider || !caps.ModelProvider || !caps.Executor || !caps.ManagementAPI || !caps.QuotaProvider {
 		t.Errorf("capabilities = %+v", caps)
 	}
+	if !caps.RequestInterceptor || !caps.RequestInterceptorOmitBodyBefore || !caps.RequestInterceptorOmitBodyAfter {
+		t.Errorf("request interceptor = %+v", caps)
+	}
+	// A host that cannot leave out request bodies gets no interceptor.
+	raw, _ = json.Marshal(rpcLifecycleRequest{ConfigYAML: []byte(config), SchemaVersion: pluginabi.SchemaVersionRawManagementResponse})
+	if old := mustDecode[rpcRegistration](t, decodeEnvelope(t, svc.Call(pluginabi.MethodPluginRegister, raw)).Result); old.Capabilities.RequestInterceptor || old.SchemaVersion != pluginabi.SchemaVersionRawManagementResponse {
+		t.Errorf("schema 6 registration = %+v", old)
+	}
 	if reg.Metadata.Logo != logoPath || len(reg.Metadata.ConfigFields) != 8 {
 		t.Errorf("metadata = %+v", reg.Metadata)
 	}
@@ -397,5 +410,55 @@ func TestCallDispatchRPCs(t *testing.T) {
 	}
 	if envelope = call(pluginabi.MethodModelStatic, struct{}{}); !envelope.OK || len(mustDecode[pluginapi.ModelResponse](t, envelope.Result).Models) != 0 {
 		t.Fatalf("model.static: %+v", envelope)
+	}
+}
+
+func TestRequestInterceptorStampsWokeyRequests(t *testing.T) {
+	svc, _ := newTestService(t, nil)
+	call := func(method string, req any) pluginapi.RequestInterceptResponse {
+		t.Helper()
+		raw, _ := json.Marshal(req)
+		envelope := decodeEnvelope(t, svc.Call(method, raw))
+		if !envelope.OK {
+			t.Fatalf("%s: %+v", method, envelope.Error)
+		}
+		return mustDecode[pluginapi.RequestInterceptResponse](t, envelope.Result)
+	}
+	intercept := func(authID, traceID string) pluginapi.RequestInterceptResponse {
+		t.Helper()
+		return call(pluginabi.MethodRequestInterceptAfter, rpcRequestInterceptRequest{RequestInterceptRequest: pluginapi.RequestInterceptRequest{
+			RequestID: "lifecycle-id",
+			TraceID:   traceID,
+			Headers:   http.Header{"Authorization": {"Bearer client"}},
+			Metadata:  map[string]any{selectedAuthMetadataKey: authID, "requested_model": "wokey/model-a"},
+		}})
+	}
+
+	if resp := call(pluginabi.MethodRequestInterceptBefore, rpcRequestInterceptRequest{}); len(resp.Headers) != 0 || len(resp.ClearHeaders) != 0 || resp.Terminate {
+		t.Fatalf("before auth = %+v", resp)
+	}
+	// Until the auth is known as a Wokey credential, requests are left alone.
+	if resp := intercept("w.json", "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"); len(resp.Headers) != 0 || len(resp.ClearHeaders) != 0 {
+		t.Fatalf("unknown auth = %+v", resp)
+	}
+	svc.modelsForAuth(pluginapi.AuthModelRequest{AuthID: "w.json", StorageJSON: []byte(`{"type":"wokey","api_key":"k"}`)})
+	resp := intercept("w.json", "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b")
+	if got := resp.Headers.Values(cpaRequestIDHeader); len(got) != 1 || got[0] != "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b" || len(resp.Headers) != 1 {
+		t.Fatalf("wokey auth = %+v", resp)
+	}
+	// Without a trace ID a client-sent value is dropped instead of logged.
+	if resp = intercept("w.json", ""); len(resp.Headers) != 0 || len(resp.ClearHeaders) != 1 || resp.ClearHeaders[0] != cpaRequestIDHeader {
+		t.Fatalf("no trace ID = %+v", resp)
+	}
+	if resp = intercept("codex-a.json", "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"); len(resp.Headers) != 0 || len(resp.ClearHeaders) != 0 {
+		t.Fatalf("other provider = %+v", resp)
+	}
+	// Executing on an auth also marks it, so a reloaded plugin catches up.
+	svc.prepareCall(executorRequest("openai", "wokey/model-a", `{}`), endpointChat)
+	if !svc.isWokeyAuth("wokey-test.json") {
+		t.Fatal("executor auth not remembered")
+	}
+	if envelope := decodeEnvelope(t, svc.Call(pluginabi.MethodRequestInterceptAfter, []byte(`{bad`))); envelope.OK || envelope.Error.Code != "invalid_request" {
+		t.Fatalf("bad request: %+v", envelope)
 	}
 }

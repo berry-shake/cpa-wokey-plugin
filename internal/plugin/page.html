@@ -908,7 +908,7 @@
       'logs.all': 'All',
       'logs.success': 'Success',
       'logs.error': 'Error',
-      'logs.search': 'Search model, key, error',
+      'logs.search': 'Search request ID, model, key, error',
       'logs.hint': 'Keeps the latest {n} requests on disk',
       'logs.hintDays': 'Keeps up to {n} requests from the last {d} days on disk',
       'logs.hintOff': 'Request logging is off (log-retention: 0)',
@@ -963,6 +963,7 @@
       'logs.d.reasoning': 'Reasoning tokens',
       'logs.d.speed': 'Output speed',
       'logs.d.auth': 'Auth Index',
+      'logs.d.reqid': 'Request ID',
       'logs.d.key': 'API key',
       'logs.d.error': 'Error',
       'logs.phase.request': 'before output',
@@ -1184,7 +1185,7 @@
       'logs.all': '全部',
       'logs.success': '成功',
       'logs.error': '失败',
-      'logs.search': '搜索模型、凭据、错误',
+      'logs.search': '搜索请求 ID、模型、凭据、错误',
       'logs.hint': '磁盘上保留最近 {n} 条请求',
       'logs.hintDays': '磁盘上保留最近 {d} 天、最多 {n} 条请求',
       'logs.hintOff': '请求日志已关闭（log-retention: 0）',
@@ -1239,6 +1240,7 @@
       'logs.d.reasoning': '思考 Token',
       'logs.d.speed': '输出速度',
       'logs.d.auth': 'Auth Index',
+      'logs.d.reqid': '请求 ID',
       'logs.d.key': 'API Key',
       'logs.d.error': '错误信息',
       'logs.phase.request': '输出前',
@@ -3005,6 +3007,13 @@
       note ? el('div', { class: 'strip-note', text: note }) : null);
   }
 
+  // CPA prints the last 8 characters of its request ID in log lines and
+  // request log file names; the full ID is in the tooltip.
+  function logRequestID(e) {
+    const id = String(e.request_id || '').trim();
+    return id.length > 8 ? id.slice(-8) : (id || '—');
+  }
+
   function detailItem(label, value, extra) {
     return el('div', { class: extra || '' }, el('span', { class: 'sub', text: label }), el('span', { class: 'mono', text: value }));
   }
@@ -3052,10 +3061,12 @@
           el('div', { text: fmtCount(e.input_tokens) + ' / ' + fmtCount(e.output_tokens), title: t('logs.usageHint') }),
           el('div', { class: 'sub', title: t('logs.speedHint') }, t('logs.cacheLine', { c: fmtCount(e.cached_tokens), p: cacheRate }) + ' · ' + fmtRate(e.output_tokens_per_second))),
         el('span', { class: 'log-chev', 'aria-hidden': 'true', text: '›' }));
+      const reqID = detailItem(t('logs.d.reqid'), logRequestID(e));
+      if (e.request_id) reqID.lastChild.title = e.request_id;
       const authIndex = detailItem(t('logs.d.auth'), logAuthIndex(e));
       const keyItem = detailItem(t('logs.d.key'), logKey(e) || '—');
       const detail = el('div', { class: 'log-detail' },
-        detailItem('ID', e.id),
+        reqID,
         detailItem(t('logs.d.endpoint'), e.endpoint || '—'),
         detailItem(t('logs.d.stream'), e.stream ? t('logs.yes') : t('logs.no')),
         detailItem(t('logs.d.status'), String(e.http_status || '—')),
