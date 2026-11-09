@@ -33,7 +33,7 @@ plugins:
 ```bash
 curl -X POST -H "Authorization: Bearer $MANAGEMENT_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"version":"0.1.7"}' \
+  -d '{"version":"0.1.8"}' \
   http://127.0.0.1:8317/v0/management/plugin-store/wokey/install
 ```
 
@@ -222,7 +222,7 @@ Wokey 在这个接口里会顺带结算冷却期已满的作废礼品卡，除�
 
 从旧版本升级时，原来的 `requests.jsonl` 会在第一次启动时导入数据库，导入成功后删除。
 
-请求 ID 和 CPA 日志里的一样，显示末 8 位（悬停看完整 ID），在搜索框里粘贴这 8 位就能找到对应的记录。CPA 只把请求 ID 交给请求拦截器，所以插件注册了一个拦截器：CPA 选中 Wokey 凭据后，拦截器把请求 ID 放进内部请求头 `X-Wokey-Cpa-Request-Id`，执行器读出来记进日志。这个头不会转发给 Wokey；其他渠道的请求，拦截器不做任何修改。拦截器只读请求头和元数据，不接收请求体，需要 CPA 支持插件协议 schema 7；CPA 版本更老时不注册拦截器，日志里也就没有请求 ID。之前版本写的记录没有请求 ID，显示为"—"。
+详情里显示完整的请求 ID。CPA 日志和请求日志文件名里用的是它的末 8 位，把这 8 位粘贴进搜索框也能找到对应的记录。CPA 只把请求 ID 交给请求拦截器，所以插件注册了一个拦截器：CPA 选中 Wokey 凭据后，拦截器把请求 ID 放进内部请求头 `X-Wokey-Cpa-Request-Id`，执行器读出来记进日志。这个头不会转发给 Wokey；其他渠道的请求，拦截器不做任何修改。拦截器只读请求头和元数据，不接收请求体，需要 CPA 支持插件协议 schema 7；CPA 版本更老时不注册拦截器，日志里也就没有请求 ID。之前版本写的记录没有请求 ID，显示为"—"。
 
 启用、停用和删除走 CPA 原生的认证文件接口（`PATCH /v0/management/auth-files/status`、`DELETE /v0/management/auth-files?name=...`），和在 CPA 面板里操作效果相同。
 
@@ -267,13 +267,19 @@ curl -X PATCH -H "Authorization: Bearer $MANAGEMENT_KEY" \
 
 ## 本地构建
 
+管理页在 `web/`，用 React + TypeScript + Vite 写，构建成单个 HTML 文件后嵌进插件。需要 Node 20 和 Go：
+
 ```bash
+make web        # 构建管理页，输出到 internal/web/dist/index.html
+make web-test   # 管理页的单元测试
 go test ./...
 CGO_ENABLED=1 go build -buildmode=c-shared \
-  -ldflags '-X main.pluginVersion=0.1.7-dev' \
+  -ldflags '-X main.pluginVersion=0.1.8-dev' \
   -o wokey.dylib .
 ```
 
-Linux 用 `.so`，Windows 用 `.dll`。c-shared 构建会顺带生成一个 C 头文件，宿主用不到它。
+Linux 用 `.so`，Windows 用 `.dll`。c-shared 构建会顺带生成一个 C 头文件，宿主用不到它。没执行 `make web` 就构建的话，管理页只是一个提示"尚未构建"的占位页。
 
-推送 `v*` tag 后，GitHub Actions 会先跑 gofmt / vet / test，再构建五个平台的产物，按插件商店规范打包成 `wokey_<version>_<goos>_<goarch>.zip` 并连同 `checksums.txt` 发布 Release。
+本地调试管理页可以在 `web/` 里运行 `npm run dev`，开发服务器会把管理接口代理到 `VITE_CPA_BASE`（默认 `http://127.0.0.1:8317`）。
+
+推送 `v*` tag 后，GitHub Actions 会先构建管理页并跑前端测试，再跑 gofmt / vet / test，然后构建五个平台的产物，按插件商店规范打包成 `wokey_<version>_<goos>_<goarch>.zip` 并连同 `checksums.txt` 发布 Release。
