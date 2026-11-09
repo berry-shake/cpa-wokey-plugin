@@ -144,17 +144,19 @@ func TestRequestLogRenamesOldDatabase(t *testing.T) {
 	}
 }
 
-func TestRequestLogAddsRequestIDColumn(t *testing.T) {
+func TestRequestLogUpgradesOldTable(t *testing.T) {
 	dir := t.TempDir()
-	// A database written before request_id existed.
-	db, errOpen := sql.Open("sqlite", "file:"+filepath.ToSlash(filepath.Join(dir, requestLogDB)))
+	// A database written by early 0.1.7, before request_id and the 0.1.9
+	// columns existed.
+	db, errOpen := sql.Open("sqlite3", "file:"+filepath.ToSlash(filepath.Join(dir, requestLogDB)))
 	if errOpen != nil {
 		t.Fatal(errOpen)
 	}
-	oldSchema := strings.Replace(requestSchema, ",\n\trequest_id         TEXT    NOT NULL DEFAULT ''", "", 1)
-	if oldSchema == requestSchema {
-		t.Fatal("old schema still has request_id")
+	cut, end := strings.Index(requestSchema, ",\n\trequest_id"), strings.Index(requestSchema, "\n);")
+	if cut < 0 || end < cut {
+		t.Fatal("schema layout changed")
 	}
+	oldSchema := requestSchema[:cut] + requestSchema[end:]
 	if _, errExec := db.Exec(oldSchema); errExec != nil {
 		t.Fatal(errExec)
 	}
@@ -166,20 +168,51 @@ func TestRequestLogAddsRequestIDColumn(t *testing.T) {
 	log := New(func(message string) { t.Errorf("warning: %s", message) })
 	defer log.Close()
 	log.Configure(dir, 100, 0)
-	log.Add(Entry{Model: "new", Status: "success", RequestID: "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"})
+	frames, last, reported := int64(42), int64(8100), false
+	log.Add(Entry{
+		Model: "new", Status: "success", RequestID: "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+		ClientPath: "/v1/messages", UserAgent: "claude-cli/2.1", AuthIndex: "9d3c", Egress: "socks5://p.example:1080",
+		UpstreamStatus: 200, UpstreamRequestID: "req_1", RetryAfter: 7, FinishReason: "end_turn",
+		Frames: &frames, LastFrameMS: &last, UsageReported: &reported,
+	})
 	page := log.Query(Query{})
 	if page.Error != "" || page.Total != 2 || page.Items[0].RequestID != "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b" || page.Items[1].RequestID != "" {
 		t.Fatalf("page = %+v", page)
 	}
+	e, old := page.Items[0], page.Items[1]
+	if e.ClientPath != "/v1/messages" || e.UserAgent != "claude-cli/2.1" || e.AuthIndex != "9d3c" || e.Egress != "socks5://p.example:1080" ||
+		e.UpstreamStatus != 200 || e.UpstreamRequestID != "req_1" || e.RetryAfter != 7 || e.FinishReason != "end_turn" ||
+		e.Frames == nil || *e.Frames != 42 || e.LastFrameMS == nil || *e.LastFrameMS != 8100 || e.UsageReported == nil || *e.UsageReported {
+		t.Fatalf("new entry = %+v", e)
+	}
+	if old.Frames != nil || old.LastFrameMS != nil || old.UsageReported != nil || old.UpstreamStatus != 0 {
+		t.Fatalf("old entry = %+v", old)
+	}
+	// The attempts of one request are found by its full ID only.
+	if found := log.Query(Query{RequestID: "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"}); found.Total != 1 || found.Items[0].Model != "new" {
+		t.Fatalf("by request ID: %+v", found)
+	}
+	// CPA retried the request on another credential.
+	log.Add(Entry{Model: "retry", Status: "error", RequestID: "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b"})
+	if found := log.Query(Query{}); found.Items[0].Attempts != 2 || found.Items[1].Attempts != 2 || found.Items[2].Attempts != 1 {
+		t.Fatalf("attempts = %+v", found.Items)
+	}
+	if found := log.Query(Query{RequestID: "2e3f4a5b"}); found.Total != 0 {
+		t.Fatalf("partial request ID matched: %+v", found)
+	}
+	var plan string
+	if errPlan := log.db.QueryRow(`EXPLAIN QUERY PLAN SELECT id FROM requests WHERE request_id = ?`, "x").Scan(new(int), new(int), new(int), &plan); errPlan != nil || !strings.Contains(plan, "requests_request_id") {
+		t.Fatalf("request ID lookup plan = %q, %v", plan, errPlan)
+	}
 	// The 8 characters CPA prints in its log lines find the entry.
-	if found := log.Query(Query{Search: "2e3f4a5b"}); found.Total != 1 || found.Items[0].Model != "new" {
+	if found := log.Query(Query{Search: "2e3f4a5b"}); found.Total != 2 || found.Items[1].Model != "new" {
 		t.Fatalf("search by short request ID: %+v", found)
 	}
 	// Reopening an upgraded database does not alter it again.
 	log.Close()
 	log.Configure("", 100, 0)
 	log.Configure(dir, 100, 0)
-	if page = log.Query(Query{}); page.Error != "" || page.Total != 2 {
+	if page = log.Query(Query{}); page.Error != "" || page.Total != 3 {
 		t.Fatalf("reopen: %+v", page)
 	}
 }

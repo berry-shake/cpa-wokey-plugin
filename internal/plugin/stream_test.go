@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/berry-shake/cpa-wokey-plugin/internal/requestlog"
 	"github.com/berry-shake/cpa-wokey-plugin/internal/wokey"
 )
 
@@ -47,6 +48,7 @@ func TestExecuteStreamMessages(t *testing.T) {
 		"data: [DONE]\n\n",
 	))
 	svc, host := newTestService(t, upstream)
+	svc.reqlog.Configure("", 10, 0)
 
 	req := rpcExecutorRequest{ExecutorRequest: executorRequest("claude", "wokey/model-a", `{"model":"wokey/model-a","stream":true}`), StreamID: "s1"}
 	envelope := decodeEnvelope(t, svc.executeStream(req))
@@ -65,6 +67,11 @@ func TestExecuteStreamMessages(t *testing.T) {
 	host.mu.Unlock()
 	if len(emitted) != 2 || !strings.HasPrefix(string(emitted[0]), "event: message_start") || !strings.HasPrefix(string(emitted[1]), "event: message_stop") {
 		t.Fatalf("emitted %q", emitted)
+	}
+	svc.streams.Wait() // the entry is written after the stream closes
+	e := svc.reqlog.Query(requestlog.Query{}).Items[0]
+	if e.Status != "success" || e.UpstreamStatus != 200 || e.Frames == nil || *e.Frames != 0 || e.UsageReported == nil || *e.UsageReported {
+		t.Fatalf("log entry = %+v", e)
 	}
 }
 
@@ -143,6 +150,7 @@ func TestExecuteStreamEarlyErrorFailsCall(t *testing.T) {
 		"event: error\ndata: {\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"slow down\"}}\n\n",
 	))
 	svc, host := newTestService(t, upstream)
+	svc.reqlog.Configure("", 10, 0)
 
 	req := rpcExecutorRequest{ExecutorRequest: executorRequest("claude", "wokey/model-a", `{"model":"wokey/model-a","stream":true}`), StreamID: "e1"}
 	if envelope := decodeEnvelope(t, svc.executeStream(req)); !envelope.OK {
@@ -156,6 +164,12 @@ func TestExecuteStreamEarlyErrorFailsCall(t *testing.T) {
 	defer host.mu.Unlock()
 	if len(host.emits["e1"]) != 0 {
 		t.Fatalf("nothing must be emitted before the error: %q", host.emits["e1"])
+	}
+	svc.streams.Wait()
+	// Wokey answered 200 and then reported 429 inside the stream.
+	e := svc.reqlog.Query(requestlog.Query{}).Items[0]
+	if e.UpstreamStatus != 200 || e.HTTPStatus != 429 || e.ErrorPhase != "request" || e.UsageReported != nil {
+		t.Fatalf("log entry = %+v", e)
 	}
 }
 

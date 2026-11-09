@@ -1,8 +1,12 @@
 package plugin
 
 import (
+	"encoding/json"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/berry-shake/cpa-wokey-plugin/internal/requestlog"
 	"github.com/berry-shake/cpa-wokey-plugin/internal/streamgate"
@@ -25,21 +29,78 @@ func TestParseLogTime(t *testing.T) {
 func TestCallRecordUsage(t *testing.T) {
 	log := requestlog.New(nil)
 	log.Configure("", 10, 0)
-	rec := &callRecord{log: log}
-	rec.observe(streamgate.Prelude, []byte("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-x\",\"usage\":{\"input_tokens\":3,\"cache_read_input_tokens\":7,\"cache_creation_input_tokens\":2}}}\n\n"))
+	rec := &callRecord{log: log, entry: requestlog.Entry{Stream: true, UpstreamStatus: 200}}
+	rec.observe(streamgate.Prelude, []byte("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-x\",\"stop_reason\":null,\"usage\":{\"input_tokens\":3,\"cache_read_input_tokens\":7,\"cache_creation_input_tokens\":2}}}\n\n"))
 	rec.observe(streamgate.Content, []byte("data: {\"type\":\"content_block_delta\"}\n\n"))
-	rec.observe(streamgate.Terminal, []byte("data: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":9}}\n\n"))
+	rec.observe(streamgate.Content, []byte("data: {\"type\":\"content_block_delta\"}\n\n"))
+	rec.observe(streamgate.Terminal, []byte("data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":9}}\n\n"))
 	rec.finish(nil, "")
-	rec = &callRecord{log: log}
+	// A buffered call that failed after Wokey answered: no stream fields.
+	rec = &callRecord{log: log, entry: requestlog.Entry{UpstreamStatus: 200}}
 	rec.observeJSON([]byte(`{"model":"gpt","usage":{"prompt_tokens":20,"completion_tokens":4,"prompt_tokens_details":{"cached_tokens":8},"completion_tokens_details":{"reasoning_tokens":2}}}`))
-	rec.finish(&pluginabi.Error{Code: "c", HTTPStatus: 429}, "stream")
+	rec.finish(&pluginabi.Error{Code: "c", HTTPStatus: 429, RetryAfterSeconds: 5}, "stream")
+	// A stream Wokey rejected before any output.
+	rec = &callRecord{log: log, entry: requestlog.Entry{Stream: true, UpstreamStatus: 200}}
+	rec.finish(&pluginabi.Error{Code: "rate_limit_error", HTTPStatus: 429}, "request")
 	items := log.Query(requestlog.Query{}).Items
-	e, a := items[0], items[1]
+	r, e, a := items[0], items[1], items[2]
 	if a.ServedModel != "claude-x" || a.InputTokens != 12 || a.CachedTokens != 7 || a.CacheWrite != 2 || a.OutputTokens != 9 || a.TTFTMS == nil {
 		t.Fatalf("anthropic = %+v", a)
 	}
+	if a.FinishReason != "end_turn" || a.Frames == nil || *a.Frames != 2 || a.LastFrameMS == nil || *a.LastFrameMS < *a.TTFTMS || a.UsageReported == nil || !*a.UsageReported {
+		t.Fatalf("anthropic stream fields = %+v", a)
+	}
 	if e.Status != "error" || e.ErrorPhase != "stream" || e.HTTPStatus != 429 || e.InputTokens != 20 || e.CachedTokens != 8 || e.ReasoningTokens != 2 {
 		t.Fatalf("chat = %+v", e)
+	}
+	if e.RetryAfter != 5 || e.Frames != nil || e.LastFrameMS != nil || e.UsageReported == nil || !*e.UsageReported {
+		t.Fatalf("chat extra fields = %+v", e)
+	}
+	if r.Frames == nil || *r.Frames != 0 || r.LastFrameMS != nil || r.UsageReported != nil {
+		t.Fatalf("rejected stream = %+v", r)
+	}
+}
+
+func TestFinishReason(t *testing.T) {
+	for body, want := range map[string]string{
+		`{"type":"message_delta","delta":{"stop_reason":"max_tokens"}}`:                                                         "max_tokens",
+		`{"type":"message","stop_reason":"tool_use"}`:                                                                           "tool_use",
+		`{"type":"message_start","message":{"stop_reason":null}}`:                                                               "",
+		`{"choices":[{"delta":{},"finish_reason":"length"}]}`:                                                                   "length",
+		`{"choices":[{"delta":{"content":"x"},"finish_reason":null}]}`:                                                          "",
+		`{"choices":[],"usage":{"prompt_tokens":1}}`:                                                                            "",
+		`{"type":"response.created","response":{"status":"in_progress"}}`:                                                       "",
+		`{"type":"response.completed","response":{"status":"completed"}}`:                                                       "completed",
+		`{"type":"response.incomplete","response":{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"}}}`: "max_output_tokens",
+		`{"object":"response","status":"completed","output":[]}`:                                                                "completed",
+		`{"status":"completed"}`: "",
+	} {
+		var payload map[string]any
+		if errJSON := json.Unmarshal([]byte(body), &payload); errJSON != nil {
+			t.Fatal(errJSON)
+		}
+		if got := finishReason(payload); got != want {
+			t.Errorf("%s = %q, want %q", body, got, want)
+		}
+	}
+}
+
+func TestBaseEntry(t *testing.T) {
+	req := pluginapi.ExecutorRequest{
+		AuthID:   "wokey-a.json",
+		Model:    "claude-x",
+		Headers:  http.Header{"User-Agent": {"claude-cli/2.1 " + strings.Repeat("é", 200)}},
+		Metadata: map[string]any{"request_path": "/v1/messages", "selected_auth_index": " 9d3c ", "requested_model": "wokey/claude-x"},
+	}
+	e := baseEntry(req, "/v1/messages", true, time.Unix(1, 0))
+	if e.ClientPath != "/v1/messages" || e.AuthIndex != "9d3c" || e.Model != "wokey/claude-x" || !e.Stream || e.AuthID != "wokey-a.json" {
+		t.Fatalf("entry = %+v", e)
+	}
+	if len(e.UserAgent) > maxUserAgent || !utf8.ValidString(e.UserAgent) || !strings.HasPrefix(e.UserAgent, "claude-cli/2.1 ") {
+		t.Fatalf("user agent = %q (%d bytes)", e.UserAgent, len(e.UserAgent))
+	}
+	if e = baseEntry(pluginapi.ExecutorRequest{}, "/v1/responses", false, time.Unix(1, 0)); e.UserAgent != "" || e.ClientPath != "" || e.AuthIndex != "" {
+		t.Fatalf("empty request = %+v", e)
 	}
 }
 

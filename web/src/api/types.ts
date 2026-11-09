@@ -164,6 +164,23 @@ export interface LogEntry {
   error_code?: string;
   error?: string;
   error_phase?: string;
+  // Since 0.1.9; absent on older entries.
+  client_path?: string;
+  user_agent?: string;
+  auth_index?: string;
+  /** "direct", "env" or the proxy as scheme://host:port. */
+  egress?: string;
+  /** What Wokey answered; 0 or absent when no response arrived. */
+  upstream_status?: number;
+  upstream_request_id?: string;
+  retry_after?: number;
+  finish_reason?: string;
+  frames?: number;
+  last_frame_ms?: number;
+  /** Set only once Wokey answered 2xx: whether the response carried usage. */
+  usage_reported?: boolean;
+  /** How many entries share the request ID (credentials CPA tried). */
+  attempts?: number;
 }
 
 export interface LogSummary {

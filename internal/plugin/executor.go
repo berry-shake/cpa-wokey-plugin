@@ -40,12 +40,12 @@ type upstreamCall struct {
 	header   http.Header
 	client   *http.Client
 	authID   string
-	// model, upstreamModel, label and requestID describe the call for the
+	// model, upstreamModel, keyMasked and egress describe the call for the
 	// request log.
 	model         string
 	upstreamModel string
-	label         string
-	requestID     string
+	keyMasked     string
+	egress        string
 }
 
 // prepareCall resolves the credential, egress and upstream model for one
@@ -112,8 +112,8 @@ func (s *Service) prepareCall(req pluginapi.ExecutorRequest, endpoint string) (*
 
 		model:         clientModel(req, model),
 		upstreamModel: upstream,
-		label:         firstNonEmpty(cred.Label, credential.MaskKey(cred.APIKey), req.AuthID),
-		requestID:     cpaRequestID(req),
+		keyMasked:     credential.MaskKey(cred.APIKey),
+		egress:        setting.Label(),
 	}, nil
 }
 
@@ -157,7 +157,7 @@ func (s *Service) executeBuffered(req pluginapi.ExecutorRequest, endpoint string
 	}
 	var rec *callRecord
 	if endpoint != wokey.EndpointCountTokens {
-		rec = s.startRecord(call, false)
+		rec = s.startRecord(req, call, false)
 	}
 	fail := func(perr *pluginabi.Error) []byte {
 		rec.finish(perr, "request")
@@ -174,6 +174,7 @@ func (s *Service) executeBuffered(req pluginapi.ExecutorRequest, endpoint string
 		return fail(wokey.TransportError(errDo))
 	}
 	defer func() { _ = resp.Body.Close() }()
+	rec.response(resp)
 	body, errRead := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if errRead != nil {
 		return fail(wokey.TransportError(fmt.Errorf("read response: %w", errRead)))

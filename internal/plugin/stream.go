@@ -51,7 +51,7 @@ func (s *Service) executeStream(req rpcExecutorRequest) []byte {
 		s.recordFailure(req.ExecutorRequest, endpoint, true, perr)
 		return errorEnvelopeFrom(perr)
 	}
-	rec := s.startRecord(call, true)
+	rec := s.startRecord(req.ExecutorRequest, call, true)
 	fail := func(perr *pluginabi.Error) []byte {
 		rec.finish(perr, "request")
 		return errorEnvelopeFrom(perr)
@@ -70,6 +70,7 @@ func (s *Service) executeStream(req rpcExecutorRequest) []byte {
 		cancel(nil)
 		return fail(wokey.TransportError(errDo))
 	}
+	rec.response(resp)
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, wokey.MaxErrorBodyBytes*4))
 		_ = resp.Body.Close()

@@ -2,9 +2,11 @@ package plugin
 
 import (
 	"encoding/json"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/berry-shake/cpa-wokey-plugin/internal/jsonfield"
 	"github.com/berry-shake/cpa-wokey-plugin/internal/requestlog"
@@ -13,48 +15,74 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
+// maxUserAgent bounds the client User-Agent kept in the log.
+const maxUserAgent = 256
+
 // callRecord collects one call's log entry while it runs.
 type callRecord struct {
 	log   *requestlog.Log
 	start time.Time
 	entry requestlog.Entry
 	usage usageTotals
-	first time.Time
+	// first and last are when the first and the latest output event
+	// arrived; frames counts output events.
+	first, last time.Time
+	frames      int64
 }
 
-func (s *Service) startRecord(call *upstreamCall, stream bool) *callRecord {
+// baseEntry fills in what the executor request tells about a call.
+func baseEntry(req pluginapi.ExecutorRequest, endpoint string, stream bool, now time.Time) requestlog.Entry {
+	path, _ := req.Metadata["request_path"].(string)
+	index, _ := req.Metadata["selected_auth_index"].(string)
+	return requestlog.Entry{
+		Time:       now,
+		Endpoint:   endpoint,
+		Model:      clientModel(req, req.Model),
+		Stream:     stream,
+		AuthID:     req.AuthID,
+		AuthIndex:  strings.TrimSpace(index),
+		RequestID:  cpaRequestID(req),
+		ClientPath: strings.TrimSpace(path),
+		UserAgent:  clip(strings.TrimSpace(req.Headers.Get("User-Agent")), maxUserAgent),
+	}
+}
+
+func (s *Service) startRecord(req pluginapi.ExecutorRequest, call *upstreamCall, stream bool) *callRecord {
 	now := time.Now()
-	return &callRecord{log: s.reqlog, start: now, entry: requestlog.Entry{
-		Time:            now,
-		Endpoint:        call.endpoint,
-		Model:           call.model,
-		UpstreamModel:   call.upstreamModel,
-		ReasoningEffort: reasoningEffort(call.body),
-		Stream:          stream,
-		Credential:      call.label,
-		AuthID:          call.authID,
-		RequestID:       call.requestID,
-	}}
+	entry := baseEntry(req, call.endpoint, stream, now)
+	entry.Model = call.model
+	entry.UpstreamModel = call.upstreamModel
+	entry.ReasoningEffort = reasoningEffort(call.body)
+	entry.Credential = call.keyMasked
+	entry.Egress = call.egress
+	return &callRecord{log: s.reqlog, start: now, entry: entry}
 }
 
 // recordFailure logs a call that failed before prepareCall produced a call.
 func (s *Service) recordFailure(req pluginapi.ExecutorRequest, endpoint string, stream bool, perr *pluginabi.Error) {
 	now := time.Now()
-	rec := &callRecord{log: s.reqlog, start: now, entry: requestlog.Entry{
-		Time:      now,
-		Endpoint:  endpoint,
-		Model:     clientModel(req, req.Model),
-		Stream:    stream,
-		AuthID:    req.AuthID,
-		RequestID: cpaRequestID(req),
-	}}
+	rec := &callRecord{log: s.reqlog, start: now, entry: baseEntry(req, endpoint, stream, now)}
 	rec.finish(perr, "request")
+}
+
+// response notes Wokey's status and request ID.
+func (r *callRecord) response(resp *http.Response) {
+	if r == nil {
+		return
+	}
+	r.entry.UpstreamStatus = resp.StatusCode
+	r.entry.UpstreamRequestID = firstNonEmpty(resp.Header.Get("X-Request-Id"), resp.Header.Get("Request-Id"))
 }
 
 // observe looks at a stream event that went through the gate.
 func (r *callRecord) observe(kind streamgate.Kind, event []byte) {
-	if kind == streamgate.Content && r.first.IsZero() {
-		r.first = time.Now()
+	if kind == streamgate.Content {
+		now := time.Now()
+		if r.first.IsZero() {
+			r.first = now
+		}
+		r.last = now
+		r.frames++
 	}
 	_, data := streamgate.EventFields(event)
 	if len(data) > 0 && data[0] == '{' {
@@ -79,6 +107,52 @@ func (r *callRecord) observeJSON(data []byte) {
 		}
 	}
 	r.usage.merge(payload["usage"])
+	if reason := finishReason(payload); reason != "" {
+		r.entry.FinishReason = reason
+	}
+}
+
+// finishReason reads why the model stopped from a response or stream event.
+func finishReason(payload map[string]any) string {
+	// Messages: message_delta carries delta.stop_reason, a buffered message
+	// has it at the top.
+	if delta, ok := payload["delta"].(map[string]any); ok {
+		if reason := jsonfield.Text(delta["stop_reason"]); reason != "" {
+			return reason
+		}
+	}
+	if reason := jsonfield.Text(payload["stop_reason"]); reason != "" {
+		return reason
+	}
+	// Chat Completions, buffered or streamed.
+	if choices, ok := payload["choices"].([]any); ok {
+		for _, raw := range choices {
+			if choice, ok := raw.(map[string]any); ok {
+				if reason := jsonfield.Text(choice["finish_reason"]); reason != "" {
+					return reason
+				}
+			}
+		}
+	}
+	// Responses: the response object is the body when buffered and sits
+	// under "response" in stream events.
+	response, ok := payload["response"].(map[string]any)
+	if !ok {
+		if _, buffered := payload["output"]; !buffered {
+			return ""
+		}
+		response = payload
+	}
+	if details, ok := response["incomplete_details"].(map[string]any); ok {
+		if reason := jsonfield.Text(details["reason"]); reason != "" {
+			return reason
+		}
+	}
+	switch status := jsonfield.Text(response["status"]); status {
+	case "completed", "incomplete", "failed", "cancelled":
+		return status
+	}
+	return ""
 }
 
 func (r *callRecord) finish(perr *pluginabi.Error, phase string) {
@@ -104,12 +178,29 @@ func (r *callRecord) finish(perr *pluginabi.Error, phase string) {
 			entry.TokensPerSecond = &rate
 		}
 	}
+	if answered := entry.UpstreamStatus >= 200 && entry.UpstreamStatus <= 299; answered {
+		if entry.Stream {
+			frames := r.frames
+			entry.Frames = &frames
+			if !r.last.IsZero() {
+				last := r.last.Sub(r.start).Milliseconds()
+				entry.LastFrameMS = &last
+			}
+		}
+		// Usage is expected once a response is being delivered; an error
+		// inside the stream before any output has none to report.
+		if perr == nil || phase == "stream" {
+			reported := r.usage.seen
+			entry.UsageReported = &reported
+		}
+	}
 	if perr != nil {
 		entry.Status = "error"
 		entry.HTTPStatus = perr.HTTPStatus
 		entry.ErrorCode = perr.Code
 		entry.Error = perr.Message
 		entry.ErrorPhase = phase
+		entry.RetryAfter = perr.RetryAfterSeconds
 	} else {
 		entry.Status = "success"
 		entry.HTTPStatus = 200
@@ -122,6 +213,8 @@ func (r *callRecord) finish(perr *pluginabi.Error, phase string) {
 // and output in message_delta).
 type usageTotals struct {
 	input, output, cached, cacheWrite, reasoning int64
+	// seen is set once any usage object arrived.
+	seen bool
 }
 
 func (u *usageTotals) merge(raw any) {
@@ -129,6 +222,7 @@ func (u *usageTotals) merge(raw any) {
 	if !ok {
 		return
 	}
+	u.seen = true
 	set := func(target *int64, value int64) {
 		if value > 0 {
 			*target = value
@@ -207,6 +301,17 @@ func reasoningEffort(body []byte) string {
 func clientModel(req pluginapi.ExecutorRequest, fallback string) string {
 	requested, _ := req.Metadata["requested_model"].(string)
 	return firstNonEmpty(requested, topLevelString(req.OriginalRequest, "model"), fallback)
+}
+
+// clip cuts text to at most limit bytes without splitting a character.
+func clip(text string, limit int) string {
+	if len(text) <= limit {
+		return text
+	}
+	for limit > 0 && !utf8.RuneStart(text[limit]) {
+		limit--
+	}
+	return text[:limit]
 }
 
 func firstNonEmpty(values ...string) string {

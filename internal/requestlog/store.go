@@ -13,7 +13,9 @@ import (
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite" // pure Go, so the c-shared plugin carries no C symbols that could clash with the host
+	// SQLite compiled into the plugin. CPA loads plugins with RTLD_LOCAL, so
+	// its C symbols stay private to this library.
+	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
@@ -53,14 +55,34 @@ CREATE TABLE IF NOT EXISTS requests (
 	error_code         TEXT    NOT NULL DEFAULT '',
 	error              TEXT    NOT NULL DEFAULT '',
 	error_phase        TEXT    NOT NULL DEFAULT '',
-	request_id         TEXT    NOT NULL DEFAULT ''
+	request_id         TEXT    NOT NULL DEFAULT '',
+	client_path        TEXT    NOT NULL DEFAULT '',
+	user_agent         TEXT    NOT NULL DEFAULT '',
+	auth_index         TEXT    NOT NULL DEFAULT '',
+	egress             TEXT    NOT NULL DEFAULT '',
+	upstream_status    INTEGER NOT NULL DEFAULT 0,
+	upstream_request_id TEXT   NOT NULL DEFAULT '',
+	retry_after        INTEGER NOT NULL DEFAULT 0,
+	finish_reason      TEXT    NOT NULL DEFAULT '',
+	frames             INTEGER,
+	last_frame_ms      INTEGER,
+	usage_reported     INTEGER
 );
 CREATE INDEX IF NOT EXISTS requests_time ON requests(time_ms);
 `
 
+// requestIndexes are created after the migrations, since they cover columns
+// an older table gains there.
+const requestIndexes = `CREATE INDEX IF NOT EXISTS requests_request_id ON requests(request_id);`
+
 const requestColumns = `time_ms, endpoint, model, upstream_model, served_model, reasoning_effort, stream, status, http_status,
 	credential, auth_id, duration_ms, ttft_ms, input_tokens, output_tokens, cached_tokens, cache_write_tokens,
-	reasoning_tokens, tokens_per_second, error_code, error, error_phase, request_id`
+	reasoning_tokens, tokens_per_second, error_code, error, error_phase, request_id,
+	client_path, user_agent, auth_index, egress, upstream_status, upstream_request_id, retry_after, finish_reason,
+	frames, last_frame_ms, usage_reported`
+
+// attemptsColumn counts the entries of the same CPA request.
+const attemptsColumn = `CASE WHEN request_id = '' THEN 1 ELSE (SELECT COUNT(*) FROM requests AS same WHERE same.request_id = requests.request_id) END`
 
 var insertRequest = `INSERT INTO requests (` + requestColumns + `) VALUES (?` + strings.Repeat(", ?", strings.Count(requestColumns, ",")) + `)`
 
@@ -68,10 +90,22 @@ var insertRequest = `INSERT INTO requests (` + requestColumns + `) VALUES (?` + 
 // CREATE TABLE IF NOT EXISTS leaves an existing table as it is.
 var requestMigrations = []struct{ column, ddl string }{
 	{"request_id", `ALTER TABLE requests ADD COLUMN request_id TEXT NOT NULL DEFAULT ''`},
+	{"client_path", `ALTER TABLE requests ADD COLUMN client_path TEXT NOT NULL DEFAULT ''`},
+	{"user_agent", `ALTER TABLE requests ADD COLUMN user_agent TEXT NOT NULL DEFAULT ''`},
+	{"auth_index", `ALTER TABLE requests ADD COLUMN auth_index TEXT NOT NULL DEFAULT ''`},
+	{"egress", `ALTER TABLE requests ADD COLUMN egress TEXT NOT NULL DEFAULT ''`},
+	{"upstream_status", `ALTER TABLE requests ADD COLUMN upstream_status INTEGER NOT NULL DEFAULT 0`},
+	{"upstream_request_id", `ALTER TABLE requests ADD COLUMN upstream_request_id TEXT NOT NULL DEFAULT ''`},
+	{"retry_after", `ALTER TABLE requests ADD COLUMN retry_after INTEGER NOT NULL DEFAULT 0`},
+	{"finish_reason", `ALTER TABLE requests ADD COLUMN finish_reason TEXT NOT NULL DEFAULT ''`},
+	{"frames", `ALTER TABLE requests ADD COLUMN frames INTEGER`},
+	{"last_frame_ms", `ALTER TABLE requests ADD COLUMN last_frame_ms INTEGER`},
+	{"usage_reported", `ALTER TABLE requests ADD COLUMN usage_reported INTEGER`},
 }
 
 // requestSearchColumns are matched by the search box.
-var requestSearchColumns = []string{"CAST(id AS TEXT)", "request_id", "model", "upstream_model", "served_model", "credential", "auth_id", "endpoint", "error_code", "error", "CAST(http_status AS TEXT)"}
+var requestSearchColumns = []string{"CAST(id AS TEXT)", "request_id", "model", "upstream_model", "served_model", "credential", "auth_id", "endpoint", "error_code", "error", "CAST(http_status AS TEXT)",
+	"upstream_request_id", "client_path", "user_agent", "auth_index", "finish_reason"}
 
 var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 
@@ -127,7 +161,7 @@ func (l *Log) openLocked() {
 		l.renameLegacyDBLocked()
 		dsn = "file:" + filepath.ToSlash(filepath.Join(l.dir, requestLogDB))
 	}
-	db, errOpen := sql.Open("sqlite", dsn+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)")
+	db, errOpen := sql.Open("sqlite3", dsn+"?_busy_timeout=5000&_journal_mode=WAL&_synchronous=NORMAL")
 	if errOpen != nil {
 		l.failLocked("open request log: " + errOpen.Error())
 		return
@@ -199,7 +233,8 @@ func migrateRequestSchema(db *sql.DB) error {
 			}
 		}
 	}
-	return nil
+	_, errIndex := db.Exec(requestIndexes)
+	return errIndex
 }
 
 func (l *Log) failLocked(message string) {
@@ -251,20 +286,39 @@ func (l *Log) importLegacyLocked() {
 }
 
 func insertArgs(e Entry) []any {
-	var ttft, rate any
-	if e.TTFTMS != nil {
-		ttft = *e.TTFTMS
-	}
+	var rate, reported any
 	if e.TokensPerSecond != nil {
 		rate = *e.TokensPerSecond
 	}
-	stream := 0
-	if e.Stream {
-		stream = 1
+	if e.UsageReported != nil {
+		reported = boolInt(*e.UsageReported)
 	}
-	return []any{e.Time.UnixMilli(), e.Endpoint, e.Model, e.UpstreamModel, e.ServedModel, e.ReasoningEffort, stream, e.Status, e.HTTPStatus,
-		e.Credential, e.AuthID, e.DurationMS, ttft, e.InputTokens, e.OutputTokens, e.CachedTokens, e.CacheWrite,
-		e.ReasoningTokens, rate, e.ErrorCode, e.Error, e.ErrorPhase, e.RequestID}
+	return []any{e.Time.UnixMilli(), e.Endpoint, e.Model, e.UpstreamModel, e.ServedModel, e.ReasoningEffort, boolInt(e.Stream), e.Status, e.HTTPStatus,
+		e.Credential, e.AuthID, e.DurationMS, nullInt(e.TTFTMS), e.InputTokens, e.OutputTokens, e.CachedTokens, e.CacheWrite,
+		e.ReasoningTokens, rate, e.ErrorCode, e.Error, e.ErrorPhase, e.RequestID,
+		e.ClientPath, e.UserAgent, e.AuthIndex, e.Egress, e.UpstreamStatus, e.UpstreamRequestID, e.RetryAfter, e.FinishReason,
+		nullInt(e.Frames), nullInt(e.LastFrameMS), reported}
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func nullInt(v *int64) any {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
+func intPtr(v sql.NullInt64) *int64 {
+	if !v.Valid {
+		return nil
+	}
+	return &v.Int64
 }
 
 // Add stores one entry, pruning old rows as needed.
@@ -356,10 +410,13 @@ type Query struct {
 	Status string
 	// From and To bound the request start time (From inclusive, To
 	// exclusive); zero means unbounded.
-	From   time.Time
-	To     time.Time
-	Limit  int
-	Offset int
+	From time.Time
+	To   time.Time
+	// RequestID, when set, selects the entries of one CPA request (one per
+	// credential CPA tried).
+	RequestID string
+	Limit     int
+	Offset    int
 }
 
 // Summary totals every entry matching a query.
@@ -388,6 +445,10 @@ type Page struct {
 func (q Query) where() (string, []any) {
 	var conds []string
 	var args []any
+	if id := strings.TrimSpace(q.RequestID); id != "" {
+		conds = append(conds, "request_id = ?")
+		args = append(args, id)
+	}
 	if q.Status != "" && q.Status != "all" {
 		conds = append(conds, "status = ?")
 		args = append(args, q.Status)
@@ -450,7 +511,7 @@ func (l *Log) Query(q Query) Page {
 		limit = 50
 	}
 	page.Offset = min(max(q.Offset, 0), page.Total)
-	rows, errRows := db.Query(`SELECT id, `+requestColumns+` FROM requests`+where+` ORDER BY id DESC LIMIT ? OFFSET ?`, append(args, limit, page.Offset)...)
+	rows, errRows := db.Query(`SELECT id, `+requestColumns+`, `+attemptsColumn+` FROM requests`+where+` ORDER BY id DESC LIMIT ? OFFSET ?`, append(args, limit, page.Offset)...)
 	if errRows != nil {
 		page.Error = "read request log: " + errRows.Error()
 		return page
@@ -474,19 +535,23 @@ func scanEntry(rows *sql.Rows) (Entry, error) {
 	var e Entry
 	var id, timeMS int64
 	var stream int
-	var ttft sql.NullInt64
+	var ttft, frames, lastFrame, reported sql.NullInt64
 	var rate sql.NullFloat64
 	errScan := rows.Scan(&id, &timeMS, &e.Endpoint, &e.Model, &e.UpstreamModel, &e.ServedModel, &e.ReasoningEffort, &stream, &e.Status, &e.HTTPStatus,
 		&e.Credential, &e.AuthID, &e.DurationMS, &ttft, &e.InputTokens, &e.OutputTokens, &e.CachedTokens, &e.CacheWrite,
-		&e.ReasoningTokens, &rate, &e.ErrorCode, &e.Error, &e.ErrorPhase, &e.RequestID)
+		&e.ReasoningTokens, &rate, &e.ErrorCode, &e.Error, &e.ErrorPhase, &e.RequestID,
+		&e.ClientPath, &e.UserAgent, &e.AuthIndex, &e.Egress, &e.UpstreamStatus, &e.UpstreamRequestID, &e.RetryAfter, &e.FinishReason,
+		&frames, &lastFrame, &reported, &e.Attempts)
 	if errScan != nil {
 		return e, errScan
 	}
 	e.ID = strconv.FormatInt(id, 10)
 	e.Time = time.UnixMilli(timeMS).UTC()
 	e.Stream = stream != 0
-	if ttft.Valid {
-		e.TTFTMS = &ttft.Int64
+	e.TTFTMS, e.Frames, e.LastFrameMS = intPtr(ttft), intPtr(frames), intPtr(lastFrame)
+	if reported.Valid {
+		r := reported.Int64 != 0
+		e.UsageReported = &r
 	}
 	if rate.Valid {
 		e.TokensPerSecond = &rate.Float64

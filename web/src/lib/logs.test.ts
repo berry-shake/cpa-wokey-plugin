@@ -1,8 +1,11 @@
 import type { CredentialView } from "../api/types";
 import {
+  attemptCount,
   cacheRate,
   customRangeError,
+  finishKey,
   isFiltered,
+  isMaskedKey,
   isLogRange,
   jumpTarget,
   lastPageOffset,
@@ -12,6 +15,8 @@ import {
   logCred,
   logCredential,
   logKey,
+  logEnd,
+  logLabel,
   logRangeParams,
   logRequestID,
   nextMinute,
@@ -20,6 +25,7 @@ import {
   pagerView,
   parseLogSize,
   restoreLogRange,
+  usageMissing,
 } from "./logs";
 
 // Local wall-clock times, so the tests pass in any time zone.
@@ -192,11 +198,62 @@ describe("log entry display", () => {
     expect(logAuthIndex({ auth_id: "gone.json" }, creds)).toBe("—");
   });
 
-  it("shows the stored masked key, or the credential's for entries that stored the file name", () => {
+  it("prefers the auth index stored with the entry", () => {
+    expect(logAuthIndex({ auth_id: "gone.json", auth_index: "c0ffee" }, creds)).toBe("c0ffee");
+    expect(logAuthIndex({ auth_id: "id-b", auth_index: "c0ffee" }, creds)).toBe("c0ffee");
+    expect(logAuthIndex({ auth_id: "id-b", auth_index: "" }, creds)).toBe("8");
+  });
+
+  it("groups finish reasons of the three APIs", () => {
+    for (const r of ["stop", "end_turn", "stop_sequence", "completed", "END_TURN"]) expect(finishKey(r)).toBe("logs.finish.stop");
+    for (const r of ["length", "max_tokens", "max_output_tokens"]) expect(finishKey(r)).toBe("logs.finish.length");
+    for (const r of ["tool_use", "tool_calls"]) expect(finishKey(r)).toBe("logs.finish.tool");
+    for (const r of ["content_filter", "refusal"]) expect(finishKey(r)).toBe("logs.finish.filter");
+    expect(finishKey("pause_turn")).toBe("");
+    expect(finishKey("")).toBe("");
+    expect(finishKey(undefined)).toBe("");
+  });
+
+  it("works out the end time, missing usage and attempts", () => {
+    expect(logEnd({ time: "2026-11-08T10:02:11Z", duration_ms: 8421 })?.toISOString()).toBe("2026-11-08T10:02:19.421Z");
+    expect(logEnd({ time: "bad", duration_ms: 1 })).toBeNull();
+    expect(usageMissing({ usage_reported: false })).toBe(true);
+    expect(usageMissing({ usage_reported: true })).toBe(false);
+    expect(usageMissing({})).toBe(false);
+    expect(attemptCount({ request_id: "r", attempts: 3 })).toBe(3);
+    expect(attemptCount({ request_id: "r", attempts: 1 })).toBe(1);
+    expect(attemptCount({ request_id: "", attempts: 3 })).toBe(1);
+    expect(attemptCount({ request_id: "r" })).toBe(1);
+  });
+
+  it("shows the stored masked key, or the credential's for entries that stored a name", () => {
     expect(logKey({ auth_id: "wokey-aaaa.json", credential: "sk-wk-****old1" }, creds)).toBe("sk-wk-****old1");
+    expect(logKey({ auth_id: "wokey-aaaa.json", credential: "sk-wk-…old2" }, creds)).toBe("sk-wk-…old2");
     expect(logKey({ auth_id: "wokey-aaaa.json", credential: "wokey-aaaa.json" }, creds)).toBe("sk-wk-****aaaa");
+    expect(logKey({ auth_id: "wokey-aaaa.json", credential: "temptinglemon" }, creds)).toBe("sk-wk-****aaaa");
     expect(logKey({ auth_id: "gone.json", credential: "gone.json" }, creds)).toBe("");
+    expect(logKey({ auth_id: "gone.json", credential: "old label" }, creds)).toBe("");
     expect(logKey({ auth_id: "", credential: "" }, creds)).toBe("");
+  });
+
+  it("tells masked keys from labels", () => {
+    expect(isMaskedKey("sk-wk-…aaaa")).toBe(true);
+    expect(isMaskedKey("sk****")).toBe(true);
+    expect(isMaskedKey("****")).toBe(true);
+    expect(isMaskedKey("temptinglemon")).toBe(false);
+    expect(isMaskedKey("wokey-aaaa.json")).toBe(false);
+    expect(isMaskedKey(undefined)).toBe(false);
+  });
+
+  it("labels the credential when the label says more than the file name", () => {
+    const labelled = [{ ...creds[0], label: "team a" }, { ...creds[1], label: "wokey-bbbb" }];
+    expect(logLabel({ auth_id: "wokey-aaaa.json", credential: "sk-wk-…aaaa" }, labelled)).toBe("team a");
+    expect(logLabel({ auth_id: "wokey-aaaa.json", credential: "old name" }, labelled)).toBe("team a");
+    expect(logLabel({ auth_id: "id-b", credential: "wokey-bbbb" }, labelled)).toBe("");
+    expect(logLabel({ auth_id: "gone.json", credential: "old name" }, labelled)).toBe("old name");
+    expect(logLabel({ auth_id: "gone.json", credential: "gone" }, labelled)).toBe("");
+    expect(logLabel({ auth_id: "gone.json", credential: "gone.json" }, labelled)).toBe("");
+    expect(logLabel({ auth_id: "gone.json", credential: "sk-wk-…gone" }, labelled)).toBe("");
   });
 
   it("names the credential by its file stem", () => {

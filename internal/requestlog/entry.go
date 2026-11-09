@@ -34,4 +34,40 @@ type Entry struct {
 	// ErrorPhase is "request" (before any output reached the client) or
 	// "stream" (after output started).
 	ErrorPhase string `json:"error_phase,omitempty"`
+
+	// The fields below came in 0.1.9 and are empty on older entries.
+
+	// ClientPath is the path the client called on CPA; UserAgent is the
+	// client's User-Agent.
+	ClientPath string `json:"client_path,omitempty"`
+	UserAgent  string `json:"user_agent,omitempty"`
+	// AuthIndex is CPA's index of the credential, kept so the entry still
+	// names it after the credential is deleted.
+	AuthIndex string `json:"auth_index,omitempty"`
+	// Egress is "direct", "env" (the process environment) or the proxy, as
+	// scheme://host:port.
+	Egress string `json:"egress,omitempty"`
+	// UpstreamStatus is the HTTP status Wokey answered with, 0 when no
+	// response arrived. HTTPStatus is what CPA got, which differs for mapped
+	// errors and for errors inside a 200 stream.
+	UpstreamStatus int `json:"upstream_status,omitempty"`
+	// UpstreamRequestID is Wokey's request ID from the response headers.
+	UpstreamRequestID string `json:"upstream_request_id,omitempty"`
+	// RetryAfter is the wait in seconds Wokey asked for with a 429.
+	RetryAfter int `json:"retry_after,omitempty"`
+	// FinishReason is why the model stopped: stop_reason (Messages),
+	// finish_reason (Chat Completions) or the incomplete reason or status
+	// (Responses).
+	FinishReason string `json:"finish_reason,omitempty"`
+	// Frames counts the stream events that carried output and LastFrameMS
+	// is when the last one arrived, from the start. Streams only.
+	Frames      *int64 `json:"frames,omitempty"`
+	LastFrameMS *int64 `json:"last_frame_ms,omitempty"`
+	// UsageReported tells whether a response carried usage. It is set only
+	// once Wokey answered 2xx, so zero tokens can be told from unreported.
+	UsageReported *bool `json:"usage_reported,omitempty"`
+
+	// Attempts is how many entries share the request ID: one per credential
+	// CPA tried for the request. It is counted when queried, not stored.
+	Attempts int `json:"attempts,omitempty"`
 }

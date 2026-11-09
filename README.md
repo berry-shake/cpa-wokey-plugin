@@ -33,7 +33,7 @@ plugins:
 ```bash
 curl -X POST -H "Authorization: Bearer $MANAGEMENT_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"version":"0.1.8"}' \
+  -d '{"version":"0.1.9"}' \
   http://127.0.0.1:8317/v0/management/plugin-store/wokey/install
 ```
 
@@ -218,7 +218,7 @@ Wokey 在这个接口里会顺带结算冷却期已满的作废礼品卡，除�
 - **配置概览** 页：插件配置的当前生效值（可以展开成 YAML）、CPA 的强制前缀开关和全局代理。强制前缀没开时会提示同名模型会进入公共号池。
 - 支持 English / 中文。
 
-请求日志存在 SQLite 数据库 `<data-dir>/wokey.db`（默认 `plugins/wokey-data/wokey.db`，WAL 模式，旁边会有 `-wal` 和 `-shm` 文件），查询、筛选和统计都在数据库里做。超过 `log-retention` 条或早于 `log-retention-days` 天的记录会自动删掉。用的是纯 Go 的 SQLite（modernc.org/sqlite），不依赖系统的 libsqlite3。
+请求日志存在 SQLite 数据库 `<data-dir>/wokey.db`（默认 `plugins/wokey-data/wokey.db`，WAL 模式，旁边会有 `-wal` 和 `-shm` 文件），查询、筛选和统计都在数据库里做。超过 `log-retention` 条或早于 `log-retention-days` 天的记录会自动删掉。SQLite 用的是 [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3)，随插件一起编译进去，不依赖系统的 libsqlite3。
 
 从旧版本升级时，原来的 `requests.jsonl` 会在第一次启动时导入数据库，导入成功后删除。
 
@@ -274,7 +274,7 @@ make web        # 构建管理页，输出到 internal/web/dist/index.html
 make web-test   # 管理页的单元测试
 go test ./...
 CGO_ENABLED=1 go build -buildmode=c-shared \
-  -ldflags '-X main.pluginVersion=0.1.8-dev' \
+  -ldflags '-X main.pluginVersion=0.1.9-dev' \
   -o wokey.dylib .
 ```
 

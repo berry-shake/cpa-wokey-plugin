@@ -68,13 +68,15 @@ func TestExecuteRewritesModelAndForwards(t *testing.T) {
 	upstream.handle(wokey.EndpointChat, observe(seen, func(rw http.ResponseWriter, _ *http.Request) {
 		rw.Header().Set("X-Request-Id", "req-1")
 		rw.Header().Set("X-Internal", "secret")
-		writeJSON(rw, http.StatusOK, map[string]any{"id": "c1", "object": "chat.completion"})
+		writeJSON(rw, http.StatusOK, map[string]any{"id": "c1", "object": "chat.completion", "choices": []any{map[string]any{"finish_reason": "stop"}}})
 	}))
 	svc, _ := newTestService(t, upstream)
 	svc.reqlog.Configure("", 10, 0)
 
 	req := executorRequest("openai", "wokey/model-a", `{"model":"wokey/model-a","messages":[]}`)
 	req.Headers.Set(cpaRequestIDHeader, "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b")
+	req.Headers.Set("User-Agent", "codex_cli_rs/0.50")
+	req.Metadata = map[string]any{"request_path": "/v1/chat/completions", "selected_auth_index": "9d3c937e38fb865a"}
 	envelope := decodeEnvelope(t, svc.execute(req))
 	if !envelope.OK {
 		t.Fatalf("execute failed: %+v", envelope.Error)
@@ -103,6 +105,14 @@ func TestExecuteRewritesModelAndForwards(t *testing.T) {
 	if len(items) != 1 || items[0].Credential != credential.MaskKey(testGoodKey) || items[0].AuthID != "wokey-test.json" || items[0].Model != "wokey/model-a" || items[0].UpstreamModel != "model-a" || items[0].RequestID != "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b" {
 		t.Fatalf("log entries = %+v", items)
 	}
+	e := items[0]
+	if e.UpstreamStatus != 200 || e.UpstreamRequestID != "req-1" || e.FinishReason != "stop" || e.ClientPath != "/v1/chat/completions" || e.UserAgent != "codex_cli_rs/0.50" || e.AuthIndex != "9d3c937e38fb865a" || e.Egress != "env" {
+		t.Fatalf("log entry = %+v", e)
+	}
+	// No usage object came back, and buffered calls have no stream fields.
+	if e.UsageReported == nil || *e.UsageReported || e.Frames != nil {
+		t.Fatalf("usage and frames = %+v", e)
+	}
 }
 
 func TestExecuteMessagesSetsAnthropicHeaders(t *testing.T) {
@@ -127,11 +137,26 @@ func TestExecuteErrors(t *testing.T) {
 		rw.Header().Set("Retry-After", "3")
 		writeJSON(rw, http.StatusTooManyRequests, map[string]any{"error": map[string]any{"code": "rate_limited", "message": "slow"}})
 	})
+	upstream.handle(wokey.EndpointMessages, func(rw http.ResponseWriter, _ *http.Request) {
+		writeJSON(rw, 529, map[string]any{"type": "error", "error": map[string]any{"type": "overloaded_error", "message": "busy"}})
+	})
 	svc, _ := newTestService(t, upstream)
+	svc.reqlog.Configure("", 10, 0)
 
 	envelope := decodeEnvelope(t, svc.execute(executorRequest("openai-response", "wokey/model-a", `{"model":"x"}`)))
 	if envelope.OK || envelope.Error.HTTPStatus != 429 || envelope.Error.RetryAfterSeconds != 3 {
 		t.Fatalf("429: %+v", envelope.Error)
+	}
+	if e := svc.reqlog.Query(requestlog.Query{}).Items[0]; e.UpstreamStatus != 429 || e.HTTPStatus != 429 || e.RetryAfter != 3 || e.UsageReported != nil {
+		t.Fatalf("429 entry = %+v", e)
+	}
+	// CPA gets 503 for Wokey's 529; the log keeps both.
+	envelope = decodeEnvelope(t, svc.execute(executorRequest("claude", "wokey/model-a", `{"model":"x"}`)))
+	if envelope.OK || envelope.Error.HTTPStatus != 503 {
+		t.Fatalf("529: %+v", envelope.Error)
+	}
+	if e := svc.reqlog.Query(requestlog.Query{}).Items[0]; e.UpstreamStatus != 529 || e.HTTPStatus != 503 || e.RetryAfter != 0 {
+		t.Fatalf("529 entry = %+v", e)
 	}
 
 	envelope = decodeEnvelope(t, svc.execute(executorRequest("gemini", "wokey/model-a", `{}`)))

@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createApi, errorMessage, errorStatus, isAuthError } from "../api/client";
 import { readPanelKey } from "../api/panelKey";
-import type { CredentialView, LogPage, ModelsResponse, StatusView } from "../api/types";
+import type { CredentialView, LogEntry, LogPage, ModelsResponse, StatusView } from "../api/types";
 import { initialLang, saveLang, translate, type Lang, type Params } from "../i18n";
 import {
   credentialsOf, defaultPrefix, displayName, quotaQueue, statusHealth,
@@ -633,6 +633,12 @@ export class Store {
     } finally {
       if (!silent) this.setBusy("logs", false);
     }
+  }
+
+  /** The entries of one CPA request, oldest first: one per credential CPA tried. */
+  async logAttempts(requestID: string): Promise<LogEntry[]> {
+    const page = await this.api.logs(new URLSearchParams({ request_id: requestID, limit: "50" }));
+    return [...(page.items || [])].reverse();
   }
 
   private reloadLogsFromStart(silent: boolean): void {

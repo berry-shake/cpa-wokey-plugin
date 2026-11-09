@@ -458,20 +458,34 @@ tbody tr:last-child td { border-bottom: none; }
 .badge.ok { background: var(--success-soft); color: var(--success); }
 .badge.warn { background: var(--warning-soft); color: var(--warning); }
 .badge.danger { background: var(--danger-soft); color: var(--danger); }
+/* Square tags for request results, as on ClinePassBridge; cards keep the pills. */
+.badge.tag { padding: 2px 7px; border-radius: 4px; font-size: 11px; line-height: 16px; }
 .log-grid { font-size: 12.5px; }
-.log-head, .log-row > summary { display: grid; grid-template-columns: 140px minmax(170px,2fr) 90px 104px minmax(100px,1fr) 124px minmax(150px,1.2fr) 14px; gap: 10px; padding: 8px 18px; align-items: center; }
+/*
+ * Each column gets its usual content width plus an equal share of the spare
+ * width (--log-x), so wide screens space the columns evenly instead of
+ * leaving one wide gap. 1004px is the sum of the base widths and the gaps.
+ */
+.log-head, .log-row > summary { --log-x: max(0px, (100% - 1004px) / 7); display: grid; grid-template-columns: calc(140px + var(--log-x)) calc(200px + var(--log-x)) calc(80px + var(--log-x)) calc(90px + var(--log-x)) calc(120px + var(--log-x)) calc(124px + var(--log-x)) calc(166px + var(--log-x)) 14px; gap: 10px; padding: 8px 18px; align-items: center; }
 .log-head { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); background: var(--bg-inset); border-bottom: 1px solid var(--border-subtle); }
 .log-row { border-bottom: 1px solid var(--border-subtle); }
 .log-row > summary { cursor: pointer; list-style: none; }
 .log-row > summary::-webkit-details-marker { display: none; }
 .log-row > summary:hover { background: var(--bg-inset); }
 .log-row > summary > div { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.log-detail { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 16px; padding: 10px 18px 14px; background: var(--bg-inset); }
-.log-detail .sub { display: block; }
-.log-detail .err { grid-column: 1 / -1; }
-/* The full request ID gets two columns where two fit, and wraps otherwise. */
-.log-detail > div { min-width: 0; }
-@media (min-width: 420px) { .log-detail .reqid { grid-column: span 2; } }
+.log-row[open] { background: var(--bg-inset); box-shadow: inset 3px 0 var(--accent); }
+.log-detail { border-top: 1px solid var(--border-subtle); padding: 14px 18px 16px; }
+.log-detail-head { margin-bottom: 12px; font-size: 12.5px; font-weight: 650; }
+.log-detail-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 20px; }
+/* Six columns put two related triples on each row. */
+@media (min-width: 1920px) { .log-detail-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.datum { min-width: 0; }
+.datum-label { margin-bottom: 2px; font-size: 11px; color: var(--text-muted); }
+.datum-value { font-size: 12.5px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.datum-value.mono { font-size: 12px; }
+.datum-note { margin-left: 6px; color: var(--text-muted); }
+.log-detail-error { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.log-detail-error .danger-text { font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .log-row > summary > .clip { white-space: nowrap; }
 .log-row > summary { position: relative; }
 .log-model > div { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -489,6 +503,16 @@ tbody tr:last-child td { border-bottom: none; }
 .log-usage .sub { margin-top: 3px; overflow: hidden; text-overflow: ellipsis; }
 .log-chev { color: var(--text-muted); font-size: 18px; line-height: 1; transition: transform .16s; justify-self: end; }
 .log-row[open] .log-chev { transform: rotate(90deg); }
+.log-result .sub { margin-top: 4px; font-size: 11px; }
+.log-attempts { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.log-attempts-head { margin-bottom: 2px; font-size: 12.5px; font-weight: 650; }
+.attempt { display: grid; grid-template-columns: 24px 80px minmax(140px, 240px) 64px minmax(0, 1fr); gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-subtle); font-size: 12px; }
+.attempt:last-child { border-bottom: 0; padding-bottom: 0; }
+.attempt-n { color: var(--text-muted); }
+.attempt-cred { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attempt-this { margin-left: 6px; padding: 0 5px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); font-size: 10.5px; font-weight: 600; }
+.attempt-dur { font-variant-numeric: tabular-nums; }
+.attempt-err { min-width: 0; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .toolbar select.input { width: auto; flex: 0 0 auto; }
 .pager { display: flex; justify-content: space-between; align-items: center; gap: 10px 16px; flex-wrap: wrap; padding: 10px 18px; }
 .pager:empty { display: none; }
@@ -522,7 +546,11 @@ tbody tr:last-child td { border-bottom: none; }
   .log-model > div { white-space: normal; overflow-wrap: anywhere; }
   .log-row > summary > [data-label]::before { content: attr(data-label); display: block; font-family: var(--font-sans); font-size: 11px; font-weight: 400; color: var(--text-muted); margin-bottom: 2px; }
 }
+@media (max-width: 1100px) { .log-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .log-row > summary { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 560px) { .log-detail-grid { gap: 10px 16px; } .log-detail-grid > .wide { grid-column: 1 / -1; } }
+@media (max-width: 720px) { .attempt { grid-template-columns: 20px auto minmax(0, 1fr) auto; gap: 4px 10px; } .attempt-err { grid-column: 2 / -1; } }
+@media (max-width: 380px) { .log-detail-grid { grid-template-columns: minmax(0, 1fr); } }
 .empty { padding: 28px 18px; text-align: center; color: var(--text-muted); }
 .hidden { display: none !important; }
 .input {

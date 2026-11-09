@@ -52,7 +52,7 @@ func managementRoutes() managementRegistration {
 			{Method: http.MethodPost, Path: credentialsPath, Description: `Add a Wokey API key. Body: {"api_key","label","models","prefix","proxy_url","issuer_token"}.`},
 			{Method: http.MethodPatch, Path: credentialsPath, Description: `Edit a Wokey credential. Body: {"auth_index","label","models","prefix","proxy_url","priority","issuer_token"}.`},
 			{Method: http.MethodGet, Path: quotaPath, Description: "Balance and key usage of one Wokey credential (?auth_index=), plus Provider earnings when it has an issuing token."},
-			{Method: http.MethodGet, Path: logsPath, Description: "Request log, newest first (?search=&status=all|success|error&limit=&offset=), with a summary."},
+			{Method: http.MethodGet, Path: logsPath, Description: "Request log, newest first (?search=&status=all|success|error&from=&to=&request_id=&limit=&offset=), with a summary."},
 			{Method: http.MethodDelete, Path: logsPath, Description: "Clear the request log."},
 		},
 		Resources: []resourceDeclaration{
@@ -121,12 +121,13 @@ func (s *Service) handleManagement(req pluginapi.ManagementRequest) pluginapi.Ma
 				return jsonResponse(http.StatusBadRequest, errorBody{Error: "invalid_range", Message: "from and to must be RFC 3339 times"})
 			}
 			return jsonResponse(http.StatusOK, s.reqlog.Query(requestlog.Query{
-				Search: req.Query.Get("search"),
-				Status: req.Query.Get("status"),
-				From:   from,
-				To:     to,
-				Limit:  limit,
-				Offset: offset,
+				Search:    req.Query.Get("search"),
+				Status:    req.Query.Get("status"),
+				RequestID: req.Query.Get("request_id"),
+				From:      from,
+				To:        to,
+				Limit:     limit,
+				Offset:    offset,
 			}))
 		case http.MethodDelete:
 			if errClear := s.reqlog.Clear(); errClear != nil {

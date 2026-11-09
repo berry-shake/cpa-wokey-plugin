@@ -160,19 +160,40 @@ export function logCred(e: Pick<LogEntry, "auth_id">, creds: CredentialView[]): 
   return e.auth_id ? creds.find((c) => c.id === e.auth_id || c.name === e.auth_id) || null : null;
 }
 
-export function logAuthIndex(e: Pick<LogEntry, "auth_id">, creds: CredentialView[]): string {
+/** The auth index stored with the entry (0.1.9+), else the current credential's. */
+export function logAuthIndex(e: Pick<LogEntry, "auth_id" | "auth_index">, creds: CredentialView[]): string {
+  if (e.auth_index) return e.auth_index;
   const cred = logCred(e, creds);
   return (cred && cred.auth_index) || "—";
 }
 
+/** Whether a stored credential value is a masked key ("sk-wk-…aaaa", "sk****"). */
+export function isMaskedKey(value: string | undefined): boolean {
+  return /…|\*{4}/.test(value || "");
+}
+
 /**
- * The masked key of an entry. Early 0.1.7 builds stored the auth file name
- * in its place, so those entries take it from the credential.
+ * The masked key of an entry: the one stored with it, else the current
+ * credential's. Builds up to 0.1.8 stored the credential's label (or, in
+ * early 0.1.7, the auth file name) when it had one, so only a masked value
+ * counts.
  */
 export function logKey(e: Pick<LogEntry, "auth_id" | "credential">, creds: CredentialView[]): string {
-  if (e.credential && e.credential !== e.auth_id) return e.credential;
+  if (isMaskedKey(e.credential)) return e.credential || "";
   const cred = logCred(e, creds);
   return (cred && cred.key_masked) || "";
+}
+
+/**
+ * The label of the credential behind an entry, when it says more than the
+ * file name. Deleted credentials fall back to the label that builds up to
+ * 0.1.8 stored.
+ */
+export function logLabel(e: Pick<LogEntry, "auth_id" | "credential">, creds: CredentialView[]): string {
+  const cred = logCred(e, creds);
+  const stored = e.credential && e.credential !== e.auth_id && !isMaskedKey(e.credential) ? e.credential : "";
+  const label = (cred ? cred.label || "" : stored).trim();
+  return label && label !== fileStem(e.auth_id) && label !== fileStem(cred && cred.name) ? label : "";
 }
 
 /** Names the key behind an entry by its auth file, without the extension. */
@@ -188,4 +209,47 @@ export function cacheRate(e: Pick<LogEntry, "input_tokens" | "cached_tokens">): 
 /** Whether a log query narrows the full log (any range, status or search). */
 export function isFiltered(range: LogRange, status: string, search: string): boolean {
   return range !== "all" || status !== "all" || search.trim() !== "";
+}
+
+const FINISH_GROUPS: Record<string, string> = {
+  stop: "stop",
+  end_turn: "stop",
+  stop_sequence: "stop",
+  completed: "stop",
+  length: "length",
+  max_tokens: "length",
+  max_output_tokens: "length",
+  model_context_window_exceeded: "length",
+  tool_use: "tool",
+  tool_calls: "tool",
+  function_call: "tool",
+  content_filter: "filter",
+  refusal: "filter",
+  failed: "failed",
+  cancelled: "cancelled",
+};
+
+/**
+ * The i18n key that explains a finish reason, "" for reasons it does not
+ * know (they are shown as they are).
+ */
+export function finishKey(reason: string | undefined): string {
+  const group = FINISH_GROUPS[String(reason || "").trim().toLowerCase()];
+  return group ? "logs.finish." + group : "";
+}
+
+/** When the request finished: its start plus the duration; null without a valid start. */
+export function logEnd(e: Pick<LogEntry, "time" | "duration_ms">): Date | null {
+  const start = new Date(e.time).getTime();
+  return Number.isFinite(start) ? new Date(start + Math.max(0, e.duration_ms || 0)) : null;
+}
+
+/** Whether the response said nothing about usage, so the zero token counts mean unknown. */
+export function usageMissing(e: Pick<LogEntry, "usage_reported">): boolean {
+  return e.usage_reported === false;
+}
+
+/** How many credentials CPA tried for the request; 1 for entries without a request ID. */
+export function attemptCount(e: Pick<LogEntry, "attempts" | "request_id">): number {
+  return e.request_id && (e.attempts || 0) > 1 ? (e.attempts as number) : 1;
 }

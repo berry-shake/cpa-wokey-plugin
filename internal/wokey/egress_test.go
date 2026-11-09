@@ -4,19 +4,19 @@ import "testing"
 
 func TestResolveEgress(t *testing.T) {
 	cases := []struct {
-		auth, global, key string
+		auth, global, key, label string
 	}{
-		{"", "", "env"},
-		{"", "http://g.example:8080", "http://g.example:8080"},
-		{"socks5://u:p@a.example:1080", "http://g.example:8080", "socks5://u:p@a.example:1080"},
-		{"direct", "http://g.example:8080", "direct"},
-		{"NONE", "", "direct"},
-		{"", "direct", "direct"},
+		{"", "", "env", "env"},
+		{"", "http://g.example:8080", "http://g.example:8080", "http://g.example:8080"},
+		{"socks5://u:p@a.example:1080/x", "http://g.example:8080", "socks5://u:p@a.example:1080/x", "socks5://a.example:1080"},
+		{"direct", "http://g.example:8080", "direct", "direct"},
+		{"NONE", "", "direct", "direct"},
+		{"", "direct", "direct", "direct"},
 	}
 	for _, tc := range cases {
 		setting, errProxy := ResolveEgress(tc.auth, tc.global)
-		if errProxy != nil || setting.key != tc.key {
-			t.Errorf("ResolveEgress(%q, %q) = %+v, %v; want %s", tc.auth, tc.global, setting, errProxy, tc.key)
+		if errProxy != nil || setting.key != tc.key || setting.Label() != tc.label {
+			t.Errorf("ResolveEgress(%q, %q) = %+v (label %q), %v; want %s, %s", tc.auth, tc.global, setting, setting.Label(), errProxy, tc.key, tc.label)
 		}
 	}
 	if _, errProxy := ResolveEgress("ftp://x.example", ""); errProxy == nil {

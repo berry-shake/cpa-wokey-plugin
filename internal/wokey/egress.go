@@ -40,6 +40,15 @@ func ResolveEgress(authProxy, globalProxy string) (Egress, error) {
 	return Egress{key: "env"}, nil
 }
 
+// Label names the egress for the request log: "direct", "env" or the proxy
+// as scheme://host:port, without credentials or path.
+func (e Egress) Label() string {
+	if e.url == nil {
+		return e.key
+	}
+	return (&url.URL{Scheme: e.url.Scheme, Host: e.url.Host}).String()
+}
+
 func parseProxyURL(raw string) (*url.URL, error) {
 	parsed, errParse := url.Parse(raw)
 	if errParse != nil {
