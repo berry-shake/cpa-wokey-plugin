@@ -1,7 +1,9 @@
 package streamgate
 
 import (
+	"context"
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -73,5 +75,30 @@ func TestIsDoneEvent(t *testing.T) {
 func TestIsEventStream(t *testing.T) {
 	if !IsEventStream("text/event-stream; charset=utf-8") || IsEventStream("application/json") || IsEventStream("") {
 		t.Fatal("IsEventStream")
+	}
+}
+
+func TestStreamFailure(t *testing.T) {
+	errPump := errors.New("read: connection reset")
+	idle, cancelIdle := context.WithCancelCause(context.Background())
+	cancelIdle(ErrIdle)
+	closed, cancelClosed := context.WithCancelCause(context.Background())
+	cancelClosed(nil)
+	cases := []struct {
+		name    string
+		ctx     context.Context
+		code    string
+		status  int
+		message string
+	}{
+		{"idle", idle, "stream_idle_timeout", http.StatusGatewayTimeout, "stalled"},
+		{"shutdown", closed, "plugin_shutdown", http.StatusServiceUnavailable, "CPA is restarting"},
+		{"upstream", context.Background(), "upstream_stream_error", http.StatusBadGateway, "connection reset"},
+	}
+	for _, tc := range cases {
+		got := streamFailure(tc.ctx, errPump)
+		if got.Code != tc.code || got.HTTPStatus != tc.status || !got.Retryable || !strings.Contains(got.Message, tc.message) {
+			t.Errorf("%s: got %+v", tc.name, got)
+		}
 	}
 }

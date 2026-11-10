@@ -22,7 +22,9 @@ func streamFailure(ctx context.Context, errPump error) *pluginabi.Error {
 	case errors.Is(cause, ErrIdle):
 		return &pluginabi.Error{Code: "stream_idle_timeout", Message: "wokey: upstream stream stalled", HTTPStatus: http.StatusGatewayTimeout, Retryable: true}
 	case errors.Is(cause, context.Canceled):
-		return &pluginabi.Error{Code: "plugin_shutdown", Message: "wokey: plugin is shutting down", HTTPStatus: http.StatusServiceUnavailable, Retryable: true}
+		// Only Service.Close cancels the stream context: CPA is stopping or
+		// unloading the plugin. The code stays for existing log entries.
+		return &pluginabi.Error{Code: "plugin_shutdown", Message: "wokey: stream cut off because CPA is restarting, shutting down or unloading the plugin", HTTPStatus: http.StatusServiceUnavailable, Retryable: true}
 	default:
 		return &pluginabi.Error{Code: "upstream_stream_error", Message: "wokey: " + errPump.Error(), HTTPStatus: http.StatusBadGateway, Retryable: true}
 	}
