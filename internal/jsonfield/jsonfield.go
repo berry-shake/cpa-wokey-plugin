@@ -1,5 +1,6 @@
 // Package jsonfield reads loosely typed values out of decoded JSON objects
-// (auth files, Wokey responses, stream events).
+// (auth files, Wokey responses, stream events), and finds the top-level
+// members of raw ones without decoding them.
 package jsonfield
 
 import (

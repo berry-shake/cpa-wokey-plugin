@@ -42,7 +42,7 @@ func TestClassifyStreamEvent(t *testing.T) {
 		{wokey.EndpointMessages, `event: message_start`, Prelude},
 	}
 	for _, tc := range cases {
-		if got, _ := classifyStreamEvent(tc.endpoint, []byte(tc.event+"\n\n")); got != tc.want {
+		if got, _ := classifyStreamEvent(tc.endpoint, NewEvent([]byte(tc.event+"\n\n"))); got != tc.want {
 			t.Errorf("%s %q = %d, want %d", tc.endpoint, tc.event, got, tc.want)
 		}
 	}

@@ -40,14 +40,36 @@ func TestSetTopLevelString(t *testing.T) {
 	}
 }
 
-func TestEnsureTopLevelObject(t *testing.T) {
-	got := ensureTopLevelObject([]byte(`{"model":"a"}`), "stream_options", `{"include_usage":true}`)
-	if string(got) != `{"stream_options":{"include_usage":true},"model":"a"}` {
-		t.Fatalf("insert = %s", got)
+func TestPrepareCallBody(t *testing.T) {
+	svc, _ := newTestService(t, nil)
+	cases := []struct {
+		format, endpoint, in, want, effort string
+		stream                             bool
+	}{
+		// A chat stream asks for the usage chunk unless the client set it.
+		{"openai", wokey.EndpointChat, `{"model":"wokey/model-a","reasoning_effort":"low"}`, `{"stream_options":{"include_usage":true},"model":"model-a","reasoning_effort":"low"}`, "low", true},
+		{"openai", wokey.EndpointChat, `{"model":"x","stream_options":{"include_usage":false}}`, `{"model":"model-a","stream_options":{"include_usage":false}}`, "", true},
+		{"openai", wokey.EndpointChat, `{"model":"x"}`, `{"model":"model-a"}`, "", false},
+		{"claude", wokey.EndpointMessages, `{"messages":[],"thinking":{"type":"enabled","budget_tokens":2048}}`, `{"model":"model-a","messages":[],"thinking":{"type":"enabled","budget_tokens":2048}}`, "budget 2048", true},
+		// A broken tail after the model: the model is still rewritten, as
+		// before, but nothing is inserted and no effort is read.
+		{"openai", wokey.EndpointChat, `{"model":"x","reasoning_effort":"low",}`, `{"model":"model-a","reasoning_effort":"low",}`, "", true},
 	}
-	existing := `{"stream_options":{"include_usage":false}}`
-	if got = ensureTopLevelObject([]byte(existing), "stream_options", `{"include_usage":true}`); string(got) != existing {
-		t.Fatalf("an existing member must be kept: %s", got)
+	for _, tc := range cases {
+		req := executorRequest(tc.format, "wokey/model-a", tc.in)
+		req.Stream = tc.stream
+		call, perr := svc.prepareCall(req, tc.endpoint)
+		if perr != nil {
+			t.Fatalf("%s: %+v", tc.in, perr)
+		}
+		if string(call.body) != tc.want || call.effort != tc.effort {
+			t.Errorf("%s: body %s, effort %q; want %s, %q", tc.in, call.body, call.effort, tc.want, tc.effort)
+		}
+	}
+	for _, bad := range []string{`[]`, `{"messages":[}`} {
+		if _, perr := svc.prepareCall(executorRequest("openai", "wokey/model-a", bad), wokey.EndpointChat); perr == nil || perr.Code != "invalid_request" {
+			t.Errorf("%s: %+v", bad, perr)
+		}
 	}
 }
 

@@ -3,6 +3,7 @@ package plugin
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,13 +41,18 @@ type upstreamCall struct {
 	header   http.Header
 	client   *http.Client
 	authID   string
-	// model, upstreamModel, keyMasked and egress describe the call for the
-	// request log.
+	// model, upstreamModel, effort, keyMasked and egress describe the call
+	// for the request log.
 	model         string
 	upstreamModel string
+	effort        string
 	keyMasked     string
 	egress        string
 }
+
+// requestMembers are the top-level request members prepareCall reads or
+// edits; the rest of the body is passed through without being decoded.
+var requestMembers = []string{"model", "stream_options", "reasoning_effort", "reasoning", "output_config", "thinking"}
 
 // prepareCall resolves the credential, egress and upstream model for one
 // executor request.
@@ -60,21 +66,27 @@ func (s *Service) prepareCall(req pluginapi.ExecutorRequest, endpoint string) (*
 		return nil, wokey.AuthError("wokey: credential has no api_key")
 	}
 	cfg := s.config()
+	members, errScan := topLevelMembers(req.Payload, requestMembers...)
 	model := strings.TrimSpace(req.Model)
 	if model == "" {
-		model = topLevelString(req.Payload, "model")
+		model = memberString(req.Payload, members, "model")
 	}
 	if model == "" {
 		return nil, wokey.RequestError("invalid_request", "wokey: request has no model")
 	}
 	upstream := s.catalog.Current().UpstreamID(model, cred.EffectivePrefix(cfg))
-	body, errBody := setTopLevelString(req.Payload, "model", upstream)
+	encodedUpstream, _ := json.Marshal(upstream)
+	body, errBody := setMember(req.Payload, members, errScan, "model", encodedUpstream)
 	if errBody != nil {
 		return nil, wokey.RequestError("invalid_request", "wokey: "+errBody.Error())
 	}
-	if endpoint == wokey.EndpointChat && req.Stream {
+	if _, present := members["stream_options"]; endpoint == wokey.EndpointChat && req.Stream && !present && errScan == nil {
 		// Ask for the final usage chunk so CPA can account the request.
-		body = ensureTopLevelObject(body, "stream_options", `{"include_usage":true}`)
+		body = insertTopLevelMember(body, "stream_options", []byte(`{"include_usage":true}`))
+	}
+	effort := ""
+	if errScan == nil {
+		effort = reasoningEffort(req.Payload, members)
 	}
 	setting, errProxy := wokey.ResolveEgress(cred.ProxyURL, s.globalProxy())
 	if errProxy != nil {
@@ -112,6 +124,7 @@ func (s *Service) prepareCall(req pluginapi.ExecutorRequest, endpoint string) (*
 
 		model:         clientModel(req, model),
 		upstreamModel: upstream,
+		effort:        effort,
 		keyMasked:     credential.MaskKey(cred.APIKey),
 		egress:        setting.Label(),
 	}, nil

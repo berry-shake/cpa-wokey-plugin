@@ -30,10 +30,11 @@ func TestCallRecordUsage(t *testing.T) {
 	log := requestlog.New(nil)
 	log.Configure("", 10, 0)
 	rec := &callRecord{log: log, entry: requestlog.Entry{Stream: true, UpstreamStatus: 200}}
-	rec.observe(streamgate.Prelude, []byte("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-x\",\"stop_reason\":null,\"usage\":{\"input_tokens\":3,\"cache_read_input_tokens\":7,\"cache_creation_input_tokens\":2}}}\n\n"))
-	rec.observe(streamgate.Content, []byte("data: {\"type\":\"content_block_delta\"}\n\n"))
-	rec.observe(streamgate.Content, []byte("data: {\"type\":\"content_block_delta\"}\n\n"))
-	rec.observe(streamgate.Terminal, []byte("data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":9}}\n\n"))
+	event := func(raw string) *streamgate.Event { return streamgate.NewEvent([]byte(raw)) }
+	rec.observe(streamgate.Prelude, event("event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-x\",\"stop_reason\":null,\"usage\":{\"input_tokens\":3,\"cache_read_input_tokens\":7,\"cache_creation_input_tokens\":2}}}\n\n"))
+	rec.observe(streamgate.Content, event("data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"hi\"}}\n\n"))
+	rec.observe(streamgate.Content, nil)
+	rec.observe(streamgate.Terminal, event("data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":9}}\n\n"))
 	rec.finish(nil, "")
 	// A buffered call that failed after Wokey answered: no stream fields.
 	rec = &callRecord{log: log, entry: requestlog.Entry{UpstreamStatus: 200}}
@@ -58,6 +59,26 @@ func TestCallRecordUsage(t *testing.T) {
 	}
 	if r.Frames == nil || *r.Frames != 0 || r.LastFrameMS != nil || r.UsageReported != nil {
 		t.Fatalf("rejected stream = %+v", r)
+	}
+}
+
+func TestObservable(t *testing.T) {
+	for data, want := range map[string]bool{
+		`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"x"}}`:              false,
+		`{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":""}}`: false,
+		`{"type":"response.output_text.delta","item_id":"i","delta":"x"}`:                                false,
+		`{"type":"content_block_stop","index":0}`:                                                        false,
+		`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}`:        true,
+		`{"type":"message_delta","delta":{"stop_reason":"end_turn"}}`:                                    true,
+		`{"type":"message_start","message":{"model":"m"}}`:                                               true,
+		`{"type":"response.completed","response":{}}`:                                                    true,
+		`{"choices":[{"delta":{"content":"x"}}]}`:                                                        true,
+		`{"object":"response","output":null}`:                                                            true,
+		`not json`:                                                                                       false,
+	} {
+		if got := observable(streamgate.NewEvent([]byte("data: " + data + "\n\n"))); got != want {
+			t.Errorf("%s = %v, want %v", data, got, want)
+		}
 	}
 }
 
@@ -92,14 +113,14 @@ func TestBaseEntry(t *testing.T) {
 		Headers:  http.Header{"User-Agent": {"claude-cli/2.1 " + strings.Repeat("é", 200)}},
 		Metadata: map[string]any{"request_path": "/v1/messages", "selected_auth_index": " 9d3c ", "requested_model": "wokey/claude-x"},
 	}
-	e := baseEntry(req, "/v1/messages", true, time.Unix(1, 0))
+	e := baseEntry(req, "/v1/messages", clientModel(req, req.Model), true, time.Unix(1, 0))
 	if e.ClientPath != "/v1/messages" || e.AuthIndex != "9d3c" || e.Model != "wokey/claude-x" || !e.Stream || e.AuthID != "wokey-a.json" {
 		t.Fatalf("entry = %+v", e)
 	}
 	if len(e.UserAgent) > maxUserAgent || !utf8.ValidString(e.UserAgent) || !strings.HasPrefix(e.UserAgent, "claude-cli/2.1 ") {
 		t.Fatalf("user agent = %q (%d bytes)", e.UserAgent, len(e.UserAgent))
 	}
-	if e = baseEntry(pluginapi.ExecutorRequest{}, "/v1/responses", false, time.Unix(1, 0)); e.UserAgent != "" || e.ClientPath != "" || e.AuthIndex != "" {
+	if e = baseEntry(pluginapi.ExecutorRequest{}, "/v1/responses", "", false, time.Unix(1, 0)); e.UserAgent != "" || e.ClientPath != "" || e.AuthIndex != "" {
 		t.Fatalf("empty request = %+v", e)
 	}
 }
@@ -111,9 +132,14 @@ func TestReasoningEffort(t *testing.T) {
 		`{"output_config":{"effort":"max"}}`:                   "max",
 		`{"thinking":{"type":"enabled","budget_tokens":2048}}`: "budget 2048",
 		`{"thinking":{"type":"adaptive"}}`:                     "adaptive",
-		`{}`:                                                   "",
+		`{"messages":[{"reasoning_effort":"low"}]}`:            "",
+		`{}`: "",
 	} {
-		if got := reasoningEffort([]byte(body)); got != want {
+		found, errScan := topLevelMembers([]byte(body), requestMembers...)
+		if errScan != nil {
+			t.Fatalf("%s: %v", body, errScan)
+		}
+		if got := reasoningEffort([]byte(body), found); got != want {
 			t.Errorf("%s = %q", body, got)
 		}
 	}
@@ -127,6 +153,8 @@ func TestClientModel(t *testing.T) {
 		{pluginapi.ExecutorRequest{Model: "claude-opus-5-5", Metadata: map[string]any{"requested_model": "wokey/claude-opus-5-5"}, OriginalRequest: []byte(`{"model":"other"}`)}, "wokey/claude-opus-5-5"},
 		{pluginapi.ExecutorRequest{Model: "claude-opus-5-5", OriginalRequest: []byte(`{"model":"opus"}`)}, "opus"},
 		{pluginapi.ExecutorRequest{Model: "claude-opus-5-5", OriginalRequest: []byte(`not json`)}, "claude-opus-5-5"},
+		// Only the start of the original request is read when the model comes first.
+		{pluginapi.ExecutorRequest{Model: "claude-opus-5-5", OriginalRequest: []byte(`{"model":"opus","messages":[`)}, "opus"},
 	}
 	for _, tc := range cases {
 		if got := clientModel(tc.req, tc.req.Model); got != tc.want {

@@ -75,9 +75,15 @@ func Pump(body io.Reader, sse bool, emit func([]byte) error, progress func()) er
 	}
 }
 
+// eventBufferSize is the initial capacity of an event, enough for a text
+// delta in one allocation.
+const eventBufferSize = 512
+
 // sseReader yields complete SSE events terminated by a blank line.
 type sseReader struct {
 	reader *bufio.Reader
+	// long puts together a line longer than the read buffer.
+	long []byte
 }
 
 func newSSEReader(body io.Reader) *sseReader {
@@ -89,38 +95,59 @@ func newSSEReader(body io.Reader) *sseReader {
 // (keepalives) are skipped. At EOF a trailing partial event is returned with
 // io.EOF.
 func (r *sseReader) next(progress func()) ([]byte, error) {
-	var event bytes.Buffer
+	var event []byte
 	for {
-		line, errRead := r.reader.ReadBytes('\n')
+		line, errRead := r.readLine()
 		if len(line) > 0 {
 			progress()
 		}
 		trimmed := bytes.TrimRight(line, "\r\n")
 		switch {
 		case len(trimmed) == 0 && len(line) > 0:
-			if event.Len() > 0 {
-				event.WriteByte('\n')
-				return event.Bytes(), nil
+			if len(event) > 0 {
+				return append(event, '\n'), nil
 			}
 		case len(trimmed) > 0 && trimmed[0] == ':':
 			// SSE comment (Wokey sends ": keepalive" before the first token).
 		case len(trimmed) > 0:
-			event.Write(trimmed)
-			event.WriteByte('\n')
+			if event == nil {
+				event = make([]byte, 0, max(eventBufferSize, len(trimmed)+2))
+			}
+			event = append(append(event, trimmed...), '\n')
 		}
 		if errRead != nil {
-			if event.Len() > 0 {
-				event.WriteByte('\n')
-				return event.Bytes(), errRead
+			if len(event) > 0 {
+				return append(event, '\n'), errRead
 			}
 			return nil, errRead
 		}
 	}
 }
 
+// readLine returns the next line with its "\n", or what is left before an
+// error. The line is only valid until the next read.
+func (r *sseReader) readLine() ([]byte, error) {
+	line, errRead := r.reader.ReadSlice('\n')
+	if !errors.Is(errRead, bufio.ErrBufferFull) {
+		return line, errRead
+	}
+	r.long = append(r.long[:0], line...)
+	for errors.Is(errRead, bufio.ErrBufferFull) {
+		line, errRead = r.reader.ReadSlice('\n')
+		r.long = append(r.long, line...)
+	}
+	return r.long, errRead
+}
+
 // isDoneEvent reports whether an event is the OpenAI "[DONE]" sentinel.
 func isDoneEvent(event []byte) bool {
-	for _, line := range bytes.Split(bytes.TrimSpace(event), []byte("\n")) {
+	for rest := bytes.TrimSpace(event); len(rest) > 0; {
+		line := rest
+		if newline := bytes.IndexByte(rest, '\n'); newline >= 0 {
+			line, rest = rest[:newline], rest[newline+1:]
+		} else {
+			rest = nil
+		}
 		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
 			continue

@@ -40,6 +40,15 @@ func TestPumpSSE(t *testing.T) {
 	}
 }
 
+func TestPumpLongLine(t *testing.T) {
+	// A data line several times the read buffer arrives whole.
+	text := strings.Repeat("x", 200<<10)
+	got := collectEvents(t, "data: {\"text\":\""+text+"\"}\n\ndata: {\"b\":2}\n\n", true)
+	if len(got) != 2 || got[0] != "data: {\"text\":\""+text+"\"}\n\n" || got[1] != "data: {\"b\":2}\n\n" {
+		t.Fatalf("got %d events, first %d bytes", len(got), len(got[0]))
+	}
+}
+
 func TestPumpRaw(t *testing.T) {
 	got := collectEvents(t, `{"not":"sse"}`, false)
 	if strings.Join(got, "") != `{"not":"sse"}` {
@@ -60,7 +69,7 @@ func TestPumpStopsOnEmitError(t *testing.T) {
 }
 
 func TestIsDoneEvent(t *testing.T) {
-	for _, event := range []string{"data: [DONE]\n\n", "data:[DONE]", "  data: [DONE]  \n"} {
+	for _, event := range []string{"data: [DONE]\n\n", "data:[DONE]", "  data: [DONE]  \n", "data: [DONE]\ndata: [DONE]\n\n", ""} {
 		if !isDoneEvent([]byte(event)) {
 			t.Errorf("isDoneEvent(%q) = false", event)
 		}

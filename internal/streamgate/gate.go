@@ -59,8 +59,9 @@ type Gate struct {
 	open      bool
 	done      bool
 	failure   *pluginabi.Error
-	// Tap, when set, sees every event with its classification.
-	Tap func(Kind, []byte)
+	// Tap, when set, sees every event with its classification. The event
+	// is nil for raw chunks of a body that is not SSE.
+	Tap func(Kind, *Event)
 }
 
 // New returns a gate for one stream; emit forwards events to the client.
@@ -77,9 +78,10 @@ func (g *Gate) Push(event []byte) error {
 		}
 		return g.emit(event)
 	}
-	kind, detail := classifyStreamEvent(g.endpoint, event)
+	ev := NewEvent(event)
+	kind, detail := classifyStreamEvent(g.endpoint, ev)
 	if g.Tap != nil {
-		g.Tap(kind, event)
+		g.Tap(kind, ev)
 	}
 	switch kind {
 	case Failed:
@@ -153,34 +155,45 @@ func streamTruncated() *pluginabi.Error {
 
 // classifyStreamEvent sorts an SSE event by protocol. For Failed it
 // also returns the error as a JSON body wokey.UpstreamError can read.
-func classifyStreamEvent(endpoint string, event []byte) (Kind, []byte) {
-	name, data := EventFields(event)
+//
+// Messages and Responses events are told apart by their type, so only the
+// few that need more (message_delta, response.failed) are decoded; chat
+// chunks always are.
+func classifyStreamEvent(endpoint string, ev *Event) (Kind, []byte) {
+	data := ev.Data()
 	if len(data) == 0 {
 		return Prelude, nil
 	}
 	if bytes.Equal(data, []byte("[DONE]")) {
 		return Terminal, nil
 	}
-	var payload map[string]any
-	if json.Unmarshal(data, &payload) != nil {
+	if !ev.Object() {
 		// Unknown data: do not hold it back.
 		return Content, nil
 	}
-	eventType, _ := payload["type"].(string)
+	eventType := ev.stringMember("type")
 	if eventType == "" {
-		eventType = name
+		eventType = ev.Name()
 	}
-	if eventType == "error" || (payload["error"] != nil && eventType != "response.failed") {
+	if eventType == "error" || (ev.present("error") && eventType != "response.failed") {
 		return Failed, data
 	}
 	switch endpoint {
 	case wokey.EndpointChat:
+		payload := ev.Payload()
+		if payload == nil {
+			return Content, nil
+		}
 		return classifyChatChunk(payload), nil
 	case wokey.EndpointResponses:
 		switch eventType {
 		case "response.completed", "response.incomplete":
 			return Terminal, nil
 		case "response.failed":
+			payload := ev.Payload()
+			if payload == nil {
+				return Content, nil
+			}
 			return Failed, responseFailure(payload)
 		case "response.created", "response.queued", "response.in_progress", "response.output_item.added", "response.content_part.added":
 			return Prelude, nil
@@ -190,6 +203,7 @@ func classifyStreamEvent(endpoint string, event []byte) (Kind, []byte) {
 		case "message_stop":
 			return Terminal, nil
 		case "message_delta":
+			payload := ev.Payload()
 			if delta, _ := payload["delta"].(map[string]any); delta != nil && nonEmpty(delta["stop_reason"]) {
 				return Terminal, nil
 			}
@@ -276,22 +290,6 @@ var streamErrorRules = []struct {
 	{http.StatusNotFound, []string{"not_found"}},
 	{http.StatusGatewayTimeout, []string{"timeout"}},
 	{http.StatusBadRequest, []string{"invalid_request", "context_length", "too_large"}},
-}
-
-// EventFields returns the event name and the joined data lines.
-func EventFields(event []byte) (string, []byte) {
-	var name string
-	var data [][]byte
-	for _, line := range bytes.Split(event, []byte("\n")) {
-		line = bytes.TrimRight(line, "\r")
-		switch {
-		case bytes.HasPrefix(line, []byte("event:")):
-			name = string(bytes.TrimSpace(line[len("event:"):]))
-		case bytes.HasPrefix(line, []byte("data:")):
-			data = append(data, bytes.TrimSpace(line[len("data:"):]))
-		}
-	}
-	return name, bytes.TrimSpace(bytes.Join(data, []byte("\n")))
 }
 
 func nonEmpty(value any) bool {

@@ -30,14 +30,15 @@ type callRecord struct {
 	frames      int64
 }
 
-// baseEntry fills in what the executor request tells about a call.
-func baseEntry(req pluginapi.ExecutorRequest, endpoint string, stream bool, now time.Time) requestlog.Entry {
+// baseEntry fills in what the executor request tells about a call; model is
+// the name the client asked for.
+func baseEntry(req pluginapi.ExecutorRequest, endpoint, model string, stream bool, now time.Time) requestlog.Entry {
 	path, _ := req.Metadata["request_path"].(string)
 	index, _ := req.Metadata["selected_auth_index"].(string)
 	return requestlog.Entry{
 		Time:       now,
 		Endpoint:   endpoint,
-		Model:      clientModel(req, req.Model),
+		Model:      model,
 		Stream:     stream,
 		AuthID:     req.AuthID,
 		AuthIndex:  strings.TrimSpace(index),
@@ -49,10 +50,9 @@ func baseEntry(req pluginapi.ExecutorRequest, endpoint string, stream bool, now 
 
 func (s *Service) startRecord(req pluginapi.ExecutorRequest, call *upstreamCall, stream bool) *callRecord {
 	now := time.Now()
-	entry := baseEntry(req, call.endpoint, stream, now)
-	entry.Model = call.model
+	entry := baseEntry(req, call.endpoint, call.model, stream, now)
 	entry.UpstreamModel = call.upstreamModel
-	entry.ReasoningEffort = reasoningEffort(call.body)
+	entry.ReasoningEffort = call.effort
 	entry.Credential = call.keyMasked
 	entry.Egress = call.egress
 	return &callRecord{log: s.reqlog, start: now, entry: entry}
@@ -61,7 +61,7 @@ func (s *Service) startRecord(req pluginapi.ExecutorRequest, call *upstreamCall,
 // recordFailure logs a call that failed before prepareCall produced a call.
 func (s *Service) recordFailure(req pluginapi.ExecutorRequest, endpoint string, stream bool, perr *pluginabi.Error) {
 	now := time.Now()
-	rec := &callRecord{log: s.reqlog, start: now, entry: baseEntry(req, endpoint, stream, now)}
+	rec := &callRecord{log: s.reqlog, start: now, entry: baseEntry(req, endpoint, clientModel(req, req.Model), stream, now)}
 	rec.finish(perr, "request")
 }
 
@@ -74,8 +74,13 @@ func (r *callRecord) response(resp *http.Response) {
 	r.entry.UpstreamRequestID = firstNonEmpty(resp.Header.Get("X-Request-Id"), resp.Header.Get("Request-Id"))
 }
 
-// observe looks at a stream event that went through the gate.
-func (r *callRecord) observe(kind streamgate.Kind, event []byte) {
+// observedMembers are the top-level event members observePayload reads,
+// besides delta.stop_reason.
+var observedMembers = []string{"model", "message", "response", "usage", "stop_reason", "choices", "output"}
+
+// observe looks at a stream event that went through the gate; ev is nil for
+// raw chunks of a body that is not SSE.
+func (r *callRecord) observe(kind streamgate.Kind, ev *streamgate.Event) {
 	if kind == streamgate.Content {
 		now := time.Now()
 		if r.first.IsZero() {
@@ -84,17 +89,36 @@ func (r *callRecord) observe(kind streamgate.Kind, event []byte) {
 		r.last = now
 		r.frames++
 	}
-	_, data := streamgate.EventFields(event)
-	if len(data) > 0 && data[0] == '{' {
-		r.observeJSON(data)
+	if ev != nil && observable(ev) {
+		if payload := ev.Payload(); payload != nil {
+			r.observePayload(payload)
+		}
 	}
 }
 
+// observable reports whether an event carries anything observePayload
+// reads. Text and tool deltas, the bulk of a stream, carry none of it and are
+// not decoded.
+func observable(ev *streamgate.Event) bool {
+	for _, key := range observedMembers {
+		if ev.Member(key) != nil {
+			return true
+		}
+	}
+	// Messages: message_delta reports the stop reason inside delta.
+	return jsonfield.Has(ev.Member("delta"), "stop_reason")
+}
+
+// observeJSON looks at a buffered response body.
 func (r *callRecord) observeJSON(data []byte) {
 	var payload map[string]any
 	if json.Unmarshal(data, &payload) != nil {
 		return
 	}
+	r.observePayload(payload)
+}
+
+func (r *callRecord) observePayload(payload map[string]any) {
 	if model := jsonfield.Text(payload["model"]); model != "" {
 		r.entry.ServedModel = model
 	}
@@ -265,11 +289,14 @@ func number(value any) int64 {
 	return 0
 }
 
-// reasoningEffort describes the requested thinking level, if any.
-func reasoningEffort(body []byte) string {
-	var payload map[string]any
-	if json.Unmarshal(body, &payload) != nil {
-		return ""
+// reasoningEffort describes the requested thinking level, if any, from the
+// request members found by topLevelMembers. Only those members are decoded.
+func reasoningEffort(body []byte, found map[string]span) string {
+	payload := make(map[string]any, 4)
+	for _, key := range []string{"reasoning_effort", "reasoning", "output_config", "thinking"} {
+		if value, ok := memberValue(body, found, key); ok {
+			payload[key] = value
+		}
 	}
 	if effort := jsonfield.Text(payload["reasoning_effort"]); effort != "" {
 		return effort
@@ -297,10 +324,13 @@ func reasoningEffort(body []byte) string {
 }
 
 // clientModel is the model name the client asked for (with the prefix or
-// alias it used), falling back to the model CPA passed to the executor.
+// alias it used), falling back to the model CPA passed to the executor. The
+// original request is only read when CPA did not report the name.
 func clientModel(req pluginapi.ExecutorRequest, fallback string) string {
-	requested, _ := req.Metadata["requested_model"].(string)
-	return firstNonEmpty(requested, topLevelString(req.OriginalRequest, "model"), fallback)
+	if requested, _ := req.Metadata["requested_model"].(string); strings.TrimSpace(requested) != "" {
+		return strings.TrimSpace(requested)
+	}
+	return firstNonEmpty(topLevelString(req.OriginalRequest, "model"), fallback)
 }
 
 // clip cuts text to at most limit bytes without splitting a character.
