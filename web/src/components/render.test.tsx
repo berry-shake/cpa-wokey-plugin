@@ -1,8 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CredentialView, LogEntry, QuotaView } from "../api/types";
 import { makeT } from "../i18n";
+import { initialState, type State } from "../state/store";
 import { CredCard } from "./keys/CredCard";
 import { LogRow } from "./logs/LogRow";
+import { ProxiesPanel } from "./proxies/ProxiesPanel";
 
 const t = makeT("en");
 
@@ -207,5 +209,101 @@ describe("CredCard", () => {
     expect(doc.querySelector(".btn-danger")?.className).toContain("armed");
     expect(doc.querySelector(".btn-danger")?.textContent).toBe(t("row.confirmDelete"));
     expect(doc.querySelector(".usage-state span")?.textContent).toBe(t("usage.notLoaded"));
+  });
+});
+
+describe("CredCard proxy", () => {
+  const proxyValue = (doc: Document) =>
+    [...doc.querySelectorAll(".facts .meter")].find((n) => n.querySelector(".meter-label")?.textContent === t("card.proxy"))?.querySelector(".meter-value");
+
+  it("names a list proxy and keeps the address in the tooltip", () => {
+    const listed = { ...cred, proxy_url: "socks5://u:xxxxx@hk:1080", proxy_id: "p1", proxy_name: "HK" };
+    const value = proxyValue(html(renderToStaticMarkup(<CredCard t={t} cred={listed} q={undefined} armed={false} busy={{}} locale="en-US" />)));
+    expect(value?.textContent).toBe("HK");
+    expect(value?.getAttribute("title")).toBe("socks5://u:xxxxx@hk:1080");
+  });
+
+  it("shows a custom address, direct or inherit as before", () => {
+    const custom = proxyValue(html(renderToStaticMarkup(<CredCard t={t} cred={{ ...cred, proxy_url: "http://x:1" }} q={undefined} armed={false} busy={{}} locale="en-US" />)));
+    expect(custom?.textContent).toBe("http://x:1");
+    const direct = proxyValue(html(renderToStaticMarkup(<CredCard t={t} cred={{ ...cred, proxy_url: "none" }} q={undefined} armed={false} busy={{}} locale="en-US" />)));
+    expect(direct?.textContent).toBe(t("proxy.direct"));
+    const inherit = proxyValue(html(renderToStaticMarkup(<CredCard t={t} cred={cred} q={undefined} armed={false} busy={{}} locale="en-US" />)));
+    expect(inherit?.textContent).toBe(t("proxy.inherit"));
+  });
+});
+
+describe("ProxiesPanel", () => {
+  const base = (over: Partial<State> = {}): State => ({
+    ...initialState(),
+    lang: "en",
+    tab: "proxies",
+    view: "app",
+    status: {
+      plugin: "wokey", version: "t", now: "", catalog: { count: 0 },
+      config: { base_url: "", default_prefix: "wokey", models_refresh_minutes: 0, request_timeout_seconds: 0, stream_idle_timeout_seconds: 0 },
+      credentials: [
+        cred,
+        { ...cred, auth_index: "8", name: "b.json", proxy_url: "direct" },
+        { ...cred, auth_index: "9", name: "c.json", proxy_url: "socks5://u:xxxxx@hk:1080", proxy_id: "p1", proxy_name: "HK" },
+      ],
+    },
+    proxies: { proxies: [{ id: "p1", name: "HK", url: "socks5://u:xxxxx@hk:1080", label: "socks5://hk:1080" }] },
+    ...over,
+  });
+  const rows = (doc: Document) => [...doc.querySelectorAll("#panel-proxies tbody tr")];
+  const cells = (row: Element) => [...row.querySelectorAll("td")].map((td) => td.textContent);
+
+  it("lists the built-in rows first and leaves exit and latency blank until checked", () => {
+    const doc = html(renderToStaticMarkup(<ProxiesPanel t={t} s={base()} />));
+    const all = rows(doc);
+    expect(all.map((r) => r.getAttribute("data-key"))).toEqual(["inherit", "direct", "id:p1"]);
+    expect(cells(all[0]).slice(0, 5)).toEqual([t("proxies.inherit") + t("proxies.builtin"), t("proxies.inheritNone"), t("proxies.usedBy", { n: 1 }), "—", "—"]);
+    expect(cells(all[1]).slice(2, 5)).toEqual([t("proxies.usedBy", { n: 1 }), "—", "—"]);
+    expect(cells(all[2]).slice(0, 5)).toEqual(["HK", "socks5://u:xxxxx@hk:1080", t("proxies.usedBy", { n: 1 }), "—", "—"]);
+    // Built-in rows can only be checked.
+    expect(all[0].querySelectorAll("button").length).toBe(1);
+    expect(all[2].querySelectorAll("button").length).toBe(3);
+    expect(doc.querySelector("#proxies-import")).toBeNull();
+  });
+
+  it("shows check results, progress and failures", () => {
+    const s = base({
+      proxyChecks: {
+        "id:p1": { state: "ok", url: "socks5://u:xxxxx@hk:1080", result: { ok: true, egress: "socks5://hk:1080", ip: "203.0.113.7", country: "HK", city: "Hong Kong", org: "AS1 Example", latency_ms: 412.4 } },
+        direct: { state: "loading", url: "" },
+        inherit: { state: "error", url: "", error: "dial tcp: timeout" },
+      },
+    });
+    const doc = html(renderToStaticMarkup(<ProxiesPanel t={t} s={s} />));
+    const [inherit, direct, hk] = rows(doc);
+    expect(hk.querySelector(".proxy-egress .mono")?.textContent).toBe("203.0.113.7");
+    expect(hk.querySelector(".proxy-egress .sub")?.textContent).toBe("HK · Hong Kong · AS1 Example");
+    expect(cells(hk)[4]).toBe(t("proxies.latency", { n: 412 }));
+    expect(cells(direct)[3]).toBe(t("proxies.checking"));
+    expect(direct.querySelector("button")?.hasAttribute("disabled")).toBe(true);
+    const failed = inherit.querySelector(".proxy-egress .danger-text");
+    expect(failed?.textContent).toBe(t("proxies.failed"));
+    const reason = inherit.querySelector(".proxy-egress .proxy-error");
+    expect(reason?.textContent).toBe("dial tcp: timeout");
+    expect(reason?.getAttribute("title")).toBe("dial tcp: timeout");
+    expect(cells(inherit)[4]).toBe("—");
+  });
+
+  it("offers to import addresses the list lacks and explains an armed delete", () => {
+    const s = base({ armedDelete: "proxy:p1" });
+    s.status!.credentials.push({ ...cred, auth_index: "10", name: "d.json", proxy_url: "http://other:1" });
+    const doc = html(renderToStaticMarkup(<ProxiesPanel t={t} s={s} />));
+    expect(doc.querySelector("#proxies-import")?.textContent).toBe(t("proxies.import"));
+    const hk = rows(doc)[2];
+    expect(hk.querySelector(".btn-danger")?.textContent).toBe(t("row.confirmDelete"));
+    expect(hk.querySelector(".proxy-delete-note")?.textContent).toBe(t("proxies.deleteUsedNote", { n: 1 }));
+  });
+
+  it("shows the global proxy and an empty list", () => {
+    const doc = html(renderToStaticMarkup(<ProxiesPanel t={t} s={base({ proxies: { proxies: [], global_proxy: "http://g:3128" } })} />));
+    const all = rows(doc);
+    expect(cells(all[0])[1]).toBe("http://g:3128");
+    expect(all[2].textContent).toBe(t("proxies.empty"));
   });
 });

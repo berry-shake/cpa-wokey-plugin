@@ -8,6 +8,7 @@ import {
   newEditor,
   pickerRows,
   previewSample,
+  proxyChoiceOf,
   registerPreview,
   toggleSelected,
   type EditorState,
@@ -58,6 +59,7 @@ describe("newEditor", () => {
       label: "Team A",
       labelPlaceholder: "wokey-aaaa",
       proxy: "socks5://u:***@h:1080",
+      proxyChoice: "custom",
       prefixDefault: false,
       prefix: "team",
       priority: "5",
@@ -147,7 +149,7 @@ describe("buildSaveBody when adding", () => {
   });
 
   it("sends only the fields that were filled", () => {
-    const ed = adding({ key: "sk-wk-new", label: " Mine ", proxy: "direct", prefixDefault: false, prefix: "/p/", priority: "-3", issuer: "wkt_example", all: false, selected: ["b", "a"] });
+    const ed = adding({ key: "sk-wk-new", label: " Mine ", proxyChoice: "direct", prefixDefault: false, prefix: "/p/", priority: "-3", issuer: "wkt_example", all: false, selected: ["b", "a"] });
     expect(buildSaveBody(ed)).toEqual({
       body: { api_key: "sk-wk-new", label: "Mine", proxy_url: "direct", prefix: "p", priority: -3, issuer_token: "wkt_example", models: ["a", "b"] },
     });
@@ -176,7 +178,7 @@ describe("buildSaveBody when editing", () => {
   });
 
   it("sends changed fields", () => {
-    const ed = editing(cred(), { label: "", proxy: "", prefixDefault: true, priority: "", issuerClear: true, all: true });
+    const ed = editing(cred(), { label: "", proxyChoice: "", prefixDefault: true, priority: "", issuerClear: true, all: true });
     expect(buildSaveBody(ed)).toEqual({
       body: { auth_index: "3", name: "wokey-aaaa.json", label: "", proxy_url: "", prefix: null, priority: null, issuer_token: "", models: null },
     });
@@ -201,5 +203,57 @@ describe("buildSaveBody when editing", () => {
 
   it("does not reset a default prefix that stays default", () => {
     expect(buildSaveBody(editing(cred({ prefix: null, all_models: true, models: null })))).toEqual({ body: { auth_index: "3", name: "wokey-aaaa.json" } });
+  });
+});
+
+describe("proxy choice", () => {
+  const body = (over: Record<string, unknown> = {}) => ({ body: { auth_index: "3", name: "wokey-aaaa.json", ...over } });
+
+  it("starts from the saved egress", () => {
+    expect(proxyChoiceOf(null)).toBe("");
+    expect(proxyChoiceOf({ proxy_url: "" })).toBe("");
+    expect(proxyChoiceOf({ proxy_url: "none" })).toBe("direct");
+    expect(proxyChoiceOf({ proxy_url: " Direct " })).toBe("direct");
+    expect(proxyChoiceOf({ proxy_url: "socks5://h:1080" })).toBe("custom");
+    expect(proxyChoiceOf({ proxy_url: "socks5://h:1080", proxy_id: "p1" })).toBe("id:p1");
+  });
+
+  it("fills the input only for a custom address", () => {
+    expect(editing()).toMatchObject({ proxyChoice: "custom", proxy: "socks5://u:***@h:1080" });
+    const listed = editing(cred({ proxy_id: "p1", proxy_name: "HK" }));
+    expect(listed).toMatchObject({ proxyChoice: "id:p1", proxy: "", original: { proxyChoice: "id:p1", proxyName: "HK" } });
+    expect(editing(cred({ proxy_url: undefined }))).toMatchObject({ proxyChoice: "", proxy: "" });
+    expect(adding()).toMatchObject({ proxyChoice: "", proxy: "" });
+  });
+
+  it("sends nothing while the choice is unchanged", () => {
+    expect(buildSaveBody(editing(cred({ proxy_id: "p1" })))).toEqual(body());
+    expect(buildSaveBody(editing(cred({ proxy_url: "none" }), { proxyChoice: "direct" }))).toEqual(body());
+    expect(buildSaveBody(editing(cred({ proxy_url: undefined })))).toEqual(body());
+  });
+
+  it("sends inherit, direct or a list proxy when switched", () => {
+    expect(buildSaveBody(editing(cred(), { proxyChoice: "" }))).toEqual(body({ proxy_url: "" }));
+    expect(buildSaveBody(editing(cred(), { proxyChoice: "direct" }))).toEqual(body({ proxy_url: "direct" }));
+    expect(buildSaveBody(editing(cred(), { proxyChoice: "id:p2" }))).toEqual(body({ proxy_id: "p2" }));
+    expect(buildSaveBody(editing(cred({ proxy_id: "p1" }), { proxyChoice: "id:p2" }))).toEqual(body({ proxy_id: "p2" }));
+  });
+
+  it("sends a custom address only when it changed", () => {
+    expect(buildSaveBody(editing(cred(), { proxy: " socks5://u:***@h:1080 " }))).toEqual(body());
+    expect(buildSaveBody(editing(cred(), { proxy: "http://h2:8080" }))).toEqual(body({ proxy_url: "http://h2:8080" }));
+    // Leaving a list proxy for a custom address always sends the address.
+    expect(buildSaveBody(editing(cred({ proxy_id: "p1" }), { proxyChoice: "custom", proxy: "http://h2:8080" }))).toEqual(body({ proxy_url: "http://h2:8080" }));
+  });
+
+  it("needs an address for a custom choice", () => {
+    expect(buildSaveBody(editing(cred(), { proxy: "  " }))).toEqual({ error: "form.needProxy" });
+    expect(buildSaveBody(adding({ key: "k", proxyChoice: "custom" }))).toEqual({ error: "form.needProxy" });
+  });
+
+  it("sends only a non-default choice when adding", () => {
+    expect(buildSaveBody(adding({ key: "k" }))).toEqual({ body: { api_key: "k" } });
+    expect(buildSaveBody(adding({ key: "k", proxyChoice: "id:p1" }))).toEqual({ body: { api_key: "k", proxy_id: "p1" } });
+    expect(buildSaveBody(adding({ key: "k", proxyChoice: "custom", proxy: " socks5://h:1 " }))).toEqual({ body: { api_key: "k", proxy_url: "socks5://h:1" } });
   });
 });

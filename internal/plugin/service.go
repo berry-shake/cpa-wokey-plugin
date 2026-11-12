@@ -20,6 +20,7 @@ import (
 	"github.com/berry-shake/cpa-wokey-plugin/internal/catalog"
 	"github.com/berry-shake/cpa-wokey-plugin/internal/config"
 	"github.com/berry-shake/cpa-wokey-plugin/internal/credential"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/proxystore"
 	"github.com/berry-shake/cpa-wokey-plugin/internal/requestlog"
 	"github.com/berry-shake/cpa-wokey-plugin/internal/wokey"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
@@ -78,6 +79,10 @@ type Service struct {
 	accountQueue *wokey.Queue
 	// issuerBase is the issuing API root; tests point it at a fake server.
 	issuerBase string
+	// proxies is the proxy list of the management page.
+	proxies *proxystore.Store
+	// egressCheckURLs are the IP lookup services of the egress check.
+	egressCheckURLs []string
 
 	loopOnce sync.Once
 	kick     chan struct{}
@@ -109,6 +114,9 @@ func New(version string, host HostCaller) *Service {
 		accountQueue: wokey.NewQueue(),
 		issuerBase:   wokey.DefaultIssuerBaseURL,
 		kick:         make(chan struct{}, 1),
+
+		proxies:         proxystore.New(),
+		egressCheckURLs: defaultEgressCheckURLs,
 	}
 	svc.reqlog = requestlog.New(func(message string) { svc.logf("warn", message, nil) })
 	return svc
@@ -283,6 +291,10 @@ func (s *Service) register(request []byte) rpcRegistration {
 		s.logf("warn", "wokey: "+warning, nil)
 	}
 	s.reqlog.Configure(cfg.DataDir, cfg.LogRetention, cfg.LogRetentionDays)
+	s.proxies.Configure(cfg.DataDir)
+	if _, loadErr := s.proxies.List(); loadErr != "" {
+		s.logf("warn", "wokey: "+loadErr, nil)
+	}
 	s.loopOnce.Do(func() { go s.refreshLoop() })
 	if previous.ModelPrefix != cfg.ModelPrefix || previous.BaseURL != cfg.BaseURL {
 		// The default auth prefix is applied when CPA parses an auth file,

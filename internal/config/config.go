@@ -38,8 +38,8 @@ type Config struct {
 	RequestTimeout time.Duration
 	// StreamIdleTimeout aborts a stream that has produced no bytes for this long.
 	StreamIdleTimeout time.Duration
-	// DataDir holds plugin data (the request log). Relative paths resolve
-	// against CPA's working directory.
+	// DataDir holds plugin data (the request log and the proxy list).
+	// Relative paths resolve against CPA's working directory.
 	DataDir string
 	// LogRetention is how many requests the request log keeps; 0 disables it.
 	LogRetention int

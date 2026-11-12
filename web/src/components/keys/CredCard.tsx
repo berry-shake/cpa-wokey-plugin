@@ -80,7 +80,13 @@ function Facts({ t, cred }: { t: T; cred: CredentialView }) {
   const modelsText = cred.all_models ? t("models.all") : t("models.selected", { count: models.length });
   const prefixText = cred.effective_prefix ? cred.effective_prefix + "/" : t("prefix.none");
   let proxyText = t("proxy.inherit");
-  if (cred.proxy_url) proxyText = isDirect(cred.proxy_url) ? t("proxy.direct") : cred.proxy_url;
+  let proxyTip: string | undefined;
+  if (cred.proxy_name) {
+    proxyText = cred.proxy_name;
+    proxyTip = cred.proxy_url;
+  } else if (cred.proxy_url) {
+    proxyText = isDirect(cred.proxy_url) ? t("proxy.direct") : cred.proxy_url;
+  }
   const ok = cred.success || 0;
   const failed = cred.failed || 0;
   return (
@@ -100,7 +106,7 @@ function Facts({ t, cred }: { t: T; cred: CredentialView }) {
         text={prefixText}
         tip={prefixText + "\n" + t(cred.prefix === null || cred.prefix === undefined ? "prefix.default" : "prefix.custom")}
       />
-      <Fact label={t("card.proxy")} text={proxyText} />
+      <Fact label={t("card.proxy")} text={proxyText} tip={proxyTip} />
       <Fact
         label={t("card.requestsLabel")}
         text={ok + " / "}

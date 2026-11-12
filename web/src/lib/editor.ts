@@ -1,6 +1,6 @@
 import type { CredentialSaveRequest, CredentialView, ModelView } from "../api/types";
 import { cleanPrefix, fileStem, fmtPrice, fmtTokens } from "./format";
-import { displayName } from "./credentials";
+import { displayName, isDirect } from "./credentials";
 import type { Params, T } from "../i18n";
 
 /** The saved values of the credential being edited. */
@@ -8,6 +8,9 @@ export interface EditorOriginal {
   label: string;
   note: string;
   proxy: string;
+  proxyChoice: ProxyChoice;
+  /** Name of the list proxy the credential uses, for when the list is not loaded. */
+  proxyName: string;
   /** null or undefined when the credential uses the plugin default. */
   prefix: string | null | undefined;
   priority: string;
@@ -30,6 +33,9 @@ export interface EditorState {
   skipVerify: boolean;
   label: string;
   note: string;
+  /** Which egress the proxy select shows. */
+  proxyChoice: ProxyChoice;
+  /** The custom address input; used only while proxyChoice is "custom". */
   proxy: string;
   /** The prefix input's own value; shown only while prefixDefault is off. */
   prefix: string;
@@ -44,9 +50,25 @@ export interface EditorState {
   error: { key: string; params: Params | null } | null;
 }
 
+/**
+ * The proxy select: "" inherits CPA's global proxy, "direct" forces a direct
+ * connection, "id:<id>" uses a list proxy and "custom" an address typed in.
+ */
+export type ProxyChoice = "" | "direct" | "custom" | `id:${string}`;
+
+/** The select value for a saved credential. */
+export function proxyChoiceOf(cred: Pick<CredentialView, "proxy_url" | "proxy_id"> | null): ProxyChoice {
+  if (!cred) return "";
+  if (cred.proxy_id) return `id:${cred.proxy_id}`;
+  const proxy = String(cred.proxy_url || "").trim();
+  if (!proxy) return "";
+  return isDirect(proxy) ? "direct" : "custom";
+}
+
 export function newEditor(seq: number, mode: "add" | "edit", cred: CredentialView | null, defaultPrefix: string): EditorState {
   const editing = mode === "edit" && cred ? cred : null;
   const usesDefault = !editing || editing.prefix === null || editing.prefix === undefined;
+  const proxyChoice = proxyChoiceOf(editing);
   return {
     seq,
     mode: editing ? "edit" : "add",
@@ -57,6 +79,8 @@ export function newEditor(seq: number, mode: "add" | "edit", cred: CredentialVie
       label: editing.label || "",
       note: editing.note || "",
       proxy: editing.proxy_url || "",
+      proxyChoice,
+      proxyName: editing.proxy_name || "",
       prefix: editing.prefix,
       priority: editing.priority ? String(editing.priority) : "",
       issuer: editing.issuer_token_masked || "",
@@ -69,7 +93,9 @@ export function newEditor(seq: number, mode: "add" | "edit", cred: CredentialVie
     skipVerify: false,
     label: editing ? editing.label || "" : "",
     note: editing ? editing.note || "" : "",
-    proxy: editing ? editing.proxy_url || "" : "",
+    proxyChoice,
+    // Only a custom address is put in the input; a list proxy is picked by id.
+    proxy: editing && proxyChoice === "custom" ? editing.proxy_url || "" : "",
     prefix: usesDefault ? defaultPrefix : editing.prefix || "",
     prefixDefault: usesDefault,
     priority: editing && editing.priority ? String(editing.priority) : "",
@@ -162,7 +188,7 @@ export function buildSaveBody(ed: EditorState): SaveResult {
     body.auth_index = ed.authIndex;
     body.name = ed.name;
   }
-  const orig: EditorOriginal = ed.original || { label: "", note: "", proxy: "", prefix: null, priority: "", issuer: "", all: true, models: [] };
+  const orig: EditorOriginal = ed.original || { label: "", note: "", proxy: "", proxyChoice: "", proxyName: "", prefix: null, priority: "", issuer: "", all: true, models: [] };
 
   const label = ed.label.trim();
   if (adding ? label !== "" : label !== orig.label) body.label = label;
@@ -170,10 +196,8 @@ export function buildSaveBody(ed: EditorState): SaveResult {
   const note = ed.note.trim();
   if (adding ? note !== "" : note !== orig.note) body.note = note;
 
-  // The proxy field shows the stored value with its password redacted; only
-  // send it when the user changed it.
-  const proxy = ed.proxy.trim();
-  if (adding ? proxy !== "" : proxy !== orig.proxy) body.proxy_url = proxy;
+  const proxyError = applyProxyChoice(body, ed, orig, adding);
+  if (proxyError) return { error: proxyError };
 
   if (ed.prefixDefault) {
     if (!adding && orig.prefix !== null && orig.prefix !== undefined) body.prefix = null;
@@ -205,4 +229,26 @@ export function buildSaveBody(ed: EditorState): SaveResult {
     if (adding || orig.all || selected.join("\n") !== before.join("\n")) body.models = selected;
   }
   return { body };
+}
+
+/**
+ * Puts the proxy choice into the body when it changed: proxy_url "" to
+ * inherit, "direct", proxy_id for a list proxy, or the typed address.
+ * Returns a message key when a custom address is missing.
+ */
+function applyProxyChoice(body: CredentialSaveRequest, ed: EditorState, orig: EditorOriginal, adding: boolean): string | null {
+  const choice = ed.proxyChoice;
+  if (choice === "custom") {
+    // The input shows a saved address with its password redacted; only send
+    // it when the user changed it.
+    const proxy = ed.proxy.trim();
+    if (!proxy) return "form.needProxy";
+    if (adding || orig.proxyChoice !== "custom" || proxy !== orig.proxy) body.proxy_url = proxy;
+    return null;
+  }
+  if (!adding && choice === orig.proxyChoice) return null;
+  if (choice.startsWith("id:")) body.proxy_id = choice.slice(3);
+  else if (choice === "direct") body.proxy_url = "direct";
+  else if (!adding) body.proxy_url = "";
+  return null;
 }

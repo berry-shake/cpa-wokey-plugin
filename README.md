@@ -76,7 +76,7 @@ plugins:
       models-refresh-minutes: 60          # 模型目录轮询间隔（分钟），0 = 不轮询，只按需加载
       request-timeout-seconds: 600        # 非流式请求超时
       stream-idle-timeout-seconds: 300    # 流式响应多久没有新数据就中断
-      data-dir: plugins/wokey-data        # 插件数据目录（请求日志数据库 wokey.db），相对路径按 CPA 的工作目录算
+      data-dir: plugins/wokey-data        # 插件数据目录（请求日志数据库 wokey.db、代理列表 proxies.json），相对路径按 CPA 的工作目录算
       log-retention: 100000               # 请求日志最多保留多少条（上限 1000000），0 = 不记录
       log-retention-days: 30              # 请求日志保留多少天，0 = 不按天数清理，只受条数限制
 ```
@@ -145,6 +145,8 @@ plugins:
 
 支持 `http://`、`https://`、`socks5://`、`socks5h://`，可以带用户名密码。写 `direct` 或 `none` 表示这个 Key 强制直连，不走全局代理。管理页里显示的代理地址会隐藏密码。
 
+常用的代理可以在管理页的 **代理** 页里存成列表，编辑 Key 时直接从列表里选。选列表里的代理，实际上就是把它的地址写进 `proxy_url`，CPA 那边看到的还是普通的认证文件字段。
+
 ## 模型同步
 
 - 插件启动后按 `models-refresh-minutes` 轮询 `GET /v1/models`（带 ETag，没变化时上游返回 304）。
@@ -206,8 +208,15 @@ Wokey 在这个接口里会顺带结算冷却期已满的作废礼品卡，除�
   - Key 以卡片网格展示（宽屏一行三张，窄屏单列）。每张卡片从上到下依次是：名称（默认是认证文件名，不带 `.json`）、状态、打码后的 Key 和优先级，配了发卡令牌时右上角显示收益；左边是模型、前缀、出口代理和成功 / 失败次数，右边是余额和 24h / 7d / 30d 消费，两边都是 2×2，详情在鼠标悬停提示里（卡片窄时上下排）；下面是限额进度条、备注和状态；底部是查询时间和操作按钮。
   - 卡片上可以编辑、启用/停用、删除（删除需要 4 秒内再点一次确认）；可以按名称、Key 或文件名搜索。
   - 打开页面时自动查询所有 Key 的余额（停用的也查），"刷新余额"重新查询全部。查询按出口排队：同一个出口（同一个代理，或同样直连）一次只查一个 Key，这个 Key 的余额、用量和收益依次查完再轮到下一个；不同出口之间同时查。CPA 额度面板发来的查询、保存 Key 时的校验也一起排队。
-- 添加和编辑在弹窗里进行：名称、出口代理、模型前缀、优先级、发卡令牌，以及"全部模型 / 只注册选中的模型"，选模型时可以搜索、按价格和上下文长度对比。添加 Key 时默认先调用 Wokey 校验 Key 是否有效；名称留空时用认证文件名。
+- 添加和编辑在弹窗里进行：名称、出口代理（继承 CPA 全局代理 / 直连 / 代理列表里的代理 / 自定义地址）、模型前缀、优先级、发卡令牌，以及"全部模型 / 只注册选中的模型"，选模型时可以搜索、按价格和上下文长度对比。添加 Key 时默认先调用 Wokey 校验 Key 是否有效；名称留空时用认证文件名。
 - 发卡令牌只显示打码后的样子。编辑时留空表示不改，勾选"移除已保存的令牌"才会删掉；填了新令牌会先调用发卡接口校验，通过才保存（添加时勾了"跳过 Key 校验"则不校验）。
+- **代理** 页：管理出口代理列表。
+  - 可以添加、编辑、删除代理。名称留空时用 `主机:端口`；地址只显示隐藏了密码的样子，编辑时地址留空表示不改。
+  - 改了某个代理的地址时，正在用它的 Key（`proxy_url` 和旧地址完全相同）会一起改成新地址。删除代理不影响 Key：用它的 Key 保留原地址，变成"自定义地址"。
+  - 有 Key 用了列表里没有的代理时，可以点"导入 Key 里的代理"一次加进来。
+  - 列表上面固定两行：继承 CPA 全局代理、直连，对应 Key 编辑弹窗里 CPA 内置的两个选项。
+  - 出口 IP 和延迟默认不显示，要手动点"检测"（单个）或"检测全部"才查，不会自动检测。检测时插件通过这个代理请求 `https://ipinfo.io/json`，失败再试 `https://api.ip.sb/geoip`，User-Agent 用 `curl/8.7.1`；每次检测新建连接，延迟包含连上代理的时间，单个服务超时 10 秒。结果只留在当前页面，刷新后不保留。
+  - 代理列表存在 `<data-dir>/proxies.json`（默认 `plugins/wokey-data/proxies.json`，权限 0600，里面有代理的用户名密码）。
 - **模型目录** 页：Wokey 公开模型的提供方、上下文长度、价格，以及每个模型在 CPA 里注册的名字和服务它的 Key 数。
 - **请求日志** 页：经过本插件的每次调用，最新的在前。
   - 最上面是时间范围：全部、今天、24 小时、近 7 天、近 30 天、自定义（精确到分钟的起止时间，点"应用"生效）。按请求开始时间筛选，选择会记在浏览器里。
@@ -239,6 +248,12 @@ PATCH /v0/management/plugins/wokey/credentials      编辑 Key
 GET   /v0/management/plugins/wokey/credentials/quota?auth_index=...   账户余额、Key 消费，以及发卡令牌对应的收益
 GET   /v0/management/plugins/wokey/logs?search=&status=all|success|error&from=&to=&limit=50&offset=0   请求日志（最新的在前）和统计；from / to 是 RFC 3339 时间，按请求开始时间筛选，含 from 不含 to
 DELETE /v0/management/plugins/wokey/logs            清空请求日志
+GET   /v0/management/plugins/wokey/proxies          代理列表（地址隐藏密码）和 CPA 全局代理
+POST  /v0/management/plugins/wokey/proxies          添加代理 {"name","url"}
+PATCH /v0/management/plugins/wokey/proxies          修改代理 {"id","name","url"}，改地址时同步改用它的 Key
+DELETE /v0/management/plugins/wokey/proxies?id=...  删除代理，用它的 Key 保留原地址
+POST  /v0/management/plugins/wokey/proxies/import   把 Key 里用到、列表里还没有的代理加进列表
+POST  /v0/management/plugins/wokey/proxies/check    检测出口 IP 和延迟，{"id"} 或 {"target":"direct"|"inherit"}
 ```
 
 `/v0/management` 路由由 CPA 宿主先校验管理密钥，通过后才转发给插件。
@@ -256,6 +271,8 @@ curl -X PATCH -H "Authorization: Bearer $MANAGEMENT_KEY" \
   -d '{"auth_index":"<AUTH_INDEX>","models":null,"prefix":null,"proxy_url":"socks5://127.0.0.1:1080"}' \
   http://127.0.0.1:8317/v0/management/plugins/wokey/credentials
 ```
+
+添加和编辑 Key 时可以用 `"proxy_id"` 代替 `"proxy_url"`，表示使用代理列表里的那个代理（写入它的地址）。Key 的 `proxy_url` 和列表里某个代理完全相同时，`status` 返回的这个 Key 带 `proxy_id` 和 `proxy_name`。
 
 编辑接口只修改请求里出现的字段：`null` 表示恢复默认（`models` 恢复为全部模型，`prefix` 恢复为插件默认前缀，`priority` 清除），空字符串表示清除（`label`、`note`、`proxy_url`、`base_url`、`issuer_token`）。`api_key` 不能修改，换 Key 请新增一个再删掉旧的。
 

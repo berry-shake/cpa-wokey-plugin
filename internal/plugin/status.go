@@ -10,6 +10,7 @@ import (
 	"github.com/berry-shake/cpa-wokey-plugin/internal/config"
 	"github.com/berry-shake/cpa-wokey-plugin/internal/credential"
 	"github.com/berry-shake/cpa-wokey-plugin/internal/jsonfield"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/proxystore"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
@@ -47,19 +48,22 @@ type catalogView struct {
 }
 
 type credentialView struct {
-	AuthIndex        string   `json:"auth_index"`
-	ID               string   `json:"id"`
-	Name             string   `json:"name"`
-	Label            string   `json:"label"`
-	KeyMasked        string   `json:"key_masked"`
-	Disabled         bool     `json:"disabled"`
-	Unavailable      bool     `json:"unavailable"`
-	Status           string   `json:"status,omitempty"`
-	StatusMessage    string   `json:"status_message,omitempty"`
-	Priority         int      `json:"priority"`
-	Note             string   `json:"note,omitempty"`
-	BaseURL          string   `json:"base_url,omitempty"`
-	ProxyURL         string   `json:"proxy_url,omitempty"`
+	AuthIndex     string `json:"auth_index"`
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Label         string `json:"label"`
+	KeyMasked     string `json:"key_masked"`
+	Disabled      bool   `json:"disabled"`
+	Unavailable   bool   `json:"unavailable"`
+	Status        string `json:"status,omitempty"`
+	StatusMessage string `json:"status_message,omitempty"`
+	Priority      int    `json:"priority"`
+	Note          string `json:"note,omitempty"`
+	BaseURL       string `json:"base_url,omitempty"`
+	ProxyURL      string `json:"proxy_url,omitempty"`
+	// ProxyID and ProxyName name the listed proxy whose URL is proxy_url.
+	ProxyID          string   `json:"proxy_id,omitempty"`
+	ProxyName        string   `json:"proxy_name,omitempty"`
 	IssuerToken      string   `json:"issuer_token_masked,omitempty"`
 	Prefix           *string  `json:"prefix"`
 	EffectivePrefix  string   `json:"effective_prefix"`
@@ -100,8 +104,9 @@ func (s *Service) status() statusView {
 	}
 	registered := s.registeredModels()
 	snapshot := s.catalog.Current()
+	proxies, _ := s.proxies.List()
 	for _, entry := range entries {
-		view.Credentials = append(view.Credentials, credentialViewOf(entry, cfg, snapshot, registered))
+		view.Credentials = append(view.Credentials, credentialViewOf(entry, cfg, snapshot, registered, proxies))
 	}
 	return view
 }
@@ -117,7 +122,7 @@ func catalogSummary(snapshot catalog.Snapshot) catalogView {
 	return view
 }
 
-func credentialViewOf(entry wokeyAuth, cfg config.Config, snapshot catalog.Snapshot, registered map[string][]string) credentialView {
+func credentialViewOf(entry wokeyAuth, cfg config.Config, snapshot catalog.Snapshot, registered map[string][]string, proxies proxystore.List) credentialView {
 	view := credentialView{
 		AuthIndex:     entry.AuthIndex,
 		ID:            entry.ID,
@@ -150,6 +155,9 @@ func credentialViewOf(entry wokeyAuth, cfg config.Config, snapshot catalog.Snaps
 	view.KeyMasked = credential.MaskKey(cred.APIKey)
 	view.BaseURL = cred.BaseURL
 	view.ProxyURL = redactProxy(cred.ProxyURL)
+	if p, ok := proxies.Match(cred.ProxyURL); ok {
+		view.ProxyID, view.ProxyName = p.ID, p.Name
+	}
 	if cred.IssuerToken != "" {
 		view.IssuerToken = credential.MaskKey(cred.IssuerToken)
 	}

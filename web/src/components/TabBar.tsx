@@ -15,6 +15,7 @@ const svg = {
 const ICONS: Record<Tab, ReactNode> = {
   logs: <svg {...svg}><path d="M8 6h12M8 12h12M8 18h12" /><circle cx="4" cy="6" r="1" /><circle cx="4" cy="12" r="1" /><circle cx="4" cy="18" r="1" /></svg>,
   keys: <svg {...svg}><circle cx="8" cy="15" r="4" /><path d="m10.85 12.15 8.65-8.65M15.5 7.5l3 3M13 10l2 2" /></svg>,
+  proxies: <svg {...svg}><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.6 3.75 5.6 3.75 9S14.5 18.4 12 21M12 3C9.5 5.6 8.25 8.6 8.25 12S9.5 18.4 12 21" /></svg>,
   models: <svg {...svg}><path d="m12 3 9 4.5-9 4.5-9-4.5L12 3Z" /><path d="m3 12 9 4.5 9-4.5M3 16.5 12 21l9-4.5" /></svg>,
   config: <svg {...svg}><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" /><circle cx="15" cy="6" r="2" /><circle cx="9" cy="12" r="2" /><circle cx="17" cy="18" r="2" /></svg>,
 };
@@ -24,6 +25,9 @@ function tabCount(s: State, tab: Tab): string | null {
   if (tab === "keys") {
     const creds = data && Array.isArray(data.credentials) ? data.credentials : null;
     return creds && !data!.list_error ? String(creds.length) : "";
+  }
+  if (tab === "proxies") {
+    return s.proxies ? String(s.proxies.proxies.length) : "";
   }
   if (tab === "models") {
     const count = data && data.catalog ? data.catalog.count : 0;

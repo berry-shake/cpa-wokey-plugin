@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { T } from "../../i18n";
 import { defaultPrefix } from "../../lib/credentials";
-import { currentPrefix, modelMeta, newEditor, pickerRows, previewSample, registerPreview, type EditorState } from "../../lib/editor";
+import {
+  currentPrefix, modelMeta, newEditor, pickerRows, previewSample, registerPreview, type EditorState, type ProxyChoice,
+} from "../../lib/editor";
 import { store, type State } from "../../state/store";
 
 function Picker({ t, s, ed }: { t: T; s: State; ed: EditorState }) {
@@ -59,6 +61,51 @@ function Picker({ t, s, ed }: { t: T; s: State; ed: EditorState }) {
         </span>
       </div>
       <div className="picker-list" id="picker-list">{list}</div>
+    </div>
+  );
+}
+
+/**
+ * The egress select: CPA's built-in choices, the saved proxies, or an
+ * address typed in.
+ */
+function ProxyField({ t, s, ed }: { t: T; s: State; ed: EditorState }) {
+  const proxies = s.proxies ? s.proxies.proxies : [];
+  const global = s.proxies ? s.proxies.global_proxy : s.status && s.status.config ? s.status.config.global_proxy : undefined;
+  const choice = ed.proxyChoice;
+  // A saved list proxy stays selectable before the list loaded or after it was removed.
+  const orphan = choice.startsWith("id:") && !proxies.some((p) => "id:" + p.id === choice);
+  const orphanName = ed.original && ed.original.proxyChoice === choice ? ed.original.proxyName || ed.original.proxy : choice.slice(3);
+  return (
+    <div className="field">
+      <label htmlFor="f-proxy-choice">{t("form.proxy")}</label>
+      <select
+        className="input"
+        id="f-proxy-choice"
+        value={choice}
+        onChange={(event) => store.updateEditor({ proxyChoice: event.target.value as ProxyChoice })}
+      >
+        <option value="">{global ? t("form.proxyInheritValue", { proxy: global }) : t("form.proxyInherit")}</option>
+        <option value="direct">{t("form.proxyDirect")}</option>
+        {proxies.map((p) => (
+          <option key={p.id} value={"id:" + p.id}>{(p.name || p.label) + " — " + (p.label || p.url)}</option>
+        ))}
+        {orphan ? <option value={choice}>{orphanName}</option> : null}
+        <option value="custom">{t("form.proxyCustom")}</option>
+      </select>
+      {choice === "custom" ? (
+        <input
+          className="input mono"
+          id="f-proxy"
+          type="text"
+          spellCheck={false}
+          autoFocus
+          placeholder="socks5://user:pass@host:1080"
+          value={ed.proxy}
+          onChange={(event) => store.updateEditor({ proxy: event.target.value })}
+        />
+      ) : null}
+      <span className="help">{t(choice === "custom" ? "form.proxyCustomHelp" : "form.proxyHelp")}</span>
     </div>
   );
 }
@@ -174,19 +221,7 @@ export function EditorDialog({ t, s }: { t: T; s: State }) {
               />
               <span className="help">{t("form.noteHelp")}</span>
             </div>
-            <div className="field">
-              <label htmlFor="f-proxy">{t("form.proxy")}</label>
-              <input
-                className="input mono"
-                id="f-proxy"
-                type="text"
-                spellCheck={false}
-                placeholder="socks5://user:pass@host:1080"
-                value={ed.proxy}
-                onChange={(event) => store.updateEditor({ proxy: event.target.value })}
-              />
-              <span className="help">{t("form.proxyHelp")}</span>
-            </div>
+            <ProxyField t={t} s={s} ed={ed} />
             <div className="field">
               <label htmlFor="f-prefix">{t("form.prefix")}</label>
               <input

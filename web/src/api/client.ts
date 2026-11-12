@@ -4,6 +4,12 @@ import type {
   ErrorResponse,
   LogPage,
   ModelsResponse,
+  ProxiesResponse,
+  ProxyCheckResult,
+  ProxyCheckTarget,
+  ProxyImportResponse,
+  ProxySaveRequest,
+  ProxySaveResponse,
   QuotaView,
   StatusView,
 } from "./types";
@@ -80,6 +86,12 @@ export function createApi(getKey: () => string) {
     quota: (authIndex: string) => api<QuotaView>("/credentials/quota?auth_index=" + encodeURIComponent(authIndex)),
     saveCredential: (adding: boolean, body: CredentialSaveRequest) =>
       api<CredentialSaveResponse>("/credentials", { method: adding ? "POST" : "PATCH", body }),
+    proxies: () => api<ProxiesResponse>("/proxies"),
+    addProxy: (body: ProxySaveRequest) => api<ProxySaveResponse>("/proxies", { method: "POST", body }),
+    updateProxy: (body: ProxySaveRequest) => api<ProxySaveResponse>("/proxies", { method: "PATCH", body }),
+    deleteProxy: (id: string) => api<unknown>("/proxies?id=" + encodeURIComponent(id), { method: "DELETE" }),
+    importProxies: () => api<ProxyImportResponse>("/proxies/import", { method: "POST" }),
+    checkProxy: (target: ProxyCheckTarget) => api<ProxyCheckResult>("/proxies/check", { method: "POST", body: target }),
     logs: (params: URLSearchParams) => api<LogPage>("/logs?" + params.toString()),
     clearLogs: () => api<unknown>("/logs", { method: "DELETE" }),
     setDisabled: (name: string, authIndex: string, disabled: boolean) =>

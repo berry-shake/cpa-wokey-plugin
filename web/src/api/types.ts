@@ -34,6 +34,9 @@ export interface CredentialView {
   note?: string;
   base_url?: string;
   proxy_url?: string;
+  /** Set when proxy_url is exactly the address of a proxy in the list. */
+  proxy_id?: string;
+  proxy_name?: string;
   issuer_token_masked?: string;
   /** null means the plugin's default prefix applies. */
   prefix: string | null;
@@ -126,6 +129,8 @@ export interface CredentialSaveRequest {
   /** "" removes the note. */
   note?: string;
   proxy_url?: string;
+  /** Uses the address of this list proxy; wins over proxy_url. */
+  proxy_id?: string;
   issuer_token?: string;
   /** null resets to the plugin default. */
   prefix?: string | null;
@@ -203,6 +208,63 @@ export interface LogPage {
   retention: number;
   retention_days: number;
   summary: LogSummary;
+  error?: string;
+}
+
+/** A saved proxy; url has its password redacted. */
+export interface ProxyView {
+  id: string;
+  name: string;
+  url: string;
+  /** scheme://host:port */
+  label: string;
+  created_at?: string;
+}
+
+export interface ProxiesResponse {
+  proxies: ProxyView[];
+  /** CPA's global proxy-url, redacted; absent when not set. */
+  global_proxy?: string;
+  load_error?: string;
+}
+
+/** Body of POST (add, without id) and PATCH (edit) /proxies. */
+export interface ProxySaveRequest {
+  id?: string;
+  name?: string;
+  /** Absent when editing keeps the saved address. */
+  url?: string;
+}
+
+export interface ProxySaveResponse {
+  ok: boolean;
+  proxy?: ProxyView;
+  /** Keys moved to the new address when the address changed. */
+  updated_credentials?: number;
+  failed_credentials?: string[];
+}
+
+export interface ProxyImportResponse {
+  ok: boolean;
+  added: number;
+  proxies: ProxyView[];
+}
+
+export type ProxyCheckTarget = { id: string } | { target: "direct" | "inherit" };
+
+/** An egress check; a failed check is ok: false with error, still HTTP 200. */
+export interface ProxyCheckResult {
+  ok: boolean;
+  /** "direct", "env" or the proxy as scheme://host:port. */
+  egress?: string;
+  ip?: string;
+  country?: string;
+  region?: string;
+  city?: string;
+  org?: string;
+  latency_ms?: number;
+  source?: string;
+  checked_at?: string;
   error?: string;
 }
 

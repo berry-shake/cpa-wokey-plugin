@@ -128,6 +128,15 @@ func (c *Clients) Client(setting Egress) *http.Client {
 	if client, ok := c.clients[setting.key]; ok {
 		return client
 	}
+	// Request deadlines come from contexts; the client itself has no timeout
+	// so long streams are not cut off.
+	client := &http.Client{Transport: NewTransport(setting)}
+	c.clients[setting.key] = client
+	return client
+}
+
+// NewTransport builds an HTTP transport that goes out through an egress.
+func NewTransport(setting Egress) *http.Transport {
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
@@ -148,11 +157,7 @@ func (c *Clients) Client(setting Egress) *http.Client {
 	default:
 		transport.Proxy = http.ProxyFromEnvironment
 	}
-	// Request deadlines come from contexts; the client itself has no timeout
-	// so long streams are not cut off.
-	client := &http.Client{Transport: transport}
-	c.clients[setting.key] = client
-	return client
+	return transport
 }
 
 // CloseIdle closes idle connections of every cached client.

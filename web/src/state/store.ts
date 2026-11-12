@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { createApi, errorMessage, errorStatus, isAuthError } from "../api/client";
 import { readPanelKey } from "../api/panelKey";
-import type { CredentialView, LogEntry, LogPage, ModelsResponse, StatusView } from "../api/types";
+import type { CredentialView, LogEntry, LogPage, ModelsResponse, ProxiesResponse, ProxyView, StatusView } from "../api/types";
 import { initialLang, saveLang, translate, type Lang, type Params } from "../i18n";
 import {
   credentialsOf, defaultPrefix, displayName, quotaGroups, statusHealth,
@@ -14,11 +14,17 @@ import {
   customRangeError, isFiltered, lastPageOffset, logRangeParams, LOG_RANGE_KEY, LOG_SIZE_KEY,
   offsetForSize, parseLogSize, restoreLogRange, type LogRange,
 } from "../lib/logs";
+import {
+  buildProxyBody, checkTarget, checkUrl, DIRECT_KEY, INHERIT_KEY, newProxyDialog, proxyCheckKey, proxyUsage, pruneChecks, runLimited,
+  type ProxyCheckEntry, type ProxyCheckMap, type ProxyDialogState,
+} from "../lib/proxies";
 
-export const TABS = ["logs", "keys", "models", "config"] as const;
+export const TABS = ["logs", "keys", "proxies", "models", "config"] as const;
 export type Tab = (typeof TABS)[number];
 export const TAB_KEY = "cliproxy-wokey-tab";
 const REFRESH_MS = 30000;
+/** How many egress checks "check all" runs at once. */
+const CHECK_CONCURRENCY = 4;
 
 export interface Message {
   key: string;
@@ -66,8 +72,20 @@ export interface State {
   catalogLoading: boolean;
   catalogFilter: string;
   keysFilter: string;
+  /** The saved proxies; null until loaded. */
+  proxies: ProxiesResponse | null;
+  proxiesError: string | null;
+  /** Egress checks by "id:<id>", "direct" or "inherit"; page memory only, never automatic. */
+  proxyChecks: ProxyCheckMap;
+  /** The open add/edit proxy dialog; null while closed. */
+  proxyDialog: ProxyDialogState | null;
+  /** A credential name, or "proxy:<id>" for a proxy, armed for deletion. */
   armedDelete: string | null;
-  /** Buttons waiting on a request: refresh, catalog, quota, login, save, logs, toggle:<name>, delete:<name>. */
+  /**
+   * Buttons waiting on a request: refresh, catalog, quota, login, save, logs,
+   * toggle:<name>, delete:<name>, proxy-save, proxy-import, proxy-check-all,
+   * proxy-delete:<id>.
+   */
   busy: Record<string, true>;
   /** The open editor; null while the dialog is closed. */
   editor: EditorState | null;
@@ -117,6 +135,10 @@ export function initialState(now = Date.now()): State {
     catalogLoading: false,
     catalogFilter: "",
     keysFilter: "",
+    proxies: null,
+    proxiesError: null,
+    proxyChecks: {},
+    proxyDialog: null,
     armedDelete: null,
     busy: {},
     editor: null,
@@ -156,6 +178,8 @@ export class Store {
   private searchTimer: ReturnType<typeof setTimeout> | null = null;
   private logSeq = 0;
   private editorSeq = 0;
+  private proxySeq = 0;
+  private proxyDialogSeq = 0;
 
   constructor(state: State = initialState()) {
     this.state = state;
@@ -256,6 +280,7 @@ export class Store {
   private ensureTabData(): void {
     const s = this.state;
     if (this.key && s.tab === "logs") this.loadLogs(true).catch(() => {});
+    if (this.key && s.tab === "proxies") void this.loadProxies();
     if (this.key && s.tab === "models" && !s.catalog && !s.catalogLoading) this.loadCatalog(false).catch(() => {});
   }
 
@@ -269,6 +294,7 @@ export class Store {
     this.key = "";
     this.stopAutoRefresh();
     this.closeEditor();
+    this.closeProxyDialog();
     this.set({
       view: "login",
       loginError: errorKey ? { key: errorKey, params: { msg } } : null,
@@ -301,6 +327,8 @@ export class Store {
     this.showContent();
     this.applyStatus(data);
     void this.loadAllQuotas(false);
+    // showContent already loads the list when the proxy tab is open.
+    if (this.state.tab !== "proxies") void this.loadProxies();
   }
 
   async login(): Promise<void> {
@@ -368,6 +396,7 @@ export class Store {
   async refresh(silent: boolean): Promise<void> {
     if (!silent) this.setBusy("refresh", true);
     try {
+      void this.loadProxies();
       this.applyStatus(await this.api.status());
       if (!silent) this.setNotice(null);
     } catch (error) {
@@ -519,6 +548,7 @@ export class Store {
     const s = this.state;
     this.set({ editor: newEditor(++this.editorSeq, mode, cred || null, defaultPrefix(s.status)) });
     if (!s.catalog && !s.catalogLoading) this.loadCatalog(false).catch(() => {});
+    if (!s.proxies) void this.loadProxies();
   }
 
   closeEditor(): void {
@@ -602,6 +632,188 @@ export class Store {
       }
     } finally {
       this.setBusy("save", false);
+    }
+  }
+
+  // ---- proxies ----
+
+  private applyProxies(data: ProxiesResponse): void {
+    const proxies = Array.isArray(data.proxies) ? data.proxies : [];
+    this.set((s) => ({
+      proxies: { ...data, proxies },
+      proxiesError: null,
+      proxyChecks: pruneChecks(s.proxyChecks, proxies, data.global_proxy),
+    }));
+  }
+
+  /** Reloads the proxy list; a response older than the latest request is dropped. */
+  async loadProxies(): Promise<void> {
+    if (!this.key) return;
+    const seq = ++this.proxySeq;
+    try {
+      const data = await this.api.proxies();
+      if (seq === this.proxySeq) this.applyProxies(data);
+    } catch (error) {
+      if (isAuthError(error)) {
+        this.showLogin("login.expired", errorMessage(error));
+        return;
+      }
+      if (seq === this.proxySeq) this.set({ proxiesError: errorMessage(error) });
+    }
+  }
+
+  private setCheck(key: string, entry: ProxyCheckEntry | undefined): void {
+    this.set((s) => {
+      const proxyChecks = { ...s.proxyChecks };
+      if (entry) proxyChecks[key] = entry;
+      else delete proxyChecks[key];
+      return { proxyChecks };
+    });
+  }
+
+  /** The address a check key points at now, or null when the proxy is gone. */
+  private checkAddress(key: string): string | null {
+    const data = this.state.proxies;
+    return checkUrl(key, data ? data.proxies : [], data ? data.global_proxy : undefined);
+  }
+
+  /** Checks one egress: a list proxy ("id:<id>"), "direct" or "inherit". Only ever run on a click. */
+  async checkProxy(key: string): Promise<void> {
+    const url = this.checkAddress(key);
+    if (url === null) return;
+    const current = this.state.proxyChecks[key];
+    if (current && current.state === "loading") return;
+    this.setCheck(key, { state: "loading", url });
+    let entry: ProxyCheckEntry;
+    try {
+      const result = await this.api.checkProxy(checkTarget(key));
+      entry = result && result.ok
+        ? { state: "ok", url, result }
+        : { state: "error", url, result, error: (result && result.error) || "" };
+    } catch (error) {
+      if (isAuthError(error)) {
+        this.showLogin("login.expired", errorMessage(error));
+        return;
+      }
+      entry = { state: "error", url, error: errorMessage(error) };
+    }
+    // The proxy may have been deleted or moved to another address meanwhile.
+    if (this.checkAddress(key) === url) this.setCheck(key, entry);
+    else this.setCheck(key, undefined);
+  }
+
+  /** Checks the two built-in rows and every list proxy, a few at a time. */
+  async checkAllProxies(): Promise<void> {
+    const data = this.state.proxies;
+    const keys = [INHERIT_KEY, DIRECT_KEY, ...(data ? data.proxies.map((p) => proxyCheckKey(p.id)) : [])];
+    this.setBusy("proxy-check-all", true);
+    try {
+      await runLimited(keys, CHECK_CONCURRENCY, (key) => this.checkProxy(key));
+    } finally {
+      this.setBusy("proxy-check-all", false);
+    }
+  }
+
+  openProxyDialog(proxy?: ProxyView): void {
+    const usedBy = proxy ? proxyUsage(credentialsOf(this.state.status)).byId.get(proxy.id) || 0 : 0;
+    this.set({ proxyDialog: newProxyDialog(++this.proxyDialogSeq, proxy || null, usedBy) });
+  }
+
+  closeProxyDialog(): void {
+    if (this.state.proxyDialog) this.set({ proxyDialog: null });
+  }
+
+  updateProxyDialog(patch: Partial<ProxyDialogState>): void {
+    const d = this.state.proxyDialog;
+    if (d) this.set({ proxyDialog: { ...d, ...patch } });
+  }
+
+  async saveProxyDialog(): Promise<void> {
+    const d = this.state.proxyDialog;
+    if (!d) return;
+    const built = buildProxyBody(d);
+    if ("error" in built) {
+      this.updateProxyDialog({ error: { key: built.error, params: null } });
+      return;
+    }
+    if (!built.changed) {
+      this.closeProxyDialog();
+      return;
+    }
+    const adding = d.mode === "add";
+    this.updateProxyDialog({ error: null });
+    this.setBusy("proxy-save", true);
+    try {
+      const data = adding ? await this.api.addProxy(built.body) : await this.api.updateProxy(built.body);
+      const proxy = data && data.proxy;
+      const name = proxy ? proxy.name || proxy.label : d.title;
+      this.closeProxyDialog();
+      if (built.urlChanged && !adding) this.setCheck(proxyCheckKey(d.id), undefined);
+      const failed = data && Array.isArray(data.failed_credentials) ? data.failed_credentials : [];
+      const updated = (data && data.updated_credentials) || 0;
+      if (failed.length) this.setNotice("warn", "log.proxyKeysFailed", { name, list: failed.join(", ") });
+      else if (adding) this.notify("ok", "log.proxyAdded", { name });
+      else if (updated) this.notify("ok", "log.proxyUpdatedKeys", { name, n: updated });
+      else this.notify("ok", "log.proxyUpdated", { name });
+      // Reloads the list too. Keys show the proxy by name, and a new
+      // address rewrites their files.
+      await this.refresh(true);
+    } catch (error) {
+      if (isAuthError(error)) {
+        this.showLogin("login.expired", errorMessage(error));
+        return;
+      }
+      const current = this.state.proxyDialog;
+      if (current && current.seq === d.seq) {
+        this.updateProxyDialog({ error: { key: "log.actionFailed", params: { msg: errorMessage(error) } } });
+      }
+    } finally {
+      this.setBusy("proxy-save", false);
+    }
+  }
+
+  /** Two clicks like deleting a key; keys on the proxy keep its address as a custom one. */
+  async deleteProxy(proxy: ProxyView): Promise<void> {
+    const armed = "proxy:" + proxy.id;
+    if (this.state.armedDelete !== armed) {
+      this.disarmDelete();
+      this.set({ armedDelete: armed });
+      this.deleteTimer = setTimeout(() => this.disarmDelete(), 4000);
+      return;
+    }
+    this.disarmDelete();
+    const busy = "proxy-delete:" + proxy.id;
+    this.setBusy(busy, true);
+    try {
+      await this.api.deleteProxy(proxy.id);
+      this.setCheck(proxyCheckKey(proxy.id), undefined);
+      const d = this.state.proxyDialog;
+      if (d && d.id === proxy.id) this.closeProxyDialog();
+      this.notify("ok", "log.proxyDeleted", { name: proxy.name || proxy.label });
+      await this.refresh(true);
+    } catch (error) {
+      this.handleError(error);
+    } finally {
+      this.setBusy(busy, false);
+    }
+  }
+
+  /** Adds the custom addresses keys use but the list lacks. */
+  async importProxies(): Promise<void> {
+    this.setBusy("proxy-import", true);
+    try {
+      const data = await this.api.importProxies();
+      const added = (data && data.added) || 0;
+      if (data && Array.isArray(data.proxies)) {
+        const prev = this.state.proxies;
+        this.applyProxies({ ...(prev || {}), proxies: data.proxies });
+      }
+      this.notify("ok", added ? "log.proxiesImported" : "log.proxiesNoneImported", { n: added });
+      await this.refresh(true);
+    } catch (error) {
+      this.handleError(error);
+    } finally {
+      this.setBusy("proxy-import", false);
     }
   }
 

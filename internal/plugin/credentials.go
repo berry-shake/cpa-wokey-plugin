@@ -28,6 +28,8 @@ type credentialInput struct {
 	Note       *string `json:"note"`
 	BaseURL    *string `json:"base_url"`
 	ProxyURL   *string `json:"proxy_url"`
+	// ProxyID picks a listed proxy; it overrides ProxyURL.
+	ProxyID *string `json:"proxy_id"`
 	// IssuerToken sets the issuing token; "" removes it.
 	IssuerToken *string         `json:"issuer_token"`
 	Prefix      json.RawMessage `json:"prefix"`
@@ -154,6 +156,9 @@ func (s *Service) addCredential(body []byte) pluginapi.ManagementResponse {
 	if errInput != nil {
 		return jsonResponse(http.StatusBadRequest, *errInput)
 	}
+	if errProxy := s.resolveProxyID(&input); errProxy != nil {
+		return jsonResponse(http.StatusBadRequest, *errProxy)
+	}
 	key := strings.TrimSpace(input.APIKey)
 	if key == "" || strings.IndexFunc(key, unicode.IsSpace) >= 0 {
 		return jsonResponse(http.StatusBadRequest, errorBody{Error: "invalid_api_key", Message: "api_key is required and must not contain spaces"})
@@ -211,6 +216,9 @@ func (s *Service) updateCredential(body []byte) pluginapi.ManagementResponse {
 	}
 	if strings.TrimSpace(input.APIKey) != "" {
 		return jsonResponse(http.StatusBadRequest, errorBody{Error: "immutable_api_key", Message: "the API key cannot be changed; add a new credential instead"})
+	}
+	if errProxy := s.resolveProxyID(&input); errProxy != nil {
+		return jsonResponse(http.StatusBadRequest, *errProxy)
 	}
 	entries, errList := s.listWokeyAuths()
 	if errList != nil {
@@ -296,7 +304,8 @@ func (s *Service) credentialViewByName(name string) *credentialView {
 	if !found {
 		return nil
 	}
-	view := credentialViewOf(entry, s.config(), s.catalog.Current(), s.registeredModels())
+	proxies, _ := s.proxies.List()
+	view := credentialViewOf(entry, s.config(), s.catalog.Current(), s.registeredModels(), proxies)
 	return &view
 }
 
