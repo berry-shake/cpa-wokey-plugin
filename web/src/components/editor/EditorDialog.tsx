@@ -162,6 +162,19 @@ export function EditorDialog({ t, s }: { t: T; s: State }) {
               <span className="help">{t("form.labelHelp")}</span>
             </div>
             <div className="field">
+              <label htmlFor="f-note">{t("form.note")}</label>
+              <input
+                className="input"
+                id="f-note"
+                type="text"
+                maxLength={200}
+                placeholder={t("form.notePlaceholder")}
+                value={ed.note}
+                onChange={(event) => store.updateEditor({ note: event.target.value })}
+              />
+              <span className="help">{t("form.noteHelp")}</span>
+            </div>
+            <div className="field">
               <label htmlFor="f-proxy">{t("form.proxy")}</label>
               <input
                 className="input mono"

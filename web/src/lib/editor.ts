@@ -6,6 +6,7 @@ import type { Params, T } from "../i18n";
 /** The saved values of the credential being edited. */
 export interface EditorOriginal {
   label: string;
+  note: string;
   proxy: string;
   /** null or undefined when the credential uses the plugin default. */
   prefix: string | null | undefined;
@@ -28,6 +29,7 @@ export interface EditorState {
   key: string;
   skipVerify: boolean;
   label: string;
+  note: string;
   proxy: string;
   /** The prefix input's own value; shown only while prefixDefault is off. */
   prefix: string;
@@ -53,6 +55,7 @@ export function newEditor(seq: number, mode: "add" | "edit", cred: CredentialVie
     title: editing ? displayName(editing) : "",
     original: editing ? {
       label: editing.label || "",
+      note: editing.note || "",
       proxy: editing.proxy_url || "",
       prefix: editing.prefix,
       priority: editing.priority ? String(editing.priority) : "",
@@ -65,6 +68,7 @@ export function newEditor(seq: number, mode: "add" | "edit", cred: CredentialVie
     key: "",
     skipVerify: false,
     label: editing ? editing.label || "" : "",
+    note: editing ? editing.note || "" : "",
     proxy: editing ? editing.proxy_url || "" : "",
     prefix: usesDefault ? defaultPrefix : editing.prefix || "",
     prefixDefault: usesDefault,
@@ -158,10 +162,13 @@ export function buildSaveBody(ed: EditorState): SaveResult {
     body.auth_index = ed.authIndex;
     body.name = ed.name;
   }
-  const orig: EditorOriginal = ed.original || { label: "", proxy: "", prefix: null, priority: "", issuer: "", all: true, models: [] };
+  const orig: EditorOriginal = ed.original || { label: "", note: "", proxy: "", prefix: null, priority: "", issuer: "", all: true, models: [] };
 
   const label = ed.label.trim();
   if (adding ? label !== "" : label !== orig.label) body.label = label;
+
+  const note = ed.note.trim();
+  if (adding ? note !== "" : note !== orig.note) body.note = note;
 
   // The proxy field shows the stored value with its password redacted; only
   // send it when the user changed it.

@@ -123,6 +123,8 @@ export interface CredentialSaveRequest {
   api_key?: string;
   skip_verify?: boolean;
   label?: string;
+  /** "" removes the note. */
+  note?: string;
   proxy_url?: string;
   issuer_token?: string;
   /** null resets to the plugin default. */

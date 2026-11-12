@@ -69,6 +69,12 @@ describe("newEditor", () => {
     expect(ed.original).toMatchObject({ prefix: "team", priority: "5", issuer: "wkt_****abcd", all: false, models: ["gpt-5", "glm-4.6"] });
   });
 
+  it("fills the note, empty when there is none", () => {
+    expect(editing(cred({ note: "for team A" }))).toMatchObject({ note: "for team A", original: { note: "for team A" } });
+    expect(editing()).toMatchObject({ note: "", original: { note: "" } });
+    expect(adding().note).toBe("");
+  });
+
   it("uses the default prefix for credentials without one", () => {
     expect(editing(cred({ prefix: null }))).toMatchObject({ prefixDefault: true, prefix: "wokey" });
     expect(editing(cred({ prefix: "" }))).toMatchObject({ prefixDefault: false, prefix: "" });
@@ -147,6 +153,11 @@ describe("buildSaveBody when adding", () => {
     });
   });
 
+  it("sends a trimmed note only when filled", () => {
+    expect(buildSaveBody(adding({ key: "k", note: "  for team A  " }))).toEqual({ body: { api_key: "k", note: "for team A" } });
+    expect(buildSaveBody(adding({ key: "k", note: "   " }))).toEqual({ body: { api_key: "k" } });
+  });
+
   it("sends an empty custom prefix", () => {
     expect(buildSaveBody(adding({ key: "k", prefixDefault: false, prefix: "" }))).toEqual({ body: { api_key: "k", prefix: "" } });
   });
@@ -169,6 +180,13 @@ describe("buildSaveBody when editing", () => {
     expect(buildSaveBody(ed)).toEqual({
       body: { auth_index: "3", name: "wokey-aaaa.json", label: "", proxy_url: "", prefix: null, priority: null, issuer_token: "", models: null },
     });
+  });
+
+  it("sends a changed or cleared note, not an unchanged one", () => {
+    const withNote = cred({ note: "old" });
+    expect(buildSaveBody(editing(withNote, { note: " new " }))).toEqual({ body: { auth_index: "3", name: "wokey-aaaa.json", note: "new" } });
+    expect(buildSaveBody(editing(withNote, { note: "" }))).toEqual({ body: { auth_index: "3", name: "wokey-aaaa.json", note: "" } });
+    expect(buildSaveBody(editing(withNote, { note: "old " }))).toEqual({ body: { auth_index: "3", name: "wokey-aaaa.json" } });
   });
 
   it("ignores a typed token once removal is ticked", () => {
