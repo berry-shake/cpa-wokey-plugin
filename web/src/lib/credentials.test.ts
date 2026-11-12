@@ -12,7 +12,8 @@ import {
   forceState,
   isDirect,
   modelUsage,
-  quotaQueue,
+  egressKey,
+  quotaGroups,
   statusHealth,
   summarizeKeys,
   type QuotaMap,
@@ -203,22 +204,29 @@ describe("summarizeKeys", () => {
   });
 });
 
-describe("quotaQueue", () => {
+describe("quotaGroups", () => {
   const creds = [
     cred({ auth_index: "1" }),
-    cred({ auth_index: "2", disabled: true }),
+    cred({ auth_index: "2", disabled: true, proxy_url: "socks5h://u:***@p.example:1080" }),
     cred({ auth_index: "3", disabled: true }),
     cred({ auth_index: "4", read_error: "bad" }),
-    cred({ auth_index: "5" }),
+    cred({ auth_index: "5", proxy_url: "direct" }),
+    cred({ auth_index: "6", proxy_url: "socks5h://u:***@p.example:1080" }),
+    cred({ auth_index: "7", proxy_url: "NONE" }),
   ];
   const quota: QuotaMap = { "3": { state: "ok" }, "5": { state: "ok" } };
 
-  it("loads enabled keys that have no balance yet", () => {
-    expect(quotaQueue(creds, quota, false)).toEqual(["1"]);
+  it("loads keys with no balance yet, disabled ones too, grouped by egress", () => {
+    expect(quotaGroups(creds, quota, false)).toEqual([["1"], ["2", "6"], ["7"]]);
   });
 
-  it("with force reloads enabled keys and disabled ones already shown", () => {
-    expect(quotaQueue(creds, quota, true)).toEqual(["1", "3", "5"]);
+  it("with force reloads every readable key", () => {
+    expect(quotaGroups(creds, quota, true)).toEqual([["1", "3"], ["2", "6"], ["5", "7"]]);
+  });
+
+  it("names the egress a proxy setting picks", () => {
+    expect([egressKey(undefined), egressKey(" "), egressKey("Direct"), egressKey("none"), egressKey(" http://h:1 ")])
+      .toEqual(["inherit", "inherit", "direct", "direct", "http://h:1"]);
   });
 });
 

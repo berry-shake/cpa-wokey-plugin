@@ -73,6 +73,9 @@ type Service struct {
 	catalog *catalog.Catalog
 	clients *wokey.Clients
 	streams streamGroup
+	// accountQueue sends Wokey account queries (balance, key usage, issuing
+	// balance, key checks) out one at a time per egress.
+	accountQueue *wokey.Queue
 	// issuerBase is the issuing API root; tests point it at a fake server.
 	issuerBase string
 
@@ -95,16 +98,17 @@ func New(version string, host HostCaller) *Service {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	svc := &Service{
-		version:    version,
-		host:       host,
-		now:        time.Now,
-		ctx:        ctx,
-		cancel:     cancel,
-		cfg:        config.Default(),
-		catalog:    catalog.New(),
-		clients:    wokey.NewClients(),
-		issuerBase: wokey.DefaultIssuerBaseURL,
-		kick:       make(chan struct{}, 1),
+		version:      version,
+		host:         host,
+		now:          time.Now,
+		ctx:          ctx,
+		cancel:       cancel,
+		cfg:          config.Default(),
+		catalog:      catalog.New(),
+		clients:      wokey.NewClients(),
+		accountQueue: wokey.NewQueue(),
+		issuerBase:   wokey.DefaultIssuerBaseURL,
+		kick:         make(chan struct{}, 1),
 	}
 	svc.reqlog = requestlog.New(func(message string) { svc.logf("warn", message, nil) })
 	return svc

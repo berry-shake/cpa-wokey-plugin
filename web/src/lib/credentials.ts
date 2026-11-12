@@ -158,13 +158,28 @@ export function summarizeKeys(creds: CredentialView[], quota: QuotaMap): KeySumm
 }
 
 /**
- * The keys whose balance to load: enabled keys not loaded yet, or with force
- * every key that is enabled or already showing a balance.
+ * The keys whose balance to load, disabled ones included, grouped by egress
+ * in list order. The plugin queries one key at a time per egress, so the
+ * page loads each group in turn and the groups side by side. Without force
+ * only keys with no balance yet; keys whose file cannot be read are skipped.
  */
-export function quotaQueue(creds: CredentialView[], quota: QuotaMap, force: boolean): string[] {
-  return creds
-    .filter((c) => !c.read_error && (!c.disabled || (force && quota[c.auth_index])) && (force || !quota[c.auth_index]))
-    .map((c) => c.auth_index);
+export function quotaGroups(creds: CredentialView[], quota: QuotaMap, force: boolean): string[][] {
+  const groups = new Map<string, string[]>();
+  for (const c of creds) {
+    if (c.read_error || (!force && quota[c.auth_index])) continue;
+    const key = egressKey(c.proxy_url);
+    const group = groups.get(key);
+    if (group) group.push(c.auth_index);
+    else groups.set(key, [c.auth_index]);
+  }
+  return [...groups.values()];
+}
+
+/** The egress a key's proxy setting picks, as far as the page can tell. */
+export function egressKey(proxy: string | undefined | null): string {
+  const value = String(proxy || "").trim();
+  if (!value) return "inherit";
+  return isDirect(value) ? "direct" : value;
 }
 
 /**

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/berry-shake/cpa-wokey-plugin/internal/credential"
 	"github.com/berry-shake/cpa-wokey-plugin/internal/wokey"
@@ -48,6 +50,32 @@ func TestFetchAccountUsesCredentialEgress(t *testing.T) {
 	svc.cfg.BaseURL = "http://127.0.0.1:1"
 	if _, perr = svc.fetchAccount(credential.Credential{APIKey: testGoodKey, BaseURL: upstream.URL}, false); perr != nil {
 		t.Fatalf("base_url override: %+v", perr)
+	}
+}
+
+func TestAccountQueriesQueuePerEgress(t *testing.T) {
+	upstream := newFakeWokey(t)
+	upstream.accountDelay = 20 * time.Millisecond
+	svc, _ := newTestService(t, upstream)
+	// Three keys on the same egress queried at once, two with issuing tokens.
+	creds := []credential.Credential{
+		{APIKey: testGoodKey, IssuerToken: testIssuerToken},
+		{APIKey: testGoodKey, IssuerToken: testIssuerToken2},
+		{APIKey: testGoodKey},
+	}
+	var wg sync.WaitGroup
+	for _, cred := range creds {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, perr := svc.fetchAccount(cred, true); perr != nil {
+				t.Errorf("fetch: %+v", perr)
+			}
+		}()
+	}
+	wg.Wait()
+	if calls, peak := upstream.accountLoad(); calls != 8 || peak != 1 {
+		t.Fatalf("account calls = %d, at most %d at once; want 8 one at a time", calls, peak)
 	}
 }
 

@@ -1,6 +1,7 @@
 package wokey
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -75,6 +76,37 @@ func ValidateProxy(raw string) error {
 	}
 	_, errParse := parseProxyURL(raw)
 	return errParse
+}
+
+// Queue lets one holder at a time through each egress. Waiters get their
+// turn in the order they arrived; different egresses do not wait for each
+// other.
+type Queue struct {
+	mu    sync.Mutex
+	slots map[string]chan struct{}
+}
+
+// NewQueue returns a queue with no egress in use.
+func NewQueue() *Queue {
+	return &Queue{slots: make(map[string]chan struct{})}
+}
+
+// Acquire waits for the egress's turn and returns the function that ends
+// it. It gives up with ctx's error when ctx ends first.
+func (q *Queue) Acquire(ctx context.Context, e Egress) (release func(), err error) {
+	q.mu.Lock()
+	slot, ok := q.slots[e.key]
+	if !ok {
+		slot = make(chan struct{}, 1)
+		q.slots[e.key] = slot
+	}
+	q.mu.Unlock()
+	select {
+	case slot <- struct{}{}:
+		return func() { <-slot }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // Clients keeps one HTTP client per egress so connections are reused

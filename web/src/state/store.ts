@@ -4,7 +4,7 @@ import { readPanelKey } from "../api/panelKey";
 import type { CredentialView, LogEntry, LogPage, ModelsResponse, StatusView } from "../api/types";
 import { initialLang, saveLang, translate, type Lang, type Params } from "../i18n";
 import {
-  credentialsOf, defaultPrefix, displayName, quotaQueue, statusHealth,
+  credentialsOf, defaultPrefix, displayName, quotaGroups, statusHealth,
   type Health, type QuotaEntry, type QuotaMap,
 } from "../lib/credentials";
 import {
@@ -19,7 +19,6 @@ export const TABS = ["logs", "keys", "models", "config"] as const;
 export type Tab = (typeof TABS)[number];
 export const TAB_KEY = "cliproxy-wokey-tab";
 const REFRESH_MS = 30000;
-const QUOTA_CONCURRENCY = 3;
 
 export interface Message {
   key: string;
@@ -400,16 +399,20 @@ export class Store {
     }
   }
 
-  // Loads balances a few at a time.
+  // Loads balances one key at a time per egress, egresses side by side (the
+  // plugin queues per egress too). Keys still waiting show as loading.
   private async loadAllQuotas(force: boolean): Promise<void> {
-    const queue = quotaQueue(credentialsOf(this.state.status), this.state.quota, force);
-    const workers: Promise<void>[] = [];
-    for (let i = 0; i < QUOTA_CONCURRENCY; i++) {
-      workers.push((async () => {
-        while (queue.length && this.key) await this.loadQuota(queue.shift() as string);
-      })());
+    const groups = quotaGroups(credentialsOf(this.state.status), this.state.quota, force);
+    for (const authIndex of groups.flat()) {
+      const prev = this.state.quota[authIndex];
+      this.setQuota(authIndex, { state: "loading", data: prev && prev.data });
     }
-    await Promise.all(workers);
+    await Promise.all(groups.map(async (group) => {
+      for (const authIndex of group) {
+        if (!this.key) return;
+        await this.loadQuota(authIndex);
+      }
+    }));
   }
 
   async refreshQuotas(): Promise<void> {

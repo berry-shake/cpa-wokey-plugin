@@ -287,6 +287,10 @@ type fakeWokey struct {
 	issuers       map[string]map[string]any
 	issuerCalls   int
 	handlers      map[string]http.HandlerFunc
+	// Account calls (balance, key usage, issuing balance): how many were
+	// served, how many at most at once, and how long each one takes.
+	accountCalls, accountBusy, accountPeak int
+	accountDelay                           time.Duration
 }
 
 const (
@@ -364,7 +368,29 @@ func writeJSON(rw http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(rw).Encode(v)
 }
 
+// accountLoad returns how many account calls were served and the most
+// that were in progress at the same time.
+func (w *fakeWokey) accountLoad() (calls, peak int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.accountCalls, w.accountPeak
+}
+
 func (w *fakeWokey) serve(rw http.ResponseWriter, r *http.Request) {
+	if p := r.URL.Path; p == "/v1/key" || p == "/v1/dashboard/balance" || strings.HasPrefix(p, testIssuerPath) {
+		w.mu.Lock()
+		w.accountCalls++
+		w.accountBusy++
+		w.accountPeak = max(w.accountPeak, w.accountBusy)
+		delay := w.accountDelay
+		w.mu.Unlock()
+		defer func() {
+			w.mu.Lock()
+			w.accountBusy--
+			w.mu.Unlock()
+		}()
+		time.Sleep(delay)
+	}
 	w.mu.Lock()
 	handler := w.handlers[r.URL.Path]
 	w.mu.Unlock()
