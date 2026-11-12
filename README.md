@@ -215,8 +215,11 @@ Wokey 在这个接口里会顺带结算冷却期已满的作废礼品卡，除�
   - 改了某个代理的地址时，正在用它的 Key（`proxy_url` 和旧地址完全相同）会一起改成新地址。删除代理不影响 Key：用它的 Key 保留原地址，变成"自定义地址"。
   - 有 Key 用了列表里没有的代理时，可以点"导入 Key 里的代理"一次加进来。
   - 列表上面固定两行：继承 CPA 全局代理、直连，对应 Key 编辑弹窗里 CPA 内置的两个选项。
-  - 出口 IP 和延迟默认不显示，要手动点"检测"（单个）或"检测全部"才查，不会自动检测。检测时插件通过这个代理请求 `https://ipinfo.io/json`，失败再试 `https://api.ip.sb/geoip`，User-Agent 用 `curl/8.7.1`；每次检测新建连接，延迟包含连上代理的时间，单个服务超时 10 秒。结果只留在当前页面，刷新后不保留。
-  - 代理列表存在 `<data-dir>/proxies.json`（默认 `plugins/wokey-data/proxies.json`，权限 0600，里面有代理的用户名密码）。
+  - 检测要手动点"检测"（单个）或"检测全部"，不会自动检测。检测时插件通过这个代理请求 `https://ipinfo.io/json`，失败再试 `https://api.ip.sb/geoip`，User-Agent 用 `curl/8.7.1`；每次检测新建连接，延迟包含连上代理的时间，单个服务超时 10 秒。
+  - 出口列显示国旗和出口 IP，下面是国家和城市（国家名按页面语言显示）；另外两列是延迟和检测时间。还没检测过的显示"—"。
+  - 每次检测的结果（包括失败）都会保存，下次打开页面直接显示上一次的结果。代理改了地址，旧结果作废；CPA 全局代理变了，"继承"那行的旧结果也不再显示。
+  - 代理列表和检测结果存在 `<data-dir>/proxies.json`（默认 `plugins/wokey-data/proxies.json`，权限 0600，里面有代理的用户名密码）。
+  - 国旗图标来自 [Twemoji](https://github.com/jdecked/twemoji)（CC-BY 4.0），编进插件里，由 `/v0/resource/plugins/wokey/flag.svg?cc=<国家代码>` 提供，不访问外部网站。
 - **模型目录** 页：Wokey 公开模型的提供方、上下文长度、价格，以及每个模型在 CPA 里注册的名字和服务它的 Key 数。
 - **请求日志** 页：经过本插件的每次调用，最新的在前。
   - 最上面是时间范围：全部、今天、24 小时、近 7 天、近 30 天、自定义（精确到分钟的起止时间，点"应用"生效）。按请求开始时间筛选，选择会记在浏览器里。
@@ -240,6 +243,7 @@ Wokey 在这个接口里会顺带结算冷却期已满的作废礼品卡，除�
 ```text
 GET   /v0/resource/plugins/wokey/manage             管理页外壳，无需鉴权，不含数据
 GET   /v0/resource/plugins/wokey/logo.svg           插件 logo，无需鉴权
+GET   /v0/resource/plugins/wokey/flag.svg?cc=hk     国旗图标，无需鉴权
 GET   /v0/management/plugins/wokey/status           插件状态、目录摘要、Key 列表
 GET   /v0/management/plugins/wokey/models           模型目录（价格为每百万 token 美元）
 POST  /v0/management/plugins/wokey/models/refresh   强制重新拉取模型目录
@@ -248,12 +252,12 @@ PATCH /v0/management/plugins/wokey/credentials      编辑 Key
 GET   /v0/management/plugins/wokey/credentials/quota?auth_index=...   账户余额、Key 消费，以及发卡令牌对应的收益
 GET   /v0/management/plugins/wokey/logs?search=&status=all|success|error&from=&to=&limit=50&offset=0   请求日志（最新的在前）和统计；from / to 是 RFC 3339 时间，按请求开始时间筛选，含 from 不含 to
 DELETE /v0/management/plugins/wokey/logs            清空请求日志
-GET   /v0/management/plugins/wokey/proxies          代理列表（地址隐藏密码）和 CPA 全局代理
+GET   /v0/management/plugins/wokey/proxies          代理列表（地址隐藏密码、上一次检测结果）和 CPA 全局代理
 POST  /v0/management/plugins/wokey/proxies          添加代理 {"name","url"}
 PATCH /v0/management/plugins/wokey/proxies          修改代理 {"id","name","url"}，改地址时同步改用它的 Key
 DELETE /v0/management/plugins/wokey/proxies?id=...  删除代理，用它的 Key 保留原地址
 POST  /v0/management/plugins/wokey/proxies/import   把 Key 里用到、列表里还没有的代理加进列表
-POST  /v0/management/plugins/wokey/proxies/check    检测出口 IP 和延迟，{"id"} 或 {"target":"direct"|"inherit"}
+POST  /v0/management/plugins/wokey/proxies/check    检测出口 IP、国家、城市和延迟并保存结果，{"id"} 或 {"target":"direct"|"inherit"}
 ```
 
 `/v0/management` 路由由 CPA 宿主先校验管理密钥，通过后才转发给插件。
@@ -278,7 +282,7 @@ curl -X PATCH -H "Authorization: Bearer $MANAGEMENT_KEY" \
 
 ## 安全说明
 
-- 读取和修改 Key 的接口都需要 CPA 管理密钥；公开的只有不含数据的页面外壳和 logo。
+- 读取和修改 Key 的接口都需要 CPA 管理密钥；公开的只有不含数据的页面外壳、logo 和国旗图标。
 - 管理页设置了 `frame-ancestors 'self'`，其他站点不能嵌入。
 - 接口和页面只显示打码后的 Key、打码后的发卡令牌和隐藏了密码的代理地址。
 

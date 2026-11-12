@@ -602,15 +602,18 @@ dialog.modal.modal-sm { width: min(520px, calc(100vw - 32px)); }
 .field select.input + .input { margin-top: 6px; }
 /* Proxies: built-in rows on a tinted band, then the saved proxies. */
 /* Fixed columns, so results appearing after a check do not shift the table. */
-.proxies-table { table-layout: fixed; min-width: 1040px; }
+.proxies-table { table-layout: fixed; min-width: 1120px; }
 .proxies-table td { vertical-align: middle; overflow-wrap: anywhere; }
 .proxies-table .proxy-builtin td { background: var(--bg-inset); }
-.proxies-table .col-name { width: 16%; }
-.proxies-table .col-url { width: 25%; }
-.proxies-table .col-usage { width: 9%; }
-.proxies-table .col-egress { width: 25%; }
-.proxies-table .col-latency { width: 8%; }
+.proxies-table .col-name { width: 15%; }
+.proxies-table .col-url { width: 24%; }
+.proxies-table .col-usage { width: 8%; }
+.proxies-table .col-egress { width: 22%; }
+.proxies-table .col-latency { width: 7%; }
+.proxies-table .col-checked { width: 10%; }
 .proxies-table .col-actions { width: 196px; }
+.proxy-ip { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.proxy-flag { flex: none; width: 18px; height: 18px; }
 .proxies-table .proxy-error { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .proxies-table td.proxy-empty { padding: 20px 12px; }
 .proxy-delete-note { margin-top: 4px; max-width: 260px; color: var(--warning); }

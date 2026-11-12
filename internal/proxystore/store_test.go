@@ -140,3 +140,47 @@ func TestUnreadableFileBlocksWrites(t *testing.T) {
 		t.Fatalf("after fix = %+v (%s)", list, loadErr)
 	}
 }
+
+func TestChecksPersistAndFollowTheURL(t *testing.T) {
+	dir := t.TempDir()
+	s := New()
+	s.Configure(dir)
+	p, _ := s.Add("HK", "socks5://10.0.0.1:1080")
+	check := Check{OK: true, Egress: "socks5://10.0.0.1:1080", IP: "203.0.113.7", Country: "HK", City: "Kwai Chung", LatencyMS: 312, CheckedAt: "2026-11-12T14:00:00Z"}
+	if errSet := s.SetCheck(p.ID, p.URL, check); errSet != nil {
+		t.Fatalf("SetCheck: %v", errSet)
+	}
+	// A check of an address the proxy no longer has is dropped.
+	if errSet := s.SetCheck(p.ID, "socks5://10.0.0.9:1080", Check{IP: "198.51.100.1"}); errSet != nil {
+		t.Fatalf("stale SetCheck: %v", errSet)
+	}
+	if errSet := s.SetCheck("gone", p.URL, check); errSet != nil {
+		t.Fatalf("SetCheck of a deleted proxy: %v", errSet)
+	}
+	if errSet := s.SetBuiltinCheck(BuiltinDirect, Check{OK: true, Egress: "direct", IP: "45.32.10.8", CheckedAt: "2026-11-12T14:01:00Z"}); errSet != nil {
+		t.Fatalf("SetBuiltinCheck: %v", errSet)
+	}
+	if errSet := s.SetBuiltinCheck("elsewhere", Check{}); errSet == nil {
+		t.Fatal("accepted an unknown built-in egress")
+	}
+
+	reloaded := New()
+	reloaded.Configure(dir)
+	list, _ := reloaded.List()
+	if len(list) != 1 || list[0].LastCheck == nil || *list[0].LastCheck != check {
+		t.Fatalf("reloaded check = %+v", list[0].LastCheck)
+	}
+	if got := reloaded.BuiltinChecks(); len(got) != 1 || got[BuiltinDirect].IP != "45.32.10.8" {
+		t.Fatalf("built-in checks = %+v", got)
+	}
+
+	// Renaming keeps the check; a new URL clears it.
+	name := "Hong Kong"
+	if _, after, _ := reloaded.Update(p.ID, &name, nil); after.LastCheck == nil {
+		t.Fatal("rename dropped the last check")
+	}
+	moved := "socks5://10.0.0.9:1080"
+	if _, after, _ := reloaded.Update(p.ID, nil, &moved); after.LastCheck != nil {
+		t.Fatalf("URL change kept the check: %+v", after.LastCheck)
+	}
+}

@@ -43,12 +43,16 @@ type proxyView struct {
 	URL       string `json:"url"`
 	Label     string `json:"label"`
 	CreatedAt string `json:"created_at,omitempty"`
+	// LastCheck is the latest egress check of the current URL.
+	LastCheck *proxystore.Check `json:"last_check,omitempty"`
 }
 
 type proxiesView struct {
 	Proxies     []proxyView `json:"proxies"`
 	GlobalProxy string      `json:"global_proxy,omitempty"`
-	LoadError   string      `json:"load_error,omitempty"`
+	// BuiltinChecks holds the last checks of "direct" and "inherit".
+	BuiltinChecks map[string]proxystore.Check `json:"builtin_checks,omitempty"`
+	LoadError     string                      `json:"load_error,omitempty"`
 }
 
 type proxyResult struct {
@@ -68,24 +72,8 @@ type proxyInput struct {
 	Target string  `json:"target"`
 }
 
-// egressCheck is the result of looking up a proxy's exit address.
-type egressCheck struct {
-	OK bool `json:"ok"`
-	// Egress is "direct", "env" or the proxy as scheme://host:port.
-	Egress    string `json:"egress,omitempty"`
-	IP        string `json:"ip,omitempty"`
-	Country   string `json:"country,omitempty"`
-	Region    string `json:"region,omitempty"`
-	City      string `json:"city,omitempty"`
-	Org       string `json:"org,omitempty"`
-	LatencyMS int64  `json:"latency_ms,omitempty"`
-	Source    string `json:"source,omitempty"`
-	Error     string `json:"error,omitempty"`
-	CheckedAt string `json:"checked_at"`
-}
-
 func proxyViewOf(p proxystore.Proxy) proxyView {
-	return proxyView{ID: p.ID, Name: p.Name, URL: redactProxy(p.URL), Label: p.Label(), CreatedAt: p.CreatedAt}
+	return proxyView{ID: p.ID, Name: p.Name, URL: redactProxy(p.URL), Label: p.Label(), CreatedAt: p.CreatedAt, LastCheck: p.LastCheck}
 }
 
 func (s *Service) proxiesView() proxiesView {
@@ -93,6 +81,17 @@ func (s *Service) proxiesView() proxiesView {
 	view := proxiesView{Proxies: make([]proxyView, 0, len(list)), GlobalProxy: redactProxy(s.globalProxy()), LoadError: loadErr}
 	for _, p := range list {
 		view.Proxies = append(view.Proxies, proxyViewOf(p))
+	}
+	builtin := s.proxies.BuiltinChecks()
+	if check, ok := builtin[proxystore.BuiltinInherit]; ok {
+		// The inherited egress follows CPA's global proxy; a check made
+		// through another one no longer applies.
+		if setting, errProxy := wokey.ResolveEgress("", s.globalProxy()); errProxy != nil || setting.Label() != check.Egress {
+			delete(builtin, proxystore.BuiltinInherit)
+		}
+	}
+	if len(builtin) > 0 {
+		view.BuiltinChecks = builtin
 	}
 	return view
 }
@@ -258,7 +257,10 @@ func (s *Service) checkProxy(body []byte) pluginapi.ManagementResponse {
 	if errInput != nil {
 		return jsonResponse(http.StatusBadRequest, *errInput)
 	}
-	var proxyURL string
+	var (
+		proxyURL string
+		save     func(proxystore.Check) error
+	)
 	switch {
 	case strings.TrimSpace(input.ID) != "":
 		list, _ := s.proxies.List()
@@ -267,20 +269,29 @@ func (s *Service) checkProxy(body []byte) pluginapi.ManagementResponse {
 			return proxyStoreError(proxystore.ErrNotFound)
 		}
 		proxyURL = p.URL
-	case input.Target == "direct":
-		proxyURL = "direct"
-	case input.Target == "inherit":
-		proxyURL = ""
+		save = func(check proxystore.Check) error { return s.proxies.SetCheck(p.ID, p.URL, check) }
+	case input.Target == proxystore.BuiltinDirect || input.Target == proxystore.BuiltinInherit:
+		if input.Target == proxystore.BuiltinDirect {
+			proxyURL = "direct"
+		}
+		target := input.Target
+		save = func(check proxystore.Check) error { return s.proxies.SetBuiltinCheck(target, check) }
 	default:
 		return jsonResponse(http.StatusBadRequest, errorBody{Error: "invalid_target", Message: `send {"id"} or {"target":"direct"|"inherit"}`})
 	}
-	return jsonResponse(http.StatusOK, s.checkEgress(s.ctx, proxyURL))
+	check := s.checkEgress(s.ctx, proxyURL)
+	// The result is kept so the list shows it later; a failure to save it
+	// does not fail the check.
+	if errSave := save(check); errSave != nil {
+		s.logf("warn", "wokey: cannot save the egress check", map[string]any{"egress": check.Egress, "error": errSave.Error()})
+	}
+	return jsonResponse(http.StatusOK, check)
 }
 
 // checkEgress asks IP lookup services, through the egress, which address
 // the request came from. Each check opens a fresh connection, so the
 // latency includes reaching the proxy.
-func (s *Service) checkEgress(ctx context.Context, proxyURL string) (result egressCheck) {
+func (s *Service) checkEgress(ctx context.Context, proxyURL string) (result proxystore.Check) {
 	defer func() { result.CheckedAt = s.now().UTC().Format(time.RFC3339) }()
 	setting, errProxy := wokey.ResolveEgress(proxyURL, s.globalProxy())
 	if errProxy != nil {
@@ -313,32 +324,32 @@ func (s *Service) checkEgress(ctx context.Context, proxyURL string) (result egre
 	return result
 }
 
-func lookupEgress(ctx context.Context, client *http.Client, target string) (egressCheck, time.Duration, error) {
+func lookupEgress(ctx context.Context, client *http.Client, target string) (proxystore.Check, time.Duration, error) {
 	ctx, cancel := context.WithTimeout(ctx, egressCheckTimeout)
 	defer cancel()
 	req, errReq := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if errReq != nil {
-		return egressCheck{}, 0, errReq
+		return proxystore.Check{}, 0, errReq
 	}
 	req.Header.Set("User-Agent", egressCheckUserAgent)
 	req.Header.Set("Accept", "*/*")
 	started := time.Now()
 	resp, errDo := client.Do(req)
 	if errDo != nil {
-		return egressCheck{}, 0, unwrapURLError(errDo)
+		return proxystore.Check{}, 0, unwrapURLError(errDo)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, errRead := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	latency := time.Since(started)
 	if errRead != nil {
-		return egressCheck{}, 0, unwrapURLError(errRead)
+		return proxystore.Check{}, 0, unwrapURLError(errRead)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return egressCheck{}, 0, fmt.Errorf("HTTP %d", resp.StatusCode)
+		return proxystore.Check{}, 0, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 	info, errParse := parseEgressInfo(raw)
 	if errParse != nil {
-		return egressCheck{}, 0, errParse
+		return proxystore.Check{}, 0, errParse
 	}
 	return info, latency, nil
 }
@@ -355,11 +366,12 @@ func unwrapURLError(err error) error {
 	return err
 }
 
-// parseEgressInfo reads an ipinfo.io or ip.sb geoip response.
-func parseEgressInfo(raw []byte) (egressCheck, error) {
+// parseEgressInfo reads the IP, country and city from an ipinfo.io or ip.sb
+// geoip response.
+func parseEgressInfo(raw []byte) (proxystore.Check, error) {
 	var body map[string]any
 	if errUnmarshal := json.Unmarshal(raw, &body); errUnmarshal != nil {
-		return egressCheck{}, fmt.Errorf("unexpected response: %w", errUnmarshal)
+		return proxystore.Check{}, fmt.Errorf("unexpected response: %w", errUnmarshal)
 	}
 	text := func(key string) string {
 		switch value := body[key].(type) {
@@ -370,23 +382,17 @@ func parseEgressInfo(raw []byte) (egressCheck, error) {
 		}
 		return ""
 	}
-	info := egressCheck{IP: text("ip"), Region: text("region"), City: text("city")}
+	info := proxystore.Check{IP: text("ip"), Region: text("region"), City: text("city")}
 	if net.ParseIP(info.IP) == nil {
-		return egressCheck{}, errors.New("no IP address in the response")
+		return proxystore.Check{}, errors.New("no IP address in the response")
 	}
+	// ipinfo.io puts the two-letter code in "country", ip.sb in "country_code".
 	info.Country = text("country_code")
 	if info.Country == "" {
 		info.Country = text("country")
 	}
-	switch {
-	case text("org") != "":
-		info.Org = text("org")
-	case text("asn") != "" && text("asn_organization") != "":
-		info.Org = "AS" + text("asn") + " " + text("asn_organization")
-	case text("organization") != "":
-		info.Org = text("organization")
-	default:
-		info.Org = text("isp")
+	if len(info.Country) == 2 {
+		info.Country = strings.ToUpper(info.Country)
 	}
 	return info, nil
 }

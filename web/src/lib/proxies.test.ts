@@ -1,7 +1,8 @@
 import type { CredentialView, ProxyView } from "../api/types";
 import {
-  buildProxyBody, checkTarget, checkUrl, DIRECT_KEY, egressName, egressPlace, INHERIT_KEY, newProxyDialog,
-  proxyCheckKey, proxyUsage, pruneChecks, runLimited, unlistedProxyKeys, type ProxyCheckMap,
+  buildProxyBody, checkedAtText, checkTarget, checkUrl, countryName, DIRECT_KEY, egressName, egressPlace, flagUrl, INHERIT_KEY,
+  newProxyDialog, proxyCheckKey, proxyUsage, pruneChecks, runLimited, savedCheck, shownCheck, unlistedProxyKeys, withSavedCheck,
+  type ProxyCheckMap,
 } from "./proxies";
 
 function cred(over: Partial<CredentialView> = {}): CredentialView {
@@ -92,11 +93,31 @@ describe("check keys", () => {
 });
 
 describe("egress text", () => {
-  it("joins country, city and network, skipping blanks", () => {
-    expect(egressPlace({ country: "HK", region: "Central", city: "Hong Kong", org: "AS1 Example" })).toBe("HK · Hong Kong · AS1 Example");
-    expect(egressPlace({ country: "JP", region: "Tokyo", city: "", org: "" })).toBe("JP · Tokyo");
-    expect(egressPlace({})).toBe("");
-    expect(egressPlace(undefined)).toBe("");
+  it("joins the country name and city, skipping blanks", () => {
+    expect(egressPlace({ country: "HK", region: "Kwai Tsing", city: "Kwai Chung" }, "en-US")).toBe("Hong Kong · Kwai Chung");
+    expect(egressPlace({ country: "jp", region: "Tokyo", city: "" }, "en-US")).toBe("Japan · Tokyo");
+    expect(egressPlace({ country: "Germany", city: "Berlin" }, "en-US")).toBe("Germany · Berlin");
+    expect(egressPlace({}, "en-US")).toBe("");
+    expect(egressPlace(undefined, "en-US")).toBe("");
+  });
+
+  it("names countries in the page language", () => {
+    expect(countryName("HK", "zh-CN")).toBe("香港");
+    expect(countryName("TW", "en-US")).toBe("Taiwan");
+    expect(countryName("", "en-US")).toBe("");
+  });
+
+  it("links a flag only for two-letter codes", () => {
+    expect(flagUrl("HK")).toBe("/v0/resource/plugins/wokey/flag.svg?cc=hk");
+    expect(flagUrl("Germany")).toBe("");
+    expect(flagUrl(undefined)).toBe("");
+  });
+
+  it("shows the time of today's checks and the date of older ones", () => {
+    const now = new Date(2026, 10, 12, 22, 30);
+    expect(checkedAtText(new Date(2026, 10, 12, 9, 5, 7).toISOString(), "en-US", now)).toBe("09:05:07");
+    expect(checkedAtText(new Date(2026, 10, 11, 21, 4).toISOString(), "en-US", now)).toMatch(/^11\/11,? 21:04$/);
+    expect(checkedAtText(new Date(2025, 0, 2, 3, 4).toISOString(), "en-US", now)).toContain("2025");
   });
 
   it("names the egress a check went through", () => {
@@ -152,5 +173,40 @@ describe("proxy dialog", () => {
     expect(buildProxyBody({ ...d, name: "Hong Kong" })).toEqual({ body: { id: "p1", name: "Hong Kong" }, changed: true, urlChanged: false });
     expect(buildProxyBody({ ...d, url: "socks5://hk2:1080" })).toEqual({ body: { id: "p1", url: "socks5://hk2:1080" }, changed: true, urlChanged: true });
     expect(buildProxyBody({ ...d, name: "" })).toEqual({ body: { id: "p1", name: "" }, changed: true, urlChanged: false });
+  });
+});
+
+describe("saved checks", () => {
+  const data = {
+    proxies: [
+      { id: "p1", name: "HK", url: "socks5://hk:1080", label: "socks5://hk:1080", last_check: { ok: true, ip: "1.1.1.1", checked_at: "t1" } },
+      { id: "p2", name: "JP", url: "http://jp:8080", label: "http://jp:8080" },
+    ],
+    builtin_checks: { direct: { ok: false, error: "boom", checked_at: "t2" } },
+  };
+
+  it("reads a row's saved check", () => {
+    expect(savedCheck("id:p1", data)?.ip).toBe("1.1.1.1");
+    expect(savedCheck("id:p2", data)).toBeUndefined();
+    expect(savedCheck(DIRECT_KEY, data)?.error).toBe("boom");
+    expect(savedCheck(INHERIT_KEY, data)).toBeUndefined();
+    expect(savedCheck("id:p1", null)).toBeUndefined();
+  });
+
+  it("prefers a check in flight over the saved one", () => {
+    expect(shownCheck("id:p1", {}, data)?.state).toBe("ok");
+    expect(shownCheck(DIRECT_KEY, {}, data)).toMatchObject({ state: "error", error: "boom" });
+    expect(shownCheck("id:p1", { "id:p1": { state: "loading", url: "socks5://hk:1080" } }, data)?.state).toBe("loading");
+    expect(shownCheck("id:p2", {}, data)).toBeUndefined();
+  });
+
+  it("stores a finished check on its row", () => {
+    const next = withSavedCheck(data, "id:p2", { ok: true, ip: "2.2.2.2" });
+    expect(next.proxies[1].last_check?.ip).toBe("2.2.2.2");
+    expect(next.proxies[0].last_check?.ip).toBe("1.1.1.1");
+    expect(data.proxies[1].last_check).toBeUndefined();
+    const inherit = withSavedCheck(data, INHERIT_KEY, { ok: true, ip: "3.3.3.3" });
+    expect(inherit.builtin_checks?.inherit?.ip).toBe("3.3.3.3");
+    expect(inherit.builtin_checks?.direct?.error).toBe("boom");
   });
 });

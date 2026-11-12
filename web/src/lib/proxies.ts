@@ -1,4 +1,4 @@
-import type { CredentialView, ProxyCheckResult, ProxyCheckTarget, ProxySaveRequest, ProxyView } from "../api/types";
+import type { CredentialView, ProxiesResponse, ProxyCheckResult, ProxyCheckTarget, ProxySaveRequest, ProxyView } from "../api/types";
 import type { Params } from "../i18n";
 import { isDirect } from "./credentials";
 
@@ -17,8 +17,10 @@ export function checkTarget(key: string): ProxyCheckTarget {
 }
 
 /**
- * One egress check, kept in page state only. url is the address the check
- * ran against, so a result is dropped once the proxy's address changes.
+ * An egress check shown in the list. The page keeps checks in flight and
+ * failed requests itself; finished checks are saved by the plugin and come
+ * back with the list (see savedCheck). url is the address the check ran
+ * against, so a result is dropped once the proxy's address changes.
  */
 export interface ProxyCheckEntry {
   state: "loading" | "ok" | "error";
@@ -75,11 +77,82 @@ export function unlistedProxyKeys(creds: CredentialView[]): CredentialView[] {
   return creds.filter((c) => !c.read_error && !c.proxy_id && !!String(c.proxy_url || "").trim() && !isDirect(c.proxy_url));
 }
 
-/** Country · city (or region) · network of a successful check. */
-export function egressPlace(result: Pick<ProxyCheckResult, "country" | "region" | "city" | "org"> | undefined): string {
+/** The last check the plugin saved for a row. */
+export function savedCheck(key: string, data: ProxiesResponse | null): ProxyCheckResult | undefined {
+  if (!data) return undefined;
+  if (key === DIRECT_KEY || key === INHERIT_KEY) return data.builtin_checks ? data.builtin_checks[key] : undefined;
+  const proxy = data.proxies.find((p) => proxyCheckKey(p.id) === key);
+  return proxy ? proxy.last_check : undefined;
+}
+
+/** What a row shows: a check in flight or a failed request first, else the saved result. */
+export function shownCheck(key: string, local: ProxyCheckMap, data: ProxiesResponse | null): ProxyCheckEntry | undefined {
+  const entry = local[key];
+  if (entry) return entry;
+  const result = savedCheck(key, data);
+  if (!result) return undefined;
+  return { state: result.ok ? "ok" : "error", url: "", result, error: result.error || "" };
+}
+
+/** The list with a finished check stored on its row, as the plugin saved it. */
+export function withSavedCheck(data: ProxiesResponse, key: string, result: ProxyCheckResult): ProxiesResponse {
+  if (key === DIRECT_KEY || key === INHERIT_KEY) {
+    return { ...data, builtin_checks: { ...(data.builtin_checks || {}), [key]: result } };
+  }
+  return { ...data, proxies: data.proxies.map((p) => (proxyCheckKey(p.id) === key ? { ...p, last_check: result } : p)) };
+}
+
+const regionNames = new Map<string, Intl.DisplayNames | null>();
+
+/** The country's name in the page language ("香港", "Japan"); the code itself when unknown. */
+export function countryName(code: string | undefined, locale: string): string {
+  const raw = String(code || "").trim();
+  if (!/^[A-Za-z]{2}$/.test(raw)) return raw;
+  const upper = raw.toUpperCase();
+  if (!regionNames.has(locale)) {
+    let names: Intl.DisplayNames | null = null;
+    try {
+      names = new Intl.DisplayNames([locale], { type: "region", style: "short" });
+    } catch {
+      names = null;
+    }
+    regionNames.set(locale, names);
+  }
+  const names = regionNames.get(locale);
+  try {
+    return (names && names.of(upper)) || upper;
+  } catch {
+    return upper;
+  }
+}
+
+/** Country · city (or region) of a successful check. */
+export function egressPlace(result: Pick<ProxyCheckResult, "country" | "region" | "city"> | undefined, locale: string): string {
   if (!result) return "";
   const place = result.city || result.region || "";
-  return [result.country, place, result.org].map((v) => String(v || "").trim()).filter(Boolean).join(" · ");
+  return [countryName(result.country, locale), place].map((v) => String(v || "").trim()).filter(Boolean).join(" · ");
+}
+
+/** A check time: the time of day when it is today, else month, day and time. */
+export function checkedAtText(iso: string, locale: string, now: Date = new Date()): string {
+  const at = new Date(iso);
+  if (isNaN(at.valueOf())) return iso;
+  if (at.toDateString() === now.toDateString()) {
+    return at.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+  }
+  const sameYear = at.getFullYear() === now.getFullYear();
+  return at.toLocaleString(locale, {
+    year: sameYear ? undefined : "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+}
+
+/** The plugin serves Twemoji flags by country code. */
+export const FLAG_URL = "/v0/resource/plugins/wokey/flag.svg";
+
+/** The flag image for a two-letter country code, or "" when there is none. */
+export function flagUrl(code: string | undefined): string {
+  const raw = String(code || "").trim();
+  return /^[A-Za-z]{2}$/.test(raw) ? FLAG_URL + "?cc=" + raw.toLowerCase() : "";
 }
 
 /** The egress a check went through, as the message key and params to show. */

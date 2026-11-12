@@ -43,6 +43,28 @@ type InputError struct {
 
 func (e *InputError) Error() string { return e.Field + ": " + e.Message }
 
+// Built-in egress choices whose last check is kept next to the list.
+const (
+	BuiltinDirect  = "direct"
+	BuiltinInherit = "inherit"
+)
+
+// Check is the result of looking up an egress's exit address.
+type Check struct {
+	OK bool `json:"ok"`
+	// Egress is "direct", "env" or the proxy as scheme://host:port.
+	Egress string `json:"egress,omitempty"`
+	IP     string `json:"ip,omitempty"`
+	// Country is the ISO 3166-1 alpha-2 code when the lookup service gave one.
+	Country   string `json:"country,omitempty"`
+	Region    string `json:"region,omitempty"`
+	City      string `json:"city,omitempty"`
+	LatencyMS int64  `json:"latency_ms,omitempty"`
+	Source    string `json:"source,omitempty"`
+	Error     string `json:"error,omitempty"`
+	CheckedAt string `json:"checked_at"`
+}
+
 // Proxy is one listed egress proxy. URL is stored as entered (trimmed),
 // including any credentials.
 type Proxy struct {
@@ -50,6 +72,8 @@ type Proxy struct {
 	Name      string `json:"name"`
 	URL       string `json:"url"`
 	CreatedAt string `json:"created_at,omitempty"`
+	// LastCheck is the latest egress check of this URL.
+	LastCheck *Check `json:"last_check,omitempty"`
 }
 
 // Label is the proxy as scheme://host:port, without credentials or path.
@@ -92,6 +116,8 @@ func (l List) Match(rawURL string) (Proxy, bool) {
 type fileFormat struct {
 	Version int     `json:"version"`
 	Proxies []Proxy `json:"proxies"`
+	// BuiltinChecks holds the last checks of "direct" and "inherit".
+	BuiltinChecks map[string]Check `json:"builtin_checks,omitempty"`
 }
 
 // Store holds the proxy list. With no directory configured it keeps the
@@ -100,6 +126,7 @@ type Store struct {
 	mu      sync.Mutex
 	dir     string
 	items   List
+	builtin map[string]Check
 	loadErr string
 	now     func() time.Time
 }
@@ -118,7 +145,7 @@ func (s *Store) Configure(dir string) {
 	if dir == s.dir && s.loadErr == "" {
 		return
 	}
-	s.dir, s.items, s.loadErr = dir, nil, ""
+	s.dir, s.items, s.builtin, s.loadErr = dir, nil, nil, ""
 	if dir == "" {
 		return
 	}
@@ -141,6 +168,14 @@ func (s *Store) Configure(dir string) {
 		}
 		s.items = append(s.items, p)
 	}
+	for key, check := range file.BuiltinChecks {
+		if key == BuiltinDirect || key == BuiltinInherit {
+			if s.builtin == nil {
+				s.builtin = make(map[string]Check)
+			}
+			s.builtin[key] = check
+		}
+	}
 }
 
 // List returns the proxies and the load error, if the file could not be
@@ -150,6 +185,60 @@ func (s *Store) List() (List, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append(List(nil), s.items...), s.loadErr
+}
+
+// BuiltinChecks returns the last checks of "direct" and "inherit".
+func (s *Store) BuiltinChecks() map[string]Check {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]Check, len(s.builtin))
+	for key, check := range s.builtin {
+		out[key] = check
+	}
+	return out
+}
+
+// SetCheck records the latest check of a proxy. It is dropped when the
+// proxy is gone or its URL is no longer rawURL, the URL that was checked.
+func (s *Store) SetCheck(id, rawURL string, check Check) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if errWritable := s.writableLocked(); errWritable != nil {
+		return errWritable
+	}
+	index := s.indexLocked(id)
+	if index < 0 || s.items[index].URL != rawURL {
+		return nil
+	}
+	next := append(List(nil), s.items...)
+	next[index].LastCheck = &check
+	if errSave := s.saveFileLocked(next, s.builtin); errSave != nil {
+		return errSave
+	}
+	s.items = next
+	return nil
+}
+
+// SetBuiltinCheck records the latest check of "direct" or "inherit".
+func (s *Store) SetBuiltinCheck(key string, check Check) error {
+	if key != BuiltinDirect && key != BuiltinInherit {
+		return &InputError{Field: "target", Message: "unknown built-in egress " + key}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if errWritable := s.writableLocked(); errWritable != nil {
+		return errWritable
+	}
+	next := make(map[string]Check, len(s.builtin)+1)
+	for k, v := range s.builtin {
+		next[k] = v
+	}
+	next[key] = check
+	if errSave := s.saveFileLocked(s.items, next); errSave != nil {
+		return errSave
+	}
+	s.builtin = next
+	return nil
 }
 
 // Add appends a proxy. An empty name defaults to the proxy's host:port.
@@ -236,7 +325,10 @@ func (s *Store) Update(id string, name, rawURL *string) (before, after Proxy, er
 		if other, dup := s.items.Match(clean); dup && other.ID != before.ID {
 			return before, before, ErrDuplicate
 		}
-		after.URL = clean
+		if clean != before.URL {
+			// The last check describes the old address.
+			after.URL, after.LastCheck = clean, nil
+		}
 	}
 	if name != nil {
 		clean, errName := checkName(*name, after.URL)
@@ -245,7 +337,7 @@ func (s *Store) Update(id string, name, rawURL *string) (before, after Proxy, er
 		}
 		after.Name = clean
 	}
-	if after == before {
+	if after.Name == before.Name && after.URL == before.URL {
 		return before, after, nil
 	}
 	next := append(List(nil), s.items...)
@@ -294,9 +386,13 @@ func (s *Store) writableLocked() error {
 	return nil
 }
 
-// saveLocked writes the list atomically; the file holds proxy credentials,
-// so it is readable by the owner only.
 func (s *Store) saveLocked(items List) error {
+	return s.saveFileLocked(items, s.builtin)
+}
+
+// saveFileLocked writes the list atomically; the file holds proxy
+// credentials, so it is readable by the owner only.
+func (s *Store) saveFileLocked(items List, builtin map[string]Check) error {
 	if s.dir == "" {
 		return nil
 	}
@@ -306,7 +402,7 @@ func (s *Store) saveLocked(items List) error {
 	if items == nil {
 		items = List{}
 	}
-	raw, errMarshal := json.MarshalIndent(fileFormat{Version: 1, Proxies: items}, "", "  ")
+	raw, errMarshal := json.MarshalIndent(fileFormat{Version: 1, Proxies: items, BuiltinChecks: builtin}, "", "  ")
 	if errMarshal != nil {
 		return fmt.Errorf("save proxy list: %w", errMarshal)
 	}

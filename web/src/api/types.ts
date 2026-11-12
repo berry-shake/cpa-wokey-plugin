@@ -219,12 +219,16 @@ export interface ProxyView {
   /** scheme://host:port */
   label: string;
   created_at?: string;
+  /** The latest check of the current address, saved by the plugin. */
+  last_check?: ProxyCheckResult;
 }
 
 export interface ProxiesResponse {
   proxies: ProxyView[];
   /** CPA's global proxy-url, redacted; absent when not set. */
   global_proxy?: string;
+  /** The latest checks of the two built-in rows. */
+  builtin_checks?: Partial<Record<"direct" | "inherit", ProxyCheckResult>>;
   load_error?: string;
 }
 
@@ -258,10 +262,10 @@ export interface ProxyCheckResult {
   /** "direct", "env" or the proxy as scheme://host:port. */
   egress?: string;
   ip?: string;
+  /** ISO 3166-1 alpha-2 code when the lookup service gave one. */
   country?: string;
   region?: string;
   city?: string;
-  org?: string;
   latency_ms?: number;
   source?: string;
   checked_at?: string;

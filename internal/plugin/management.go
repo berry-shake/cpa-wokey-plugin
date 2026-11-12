@@ -64,6 +64,7 @@ func managementRoutes() managementRegistration {
 		Resources: []resourceDeclaration{
 			{Path: "/manage", Menu: displayName, Description: "Manage Wokey API keys, model selection and egress proxies."},
 			{Path: "/logo.svg", Description: "Plugin logo served to the management panel sidebar."},
+			{Path: "/flag.svg", Description: "Country flag icon for egress checks (?cc=<ISO 3166-1 alpha-2>)."},
 		},
 	}
 }
@@ -92,6 +93,10 @@ func (s *Service) handleManagement(req pluginapi.ManagementRequest) pluginapi.Ma
 	case pagePath:
 		if method == http.MethodGet {
 			return pageResponse()
+		}
+	case flagPath:
+		if method == http.MethodGet {
+			return flagResponse(req.Query.Get("cc"))
 		}
 	case statusPath:
 		if method == http.MethodGet {

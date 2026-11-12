@@ -1,0 +1,6 @@
+The SVG files in svg/ are the country flags of Twemoji
+(https://github.com/jdecked/twemoji), taken from the @twemoji/svg 15.0.0
+package and renamed to ISO 3166-1 alpha-2 codes.
+
+Copyright 2019 Twitter, Inc and other contributors.
+Graphics licensed under CC-BY 4.0: https://creativecommons.org/licenses/by/4.0/

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/berry-shake/cpa-wokey-plugin/internal/flags"
 	"github.com/berry-shake/cpa-wokey-plugin/internal/web"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
@@ -35,6 +36,29 @@ func pageResponse() pluginapi.ManagementResponse {
 			"Content-Security-Policy": []string{pageCSP},
 		},
 		Body: append([]byte(nil), web.Page()...),
+	}
+}
+
+// flagResponse serves a country flag by its two-letter code. Flags never
+// change, so browsers may keep them for a week.
+func flagResponse(code string) pluginapi.ManagementResponse {
+	raw, ok := flags.SVG(code)
+	if !ok {
+		return pluginapi.ManagementResponse{
+			StatusCode: http.StatusNotFound,
+			Headers:    http.Header{"Content-Type": []string{"text/plain; charset=utf-8"}, "Cache-Control": []string{"public, max-age=86400"}},
+			Body:       []byte("unknown country code"),
+		}
+	}
+	return pluginapi.ManagementResponse{
+		StatusCode: http.StatusOK,
+		Headers: http.Header{
+			"Content-Type":            []string{"image/svg+xml"},
+			"Cache-Control":           []string{"public, max-age=604800"},
+			"X-Content-Type-Options":  []string{"nosniff"},
+			"Content-Security-Policy": []string{logoCSP},
+		},
+		Body: append([]byte(nil), raw...),
 	}
 }
 

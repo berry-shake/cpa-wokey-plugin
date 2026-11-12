@@ -2,20 +2,21 @@ import type { ReactNode } from "react";
 import type { ProxyView } from "../../api/types";
 import { localeTag, type T } from "../../i18n";
 import { credentialsOf } from "../../lib/credentials";
-import { formatTime } from "../../lib/format";
+import { formatWhen } from "../../lib/format";
 import {
-  DIRECT_KEY, egressName, egressPlace, INHERIT_KEY, proxyCheckKey, proxyUsage, unlistedProxyKeys, type ProxyCheckEntry,
+  checkedAtText, DIRECT_KEY, egressName, egressPlace, flagUrl, INHERIT_KEY, proxyCheckKey, proxyUsage, shownCheck, unlistedProxyKeys,
+  type ProxyCheckEntry,
 } from "../../lib/proxies";
 import { store, type State } from "../../state/store";
 
-const COLUMNS = ["name", "url", "usage", "egress", "latency", "actions"];
+const COLUMNS = ["name", "url", "usage", "egress", "latency", "checked", "actions"];
 
 function UsageCell({ t, n }: { t: T; n: number }) {
   return <td className="nowrap">{n ? t("proxies.usedBy", { n }) : <span className="sub">{t("proxies.unused")}</span>}</td>;
 }
 
-/** Exit IP and place, only once a check ran; "—" before. */
-export function EgressCell({ t, entry }: { t: T; entry: ProxyCheckEntry | undefined }) {
+/** Flag and exit IP, then country · city; "—" until the first check. */
+export function EgressCell({ t, entry, locale }: { t: T; entry: ProxyCheckEntry | undefined; locale: string }) {
   if (!entry) return <td className="proxy-egress"><span className="sub">—</span></td>;
   if (entry.state === "loading") return <td className="proxy-egress"><span className="sub">{t("proxies.checking")}</span></td>;
   const result = entry.result;
@@ -28,25 +29,32 @@ export function EgressCell({ t, entry }: { t: T; entry: ProxyCheckEntry | undefi
     );
   }
   const via = egressName(result.egress);
-  const place = egressPlace(result);
+  const place = egressPlace(result, locale);
+  const flag = flagUrl(result.country);
   return (
     <td className="proxy-egress" title={via ? t(via.key, via.params) : undefined}>
-      <div className="mono strong">{result.ip || "—"}</div>
+      <div className="proxy-ip">
+        {flag ? <img className="proxy-flag" src={flag} alt={result.country} width={18} height={18} loading="lazy" /> : null}
+        <span className="mono strong">{result.ip || "—"}</span>
+      </div>
       {place ? <div className="sub">{place}</div> : null}
     </td>
   );
 }
 
-export function LatencyCell({ t, entry, locale }: { t: T; entry: ProxyCheckEntry | undefined; locale: string }) {
+/** When the shown result was checked: the time today, else the date and time. */
+export function CheckedCell({ entry, locale }: { entry: ProxyCheckEntry | undefined; locale: string }) {
+  const at = entry && entry.state !== "loading" && entry.result ? entry.result.checked_at : undefined;
+  if (!at) return <td className="nowrap"><span className="sub">{entry && entry.state === "loading" ? "…" : "—"}</span></td>;
+  return <td className="nowrap" title={formatWhen(at, locale)}>{checkedAtText(at, locale)}</td>;
+}
+
+export function LatencyCell({ t, entry }: { t: T; entry: ProxyCheckEntry | undefined }) {
   const result = entry && entry.state === "ok" ? entry.result : undefined;
   if (!result || result.latency_ms === undefined) {
     return <td className="nowrap"><span className="sub">{entry && entry.state === "loading" ? "…" : "—"}</span></td>;
   }
-  return (
-    <td className="nowrap" title={result.checked_at ? t("proxies.checkedAt", { time: formatTime(result.checked_at, locale) }) : undefined}>
-      {t("proxies.latency", { n: Math.round(result.latency_ms) })}
-    </td>
-  );
+  return <td className="nowrap">{t("proxies.latency", { n: Math.round(result.latency_ms) })}</td>;
 }
 
 function CheckButton({ t, entry, onClick }: { t: T; entry: ProxyCheckEntry | undefined; onClick: () => void }) {
@@ -67,7 +75,7 @@ function BuiltinRow({ t, s, checkKey, name, address, used, locale }: {
   used: number;
   locale: string;
 }) {
-  const entry = s.proxyChecks[checkKey];
+  const entry = shownCheck(checkKey, s.proxyChecks, s.proxies);
   return (
     <tr className="proxy-builtin" data-key={checkKey}>
       <td>
@@ -76,8 +84,9 @@ function BuiltinRow({ t, s, checkKey, name, address, used, locale }: {
       </td>
       <td>{address}</td>
       <UsageCell t={t} n={used} />
-      <EgressCell t={t} entry={entry} />
-      <LatencyCell t={t} entry={entry} locale={locale} />
+      <EgressCell t={t} entry={entry} locale={locale} />
+      <LatencyCell t={t} entry={entry} />
+      <CheckedCell entry={entry} locale={locale} />
       <td>
         <div className="row-actions">
           <CheckButton t={t} entry={entry} onClick={() => void store.checkProxy(checkKey)} />
@@ -89,7 +98,7 @@ function BuiltinRow({ t, s, checkKey, name, address, used, locale }: {
 
 function ProxyRow({ t, s, proxy, used, locale }: { t: T; s: State; proxy: ProxyView; used: number; locale: string }) {
   const key = proxyCheckKey(proxy.id);
-  const entry = s.proxyChecks[key];
+  const entry = shownCheck(key, s.proxyChecks, s.proxies);
   const armed = s.armedDelete === "proxy:" + proxy.id;
   return (
     <tr data-key={key}>
@@ -98,8 +107,9 @@ function ProxyRow({ t, s, proxy, used, locale }: { t: T; s: State; proxy: ProxyV
       </td>
       <td><span className="mono">{proxy.url}</span></td>
       <UsageCell t={t} n={used} />
-      <EgressCell t={t} entry={entry} />
-      <LatencyCell t={t} entry={entry} locale={locale} />
+      <EgressCell t={t} entry={entry} locale={locale} />
+      <LatencyCell t={t} entry={entry} />
+      <CheckedCell entry={entry} locale={locale} />
       <td>
         <div className="row-actions">
           <CheckButton t={t} entry={entry} onClick={() => void store.checkProxy(key)} />

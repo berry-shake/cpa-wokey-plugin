@@ -16,7 +16,7 @@ import {
 } from "../lib/logs";
 import {
   buildProxyBody, checkTarget, checkUrl, DIRECT_KEY, INHERIT_KEY, newProxyDialog, proxyCheckKey, proxyUsage, pruneChecks, runLimited,
-  type ProxyCheckEntry, type ProxyCheckMap, type ProxyDialogState,
+  withSavedCheck, type ProxyCheckEntry, type ProxyCheckMap, type ProxyDialogState,
 } from "../lib/proxies";
 
 export const TABS = ["logs", "keys", "proxies", "models", "config"] as const;
@@ -75,7 +75,11 @@ export interface State {
   /** The saved proxies; null until loaded. */
   proxies: ProxiesResponse | null;
   proxiesError: string | null;
-  /** Egress checks by "id:<id>", "direct" or "inherit"; page memory only, never automatic. */
+  /**
+   * Checks in flight and failed check requests by "id:<id>", "direct" or
+   * "inherit". Finished checks are saved by the plugin and shown from the
+   * list. Checks only ever run on a click.
+   */
   proxyChecks: ProxyCheckMap;
   /** The open add/edit proxy dialog; null while closed. */
   proxyDialog: ProxyDialogState | null;
@@ -684,22 +688,23 @@ export class Store {
     const current = this.state.proxyChecks[key];
     if (current && current.state === "loading") return;
     this.setCheck(key, { state: "loading", url });
-    let entry: ProxyCheckEntry;
     try {
       const result = await this.api.checkProxy(checkTarget(key));
-      entry = result && result.ok
-        ? { state: "ok", url, result }
-        : { state: "error", url, result, error: (result && result.error) || "" };
+      // The plugin saved the result; show it like the list will after a
+      // reload, unless the proxy was deleted or moved meanwhile.
+      if (result && this.checkAddress(key) === url) {
+        this.set((s) => ({ proxies: s.proxies ? withSavedCheck(s.proxies, key, result) : s.proxies }));
+      }
+      this.setCheck(key, undefined);
     } catch (error) {
       if (isAuthError(error)) {
         this.showLogin("login.expired", errorMessage(error));
         return;
       }
-      entry = { state: "error", url, error: errorMessage(error) };
+      const entry: ProxyCheckEntry = { state: "error", url, error: errorMessage(error) };
+      if (this.checkAddress(key) === url) this.setCheck(key, entry);
+      else this.setCheck(key, undefined);
     }
-    // The proxy may have been deleted or moved to another address meanwhile.
-    if (this.checkAddress(key) === url) this.setCheck(key, entry);
-    else this.setCheck(key, undefined);
   }
 
   /** Checks the two built-in rows and every list proxy, a few at a time. */

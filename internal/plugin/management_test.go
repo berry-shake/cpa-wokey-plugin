@@ -443,7 +443,9 @@ func TestManagementRouting(t *testing.T) {
 		}
 	}
 	for _, resource := range routes.Resources {
-		if resp := svc.handleManagement(pluginapi.ManagementRequest{Path: resourceBase + resource.Path}); resp.StatusCode != http.StatusOK {
+		// flag.svg needs a country code; the other resources ignore it.
+		req := pluginapi.ManagementRequest{Path: resourceBase + resource.Path, Query: url.Values{"cc": {"hk"}}}
+		if resp := svc.handleManagement(req); resp.StatusCode != http.StatusOK {
 			t.Errorf("resource %s: %d", resource.Path, resp.StatusCode)
 		}
 	}

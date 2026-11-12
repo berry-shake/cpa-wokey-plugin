@@ -40,6 +40,7 @@ const (
 	resourceBase   = "/v0/resource/plugins/" + PluginID
 	logoPath       = resourceBase + "/logo.svg"
 	pagePath       = resourceBase + "/manage"
+	flagPath       = resourceBase + "/flag.svg"
 
 	// catalogLoadTimeout bounds the synchronous catalog load in model.for_auth.
 	catalogLoadTimeout = 15 * time.Second

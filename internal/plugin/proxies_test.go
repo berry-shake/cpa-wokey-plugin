@@ -3,6 +3,7 @@ package plugin
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -214,7 +215,7 @@ func TestCheckProxy(t *testing.T) {
 
 	status, out := manage(t, svc, http.MethodPost, proxiesCheckPath, `{"target":"direct"}`)
 	if status != http.StatusOK || out["ok"] != true || out["ip"] != "203.0.113.5" || out["egress"] != "direct" ||
-		out["country"] != "HK" || out["org"] != "AS9312 xTom" || out["source"] == "" || out["checked_at"] == "" {
+		out["country"] != "HK" || out["city"] != "Hong Kong" || out["org"] != nil || out["source"] == "" || out["checked_at"] == "" {
 		t.Fatalf("direct check: %d %v", status, out)
 	}
 	if latency, _ := out["latency_ms"].(float64); latency < 1 {
@@ -265,7 +266,7 @@ func TestCheckProxyFallsBackAndReportsFailures(t *testing.T) {
 	svc.egressCheckURLs = []string{ips.URL + "/limited", ips.URL + "/geoip"}
 
 	status, out := manage(t, svc, http.MethodPost, proxiesCheckPath, `{"target":"direct"}`)
-	if status != http.StatusOK || out["ok"] != true || out["country"] != "JP" || out["city"] != "Tokyo" || out["org"] != "AS2516 KDDI" {
+	if status != http.StatusOK || out["ok"] != true || out["country"] != "JP" || out["city"] != "Tokyo" || out["org"] != nil {
 		t.Fatalf("fallback check: %d %v", status, out)
 	}
 
@@ -294,8 +295,85 @@ func TestParseEgressInfo(t *testing.T) {
 	if _, errParse := parseEgressInfo([]byte(`<html>`)); errParse == nil {
 		t.Fatal("accepted HTML")
 	}
-	info, errParse := parseEgressInfo([]byte(`{"ip":"2001:db8::1","country":"Germany","organization":"Hetzner","isp":"Hetzner Online"}`))
-	if errParse != nil || info.IP != "2001:db8::1" || info.Country != "Germany" || info.Org != "Hetzner" {
+	info, errParse := parseEgressInfo([]byte(`{"ip":"2001:db8::1","country":"Germany","region":"Hesse"}`))
+	if errParse != nil || info.IP != "2001:db8::1" || info.Country != "Germany" || info.Region != "Hesse" {
 		t.Fatalf("info = %+v, %v", info, errParse)
+	}
+	info, errParse = parseEgressInfo([]byte(`{"ip":"203.0.113.9","country":"hk","city":"Kwai Chung"}`))
+	if errParse != nil || info.Country != "HK" || info.City != "Kwai Chung" {
+		t.Fatalf("info = %+v, %v", info, errParse)
+	}
+}
+
+func TestCheckResultsAreKept(t *testing.T) {
+	ips := newIPService(t, "203.0.113.5", "198.51.100.7")
+	svc, _ := newTestService(t, nil)
+	svc.egressCheckURLs = []string{ips.URL + "/json"}
+	svc.rememberHost(pluginapi.HostConfigSummary{ProxyURL: ips.URL})
+	status, out := manage(t, svc, http.MethodPost, proxiesPath, `{"name":"HK","url":"`+ips.URL+`"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("add proxy: %d %v", status, out)
+	}
+	id := proxyOf(t, out)["id"].(string)
+	for _, body := range []string{`{"id":"` + id + `"}`, `{"target":"direct"}`, `{"target":"inherit"}`} {
+		if status, out := manage(t, svc, http.MethodPost, proxiesCheckPath, body); status != http.StatusOK || out["ok"] != true {
+			t.Fatalf("check %s: %d %v", body, status, out)
+		}
+	}
+
+	status, out = manage(t, svc, http.MethodGet, proxiesPath, "")
+	if status != http.StatusOK {
+		t.Fatalf("list: %d %v", status, out)
+	}
+	last, _ := proxyList(t, svc)[0]["last_check"].(map[string]any)
+	if last["ip"] != "198.51.100.7" || last["country"] != "HK" || last["checked_at"] == "" {
+		t.Fatalf("last_check = %v", last)
+	}
+	builtin, _ := out["builtin_checks"].(map[string]any)
+	direct, _ := builtin["direct"].(map[string]any)
+	inherit, _ := builtin["inherit"].(map[string]any)
+	if direct["ip"] != "203.0.113.5" || inherit["ip"] != "198.51.100.7" {
+		t.Fatalf("builtin_checks = %v", builtin)
+	}
+
+	// CPA's global proxy changed: the inherited check no longer applies.
+	svc.rememberHost(pluginapi.HostConfigSummary{ProxyURL: "direct"})
+	_, out = manage(t, svc, http.MethodGet, proxiesPath, "")
+	builtin, _ = out["builtin_checks"].(map[string]any)
+	if _, ok := builtin["inherit"]; ok || builtin["direct"] == nil {
+		t.Fatalf("builtin_checks after the global proxy changed = %v", builtin)
+	}
+
+	// A new URL drops the proxy's check.
+	if status, out := manage(t, svc, http.MethodPatch, proxiesPath, `{"id":"`+id+`","url":"http://127.0.0.1:1"}`); status != http.StatusOK {
+		t.Fatalf("change URL: %d %v", status, out)
+	}
+	if last := proxyList(t, svc)[0]["last_check"]; last != nil {
+		t.Fatalf("last_check after the URL changed = %v", last)
+	}
+}
+
+func TestFlagResource(t *testing.T) {
+	svc, _ := newTestService(t, nil)
+	resp := svc.handleManagement(pluginapi.ManagementRequest{Method: http.MethodGet, Path: flagPath, Query: url.Values{"cc": {"hk"}}})
+	if resp.StatusCode != http.StatusOK || resp.Headers.Get("Content-Type") != "image/svg+xml" || !strings.HasPrefix(string(resp.Body), "<svg") {
+		t.Fatalf("flag: %d %v %.40s", resp.StatusCode, resp.Headers, resp.Body)
+	}
+	if csp := resp.Headers.Get("Content-Security-Policy"); !strings.Contains(csp, "sandbox") || resp.Headers.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("flag headers = %v", resp.Headers)
+	}
+	for _, code := range []string{"", "zz", "hkg"} {
+		resp := svc.handleManagement(pluginapi.ManagementRequest{Method: http.MethodGet, Path: flagPath, Query: url.Values{"cc": {code}}})
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("flag %q: %d", code, resp.StatusCode)
+		}
+	}
+	routes := managementRoutes()
+	found := false
+	for _, r := range routes.Resources {
+		found = found || r.Path == "/flag.svg"
+	}
+	if !found {
+		t.Fatal("flag.svg is not declared as a resource")
 	}
 }

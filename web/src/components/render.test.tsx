@@ -254,23 +254,31 @@ describe("ProxiesPanel", () => {
   const rows = (doc: Document) => [...doc.querySelectorAll("#panel-proxies tbody tr")];
   const cells = (row: Element) => [...row.querySelectorAll("td")].map((td) => td.textContent);
 
-  it("lists the built-in rows first and leaves exit and latency blank until checked", () => {
+  it("lists the built-in rows first and leaves exit, latency and time blank until checked", () => {
     const doc = html(renderToStaticMarkup(<ProxiesPanel t={t} s={base()} />));
+    expect([...doc.querySelectorAll("#panel-proxies thead th")].map((th) => th.textContent)).toContain(t("proxies.col.checked"));
     const all = rows(doc);
     expect(all.map((r) => r.getAttribute("data-key"))).toEqual(["inherit", "direct", "id:p1"]);
-    expect(cells(all[0]).slice(0, 5)).toEqual([t("proxies.inherit") + t("proxies.builtin"), t("proxies.inheritNone"), t("proxies.usedBy", { n: 1 }), "—", "—"]);
-    expect(cells(all[1]).slice(2, 5)).toEqual([t("proxies.usedBy", { n: 1 }), "—", "—"]);
-    expect(cells(all[2]).slice(0, 5)).toEqual(["HK", "socks5://u:xxxxx@hk:1080", t("proxies.usedBy", { n: 1 }), "—", "—"]);
+    expect(cells(all[0]).slice(0, 6)).toEqual([t("proxies.inherit") + t("proxies.builtin"), t("proxies.inheritNone"), t("proxies.usedBy", { n: 1 }), "—", "—", "—"]);
+    expect(cells(all[1]).slice(2, 6)).toEqual([t("proxies.usedBy", { n: 1 }), "—", "—", "—"]);
+    expect(cells(all[2]).slice(0, 6)).toEqual(["HK", "socks5://u:xxxxx@hk:1080", t("proxies.usedBy", { n: 1 }), "—", "—", "—"]);
     // Built-in rows can only be checked.
     expect(all[0].querySelectorAll("button").length).toBe(1);
     expect(all[2].querySelectorAll("button").length).toBe(3);
     expect(doc.querySelector("#proxies-import")).toBeNull();
   });
 
-  it("shows check results, progress and failures", () => {
+  it("shows saved results with flag and time, progress and failures", () => {
     const s = base({
+      proxies: {
+        proxies: [{
+          id: "p1", name: "HK", url: "socks5://u:xxxxx@hk:1080", label: "socks5://hk:1080",
+          last_check: { ok: true, egress: "socks5://hk:1080", ip: "203.0.113.7", country: "HK", city: "Kwai Chung", latency_ms: 412.4, checked_at: "2026-11-12T14:00:00Z" },
+        }],
+        // A saved result stays hidden behind a check in flight.
+        builtin_checks: { direct: { ok: true, egress: "direct", ip: "45.32.10.8", country: "SG", checked_at: "2026-11-12T13:00:00Z" } },
+      },
       proxyChecks: {
-        "id:p1": { state: "ok", url: "socks5://u:xxxxx@hk:1080", result: { ok: true, egress: "socks5://hk:1080", ip: "203.0.113.7", country: "HK", city: "Hong Kong", org: "AS1 Example", latency_ms: 412.4 } },
         direct: { state: "loading", url: "" },
         inherit: { state: "error", url: "", error: "dial tcp: timeout" },
       },
@@ -278,8 +286,11 @@ describe("ProxiesPanel", () => {
     const doc = html(renderToStaticMarkup(<ProxiesPanel t={t} s={s} />));
     const [inherit, direct, hk] = rows(doc);
     expect(hk.querySelector(".proxy-egress .mono")?.textContent).toBe("203.0.113.7");
-    expect(hk.querySelector(".proxy-egress .sub")?.textContent).toBe("HK · Hong Kong · AS1 Example");
+    expect(hk.querySelector(".proxy-flag")?.getAttribute("src")).toBe("/v0/resource/plugins/wokey/flag.svg?cc=hk");
+    expect(hk.querySelector(".proxy-egress .sub")?.textContent).toBe("Hong Kong · Kwai Chung");
     expect(cells(hk)[4]).toBe(t("proxies.latency", { n: 412 }));
+    expect(cells(hk)[5]).not.toBe("—");
+    expect(cells(direct)[5]).toBe("…");
     expect(cells(direct)[3]).toBe(t("proxies.checking"));
     expect(direct.querySelector("button")?.hasAttribute("disabled")).toBe(true);
     const failed = inherit.querySelector(".proxy-egress .danger-text");
