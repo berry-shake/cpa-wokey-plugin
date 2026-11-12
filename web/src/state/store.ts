@@ -16,7 +16,7 @@ import {
 } from "../lib/logs";
 import {
   buildProxyBody, checkTarget, checkUrl, DIRECT_KEY, INHERIT_KEY, newProxyDialog, proxyCheckKey, proxyUsage, pruneChecks, runLimited,
-  withSavedCheck, type ProxyCheckEntry, type ProxyCheckMap, type ProxyDialogState,
+  moveItem, withSavedCheck, type ProxyCheckEntry, type ProxyCheckMap, type ProxyDialogState,
 } from "../lib/proxies";
 
 export const TABS = ["logs", "keys", "proxies", "models", "config"] as const;
@@ -801,6 +801,42 @@ export class Store {
     } finally {
       this.setBusy(busy, false);
     }
+  }
+
+  /**
+   * Saves a new proxy order (the two built-in rows stay on top and are not
+   * part of it). The list moves at once and goes back if saving fails.
+   */
+  async reorderProxies(ids: string[]): Promise<void> {
+    const data = this.state.proxies;
+    if (!data) return;
+    const byId = new Map(data.proxies.map((p) => [p.id, p] as const));
+    const next = ids.map((id) => byId.get(id)).filter((p): p is ProxyView => !!p);
+    if (next.length !== data.proxies.length || next.every((p, i) => p.id === data.proxies[i].id)) return;
+    // A list load in flight carries the old order; drop it.
+    ++this.proxySeq;
+    this.set({ proxies: { ...data, proxies: next } });
+    try {
+      const saved = await this.api.reorderProxies(ids);
+      if (saved && Array.isArray(saved.proxies)) {
+        ++this.proxySeq;
+        this.set((s) => ({ proxies: s.proxies ? { ...s.proxies, proxies: saved.proxies } : s.proxies }));
+      }
+    } catch (error) {
+      this.handleError(error);
+      if (!isAuthError(error)) void this.loadProxies();
+    }
+  }
+
+  /** Moves a proxy one place up (-1) or down (+1); the keyboard way to reorder. */
+  moveProxy(id: string, delta: number): void {
+    const data = this.state.proxies;
+    if (!data) return;
+    const ids = data.proxies.map((p) => p.id);
+    const from = ids.indexOf(id);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    void this.reorderProxies(moveItem(ids, from, to));
   }
 
   /** Adds the custom addresses keys use but the list lacks. */

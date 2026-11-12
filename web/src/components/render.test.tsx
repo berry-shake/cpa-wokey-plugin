@@ -262,9 +262,12 @@ describe("ProxiesPanel", () => {
     expect(cells(all[0]).slice(0, 6)).toEqual([t("proxies.inherit") + t("proxies.builtin"), t("proxies.inheritNone"), t("proxies.usedBy", { n: 1 }), "—", "—", "—"]);
     expect(cells(all[1]).slice(2, 6)).toEqual([t("proxies.usedBy", { n: 1 }), "—", "—", "—"]);
     expect(cells(all[2]).slice(0, 6)).toEqual(["HK", "socks5://u:xxxxx@hk:1080", t("proxies.usedBy", { n: 1 }), "—", "—", "—"]);
-    // Built-in rows can only be checked.
+    // Built-in rows can only be checked and stay on top: no drag handle.
     expect(all[0].querySelectorAll("button").length).toBe(1);
-    expect(all[2].querySelectorAll("button").length).toBe(3);
+    expect(all[0].querySelector(".drag-handle")).toBeNull();
+    expect(all[1].querySelector(".drag-handle")).toBeNull();
+    expect(all[2].querySelectorAll("button").length).toBe(4);
+    expect(all[2].querySelector(".drag-handle")?.getAttribute("aria-label")).toBe(t("proxies.dragLabel", { name: "HK" }));
     expect(doc.querySelector("#proxies-import")).toBeNull();
   });
 

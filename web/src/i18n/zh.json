@@ -323,6 +323,8 @@
   "proxies.col.egress": "出口",
   "proxies.col.latency": "延迟",
   "proxies.col.checked": "检测时间",
+  "proxies.dragHint": "拖动调整顺序，或聚焦后按 ↑ ↓ 移动",
+  "proxies.dragLabel": "调整 {name} 的顺序",
   "proxies.col.actions": "操作",
   "proxies.inherit": "继承 CPA 全局代理",
   "proxies.inheritNone": "未设置（环境变量或直连）",

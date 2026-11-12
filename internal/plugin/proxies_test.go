@@ -377,3 +377,32 @@ func TestFlagResource(t *testing.T) {
 		t.Fatal("flag.svg is not declared as a resource")
 	}
 }
+
+func TestReorderProxies(t *testing.T) {
+	svc, _ := newTestService(t, nil)
+	var ids []string
+	for _, url := range []string{"http://10.0.0.1:8080", "http://10.0.0.2:8080", "http://10.0.0.3:8080"} {
+		status, out := manage(t, svc, http.MethodPost, proxiesPath, `{"url":"`+url+`"}`)
+		if status != http.StatusCreated {
+			t.Fatalf("add: %d %v", status, out)
+		}
+		ids = append(ids, proxyOf(t, out)["id"].(string))
+	}
+	status, out := manage(t, svc, http.MethodPost, proxiesOrderPath, `{"ids":["`+ids[2]+`","`+ids[0]+`","`+ids[1]+`"]}`)
+	if status != http.StatusOK || out["ok"] != true {
+		t.Fatalf("reorder: %d %v", status, out)
+	}
+	items, _ := out["proxies"].([]any)
+	if len(items) != 3 || items[0].(map[string]any)["id"] != ids[2] {
+		t.Fatalf("reorder response = %v", out)
+	}
+	list := proxyList(t, svc)
+	if list[0]["id"] != ids[2] || list[1]["id"] != ids[0] || list[2]["id"] != ids[1] {
+		t.Fatalf("list = %v", list)
+	}
+	for _, body := range []string{"", "not json", `{"ids":"x"}`} {
+		if status, _ := manage(t, svc, http.MethodPost, proxiesOrderPath, body); status != http.StatusBadRequest {
+			t.Fatalf("reorder %q: %d", body, status)
+		}
+	}
+}

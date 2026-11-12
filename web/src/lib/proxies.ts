@@ -133,17 +133,12 @@ export function egressPlace(result: Pick<ProxyCheckResult, "country" | "region" 
   return [countryName(result.country, locale), place].map((v) => String(v || "").trim()).filter(Boolean).join(" · ");
 }
 
-/** A check time: the time of day when it is today, else month, day and time. */
-export function checkedAtText(iso: string, locale: string, now: Date = new Date()): string {
+/** A check time in local time, with its date: "2026-11-12 22:40:55". */
+export function checkedAtText(iso: string): string {
   const at = new Date(iso);
   if (isNaN(at.valueOf())) return iso;
-  if (at.toDateString() === now.toDateString()) {
-    return at.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
-  }
-  const sameYear = at.getFullYear() === now.getFullYear();
-  return at.toLocaleString(locale, {
-    year: sameYear ? undefined : "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
-  });
+  const two = (n: number) => String(n).padStart(2, "0");
+  return `${at.getFullYear()}-${two(at.getMonth() + 1)}-${two(at.getDate())} ${two(at.getHours())}:${two(at.getMinutes())}:${two(at.getSeconds())}`;
 }
 
 /** The plugin serves Twemoji flags by country code. */
@@ -161,6 +156,27 @@ export function egressName(egress: string | undefined): { key: string; params: P
   if (egress === "direct") return { key: "proxy.direct", params: null };
   if (egress === "env") return { key: "logs.egress.env", params: null };
   return { key: "proxies.via", params: { egress } };
+}
+
+/** A copy of list with the item at from moved to index to. */
+export function moveItem<T>(list: readonly T[], from: number, to: number): T[] {
+  const out = list.slice();
+  if (from < 0 || from >= out.length) return out;
+  const [item] = out.splice(from, 1);
+  out.splice(Math.max(0, Math.min(to, out.length)), 0, item);
+  return out;
+}
+
+/**
+ * Where a dragged row lands: the number of other rows whose middle is above
+ * the pointer. middles are the rows' vertical centres in list order.
+ */
+export function dropIndex(middles: readonly number[], y: number, from: number): number {
+  let index = 0;
+  middles.forEach((middle, i) => {
+    if (i !== from && middle < y) index++;
+  });
+  return index;
 }
 
 /** Runs fn over items, at most limit at a time, and resolves when all are done. */

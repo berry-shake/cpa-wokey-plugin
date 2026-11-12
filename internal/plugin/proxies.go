@@ -25,6 +25,7 @@ const (
 	proxiesPath       = managementBase + "/proxies"
 	proxiesCheckPath  = managementBase + "/proxies/check"
 	proxiesImportPath = managementBase + "/proxies/import"
+	proxiesOrderPath  = managementBase + "/proxies/order"
 
 	// egressCheckUserAgent is sent by the egress check: IP lookup services
 	// answer curl with plain JSON.
@@ -212,6 +213,25 @@ func (s *Service) deleteProxy(id string) pluginapi.ManagementResponse {
 	}
 	s.logf("info", "wokey: deleted proxy", map[string]any{"proxy": removed.Label()})
 	return jsonResponse(http.StatusOK, map[string]bool{"ok": true})
+}
+
+// reorderProxies saves the order the page shows the proxies in
+// ({"ids":[...]}); the key editor lists them in the same order.
+func (s *Service) reorderProxies(body []byte) pluginapi.ManagementResponse {
+	var input struct {
+		IDs []string `json:"ids"`
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		return jsonResponse(http.StatusBadRequest, errorBody{Error: "invalid_json", Message: "request body is required"})
+	}
+	if errUnmarshal := json.Unmarshal(body, &input); errUnmarshal != nil {
+		return jsonResponse(http.StatusBadRequest, errorBody{Error: "invalid_json", Message: errUnmarshal.Error()})
+	}
+	if errOrder := s.proxies.Reorder(input.IDs); errOrder != nil {
+		return proxyStoreError(errOrder)
+	}
+	view := s.proxiesView()
+	return jsonResponse(http.StatusOK, map[string]any{"ok": true, "proxies": view.Proxies})
 }
 
 // importProxies adds the proxies credentials already use to the list.

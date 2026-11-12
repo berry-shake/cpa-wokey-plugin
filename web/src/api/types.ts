@@ -254,6 +254,12 @@ export interface ProxyImportResponse {
   proxies: ProxyView[];
 }
 
+/** Response of POST /proxies/order: the list in its saved order. */
+export interface ProxyOrderResponse {
+  ok: boolean;
+  proxies: ProxyView[];
+}
+
 export type ProxyCheckTarget = { id: string } | { target: "direct" | "inherit" };
 
 /** An egress check; a failed check is ok: false with error, still HTTP 200. */

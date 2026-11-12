@@ -605,13 +605,28 @@ dialog.modal.modal-sm { width: min(520px, calc(100vw - 32px)); }
 .proxies-table { table-layout: fixed; min-width: 1120px; }
 .proxies-table td { vertical-align: middle; overflow-wrap: anywhere; }
 .proxies-table .proxy-builtin td { background: var(--bg-inset); }
-.proxies-table .col-name { width: 15%; }
-.proxies-table .col-url { width: 24%; }
-.proxies-table .col-usage { width: 8%; }
-.proxies-table .col-egress { width: 22%; }
-.proxies-table .col-latency { width: 7%; }
-.proxies-table .col-checked { width: 10%; }
+.proxies-table .col-name { width: 14%; }
+.proxies-table .col-url { width: 22%; }
+.proxies-table .col-egress { width: 20%; }
+.proxies-table .col-usage { width: 84px; }
+.proxies-table .col-latency { width: 80px; }
+.proxies-table .col-checked { width: 164px; }
 .proxies-table .col-actions { width: 196px; }
+.proxies-table .proxy-checked { font-variant-numeric: tabular-nums; }
+/* Drag to reorder: a grip on each saved proxy; built-in rows keep the space. */
+.proxy-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.drag-handle, .drag-spacer { flex: none; width: 18px; height: 24px; }
+.drag-handle {
+  display: inline-flex; align-items: center; justify-content: center; padding: 0; margin-left: -4px;
+  border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: grab; touch-action: none;
+}
+.drag-handle:hover { color: var(--text-secondary); background: var(--bg-inset); }
+.drag-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.drag-spacer { margin-left: -4px; }
+.proxies-table tr.is-dragging td { opacity: 0.45; }
+.proxies-table tr.drop-before td { box-shadow: inset 0 2px 0 var(--accent); }
+.proxies-table tr.drop-after td { box-shadow: inset 0 -2px 0 var(--accent); }
+body.proxy-dragging, body.proxy-dragging * { cursor: grabbing !important; user-select: none; }
 .proxy-ip { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .proxy-flag { flex: none; width: 18px; height: 18px; }
 .proxies-table .proxy-error { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

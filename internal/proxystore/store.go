@@ -349,6 +349,47 @@ func (s *Store) Update(id string, name, rawURL *string) (before, after Proxy, er
 	return before, after, nil
 }
 
+// Reorder puts the proxies in the order of ids. Unknown and repeated IDs
+// are ignored; proxies missing from ids keep their relative order after the
+// listed ones, so a list that changed meanwhile is not lost.
+func (s *Store) Reorder(ids []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if errWritable := s.writableLocked(); errWritable != nil {
+		return errWritable
+	}
+	next := make(List, 0, len(s.items))
+	placed := make(map[string]bool, len(s.items))
+	for _, id := range ids {
+		index := s.indexLocked(id)
+		if index < 0 || placed[s.items[index].ID] {
+			continue
+		}
+		placed[s.items[index].ID] = true
+		next = append(next, s.items[index])
+	}
+	for _, p := range s.items {
+		if !placed[p.ID] {
+			next = append(next, p)
+		}
+	}
+	changed := false
+	for i := range next {
+		if next[i].ID != s.items[i].ID {
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		return nil
+	}
+	if errSave := s.saveLocked(next); errSave != nil {
+		return errSave
+	}
+	s.items = next
+	return nil
+}
+
 // Delete removes a proxy and returns it.
 func (s *Store) Delete(id string) (Proxy, error) {
 	s.mu.Lock()

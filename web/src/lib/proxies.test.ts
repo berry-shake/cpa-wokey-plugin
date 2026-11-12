@@ -1,7 +1,7 @@
 import type { CredentialView, ProxyView } from "../api/types";
 import {
-  buildProxyBody, checkedAtText, checkTarget, checkUrl, countryName, DIRECT_KEY, egressName, egressPlace, flagUrl, INHERIT_KEY,
-  newProxyDialog, proxyCheckKey, proxyUsage, pruneChecks, runLimited, savedCheck, shownCheck, unlistedProxyKeys, withSavedCheck,
+  buildProxyBody, checkedAtText, checkTarget, checkUrl, countryName, DIRECT_KEY, dropIndex, egressName, egressPlace, flagUrl,
+  INHERIT_KEY, moveItem, newProxyDialog, proxyCheckKey, proxyUsage, pruneChecks, runLimited, savedCheck, shownCheck, unlistedProxyKeys, withSavedCheck,
   type ProxyCheckMap,
 } from "./proxies";
 
@@ -113,11 +113,10 @@ describe("egress text", () => {
     expect(flagUrl(undefined)).toBe("");
   });
 
-  it("shows the time of today's checks and the date of older ones", () => {
-    const now = new Date(2026, 10, 12, 22, 30);
-    expect(checkedAtText(new Date(2026, 10, 12, 9, 5, 7).toISOString(), "en-US", now)).toBe("09:05:07");
-    expect(checkedAtText(new Date(2026, 10, 11, 21, 4).toISOString(), "en-US", now)).toMatch(/^11\/11,? 21:04$/);
-    expect(checkedAtText(new Date(2025, 0, 2, 3, 4).toISOString(), "en-US", now)).toContain("2025");
+  it("shows check times with their date, in local time", () => {
+    expect(checkedAtText(new Date(2026, 10, 12, 9, 5, 7).toISOString())).toBe("2026-11-12 09:05:07");
+    expect(checkedAtText(new Date(2025, 0, 2, 23, 4, 0).toISOString())).toBe("2025-01-02 23:04:00");
+    expect(checkedAtText("not a time")).toBe("not a time");
   });
 
   it("names the egress a check went through", () => {
@@ -208,5 +207,27 @@ describe("saved checks", () => {
     const inherit = withSavedCheck(data, INHERIT_KEY, { ok: true, ip: "3.3.3.3" });
     expect(inherit.builtin_checks?.inherit?.ip).toBe("3.3.3.3");
     expect(inherit.builtin_checks?.direct?.error).toBe("boom");
+  });
+});
+
+describe("reordering", () => {
+  it("moves one item and leaves the input alone", () => {
+    const list = ["a", "b", "c", "d"];
+    expect(moveItem(list, 0, 2)).toEqual(["b", "c", "a", "d"]);
+    expect(moveItem(list, 3, 0)).toEqual(["d", "a", "b", "c"]);
+    expect(moveItem(list, 1, 1)).toEqual(list);
+    expect(moveItem(list, 9, 0)).toEqual(list);
+    expect(list).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("drops a row where the pointer passes the other rows' middles", () => {
+    // Rows 40px tall starting at y=0: middles 20, 60, 100, 140.
+    const middles = [20, 60, 100, 140];
+    expect(dropIndex(middles, 10, 2)).toBe(0);
+    expect(dropIndex(middles, 70, 2)).toBe(2);
+    expect(dropIndex(middles, 99, 0)).toBe(1);
+    expect(dropIndex(middles, 120, 0)).toBe(2);
+    expect(dropIndex(middles, 500, 0)).toBe(3);
+    expect(dropIndex(middles, 90, 1)).toBe(1);
   });
 });

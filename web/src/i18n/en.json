@@ -323,6 +323,8 @@
   "proxies.col.egress": "Exit",
   "proxies.col.latency": "Latency",
   "proxies.col.checked": "Checked",
+  "proxies.dragHint": "Drag to reorder, or focus and press ↑ ↓",
+  "proxies.dragLabel": "Reorder {name}",
   "proxies.col.actions": "Actions",
   "proxies.inherit": "Inherit CPA global proxy",
   "proxies.inheritNone": "Not set (environment or direct)",

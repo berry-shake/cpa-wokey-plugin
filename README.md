@@ -214,9 +214,10 @@ Wokey 在这个接口里会顺带结算冷却期已满的作废礼品卡，除�
   - 可以添加、编辑、删除代理。名称留空时用 `主机:端口`；地址只显示隐藏了密码的样子，编辑时地址留空表示不改。
   - 改了某个代理的地址时，正在用它的 Key（`proxy_url` 和旧地址完全相同）会一起改成新地址。删除代理不影响 Key：用它的 Key 保留原地址，变成"自定义地址"。
   - 有 Key 用了列表里没有的代理时，可以点"导入 Key 里的代理"一次加进来。
-  - 列表上面固定两行：继承 CPA 全局代理、直连，对应 Key 编辑弹窗里 CPA 内置的两个选项。
+  - 列表上面固定两行：继承 CPA 全局代理、直连，对应 Key 编辑弹窗里 CPA 内置的两个选项，位置不能改。
+  - 列表里的代理可以按住名称左边的手柄拖动排序（鼠标和触屏都行），也可以聚焦手柄后按 ↑ ↓ 移动；顺序存进 `proxies.json`，Key 编辑弹窗的下拉框也按这个顺序列出。
   - 检测要手动点"检测"（单个）或"检测全部"，不会自动检测。检测时插件通过这个代理请求 `https://ipinfo.io/json`，失败再试 `https://api.ip.sb/geoip`，User-Agent 用 `curl/8.7.1`；每次检测新建连接，延迟包含连上代理的时间，单个服务超时 10 秒。
-  - 出口列显示国旗和出口 IP，下面是国家和城市（国家名按页面语言显示）；另外两列是延迟和检测时间。还没检测过的显示"—"。
+  - 出口列显示国旗和出口 IP，下面是国家和城市（国家名按页面语言显示）；另外两列是延迟和检测时间（本地时间，带日期）。还没检测过的显示"—"。
   - 每次检测的结果（包括失败）都会保存，下次打开页面直接显示上一次的结果。代理改了地址，旧结果作废；CPA 全局代理变了，"继承"那行的旧结果也不再显示。
   - 代理列表和检测结果存在 `<data-dir>/proxies.json`（默认 `plugins/wokey-data/proxies.json`，权限 0600，里面有代理的用户名密码）。
   - 国旗图标来自 [Twemoji](https://github.com/jdecked/twemoji)（CC-BY 4.0），编进插件里，由 `/v0/resource/plugins/wokey/flag.svg?cc=<国家代码>` 提供，不访问外部网站。
@@ -257,6 +258,7 @@ POST  /v0/management/plugins/wokey/proxies          添加代理 {"name","url"}
 PATCH /v0/management/plugins/wokey/proxies          修改代理 {"id","name","url"}，改地址时同步改用它的 Key
 DELETE /v0/management/plugins/wokey/proxies?id=...  删除代理，用它的 Key 保留原地址
 POST  /v0/management/plugins/wokey/proxies/import   把 Key 里用到、列表里还没有的代理加进列表
+POST  /v0/management/plugins/wokey/proxies/order    调整代理顺序 {"ids":[...]}
 POST  /v0/management/plugins/wokey/proxies/check    检测出口 IP、国家、城市和延迟并保存结果，{"id"} 或 {"target":"direct"|"inherit"}
 ```
 

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -182,5 +183,42 @@ func TestChecksPersistAndFollowTheURL(t *testing.T) {
 	moved := "socks5://10.0.0.9:1080"
 	if _, after, _ := reloaded.Update(p.ID, nil, &moved); after.LastCheck != nil {
 		t.Fatalf("URL change kept the check: %+v", after.LastCheck)
+	}
+}
+
+func TestReorder(t *testing.T) {
+	dir := t.TempDir()
+	s := New()
+	s.Configure(dir)
+	a, _ := s.Add("A", "http://10.0.0.1:8080")
+	b, _ := s.Add("B", "http://10.0.0.2:8080")
+	c, _ := s.Add("C", "http://10.0.0.3:8080")
+	ids := func(l List) []string {
+		out := make([]string, 0, len(l))
+		for _, p := range l {
+			out = append(out, p.Name)
+		}
+		return out
+	}
+	// Unknown and repeated IDs are skipped; missing ones keep their order at the end.
+	if errOrder := s.Reorder([]string{c.ID, "nope", c.ID, a.ID}); errOrder != nil {
+		t.Fatalf("Reorder: %v", errOrder)
+	}
+	list, _ := s.List()
+	if got := strings.Join(ids(list), ","); got != "C,A,B" {
+		t.Fatalf("order = %s", got)
+	}
+	reloaded := New()
+	reloaded.Configure(dir)
+	list, _ = reloaded.List()
+	if got := strings.Join(ids(list), ","); got != "C,A,B" {
+		t.Fatalf("reloaded order = %s", got)
+	}
+	if errOrder := reloaded.Reorder([]string{b.ID, c.ID, a.ID}); errOrder != nil {
+		t.Fatalf("Reorder: %v", errOrder)
+	}
+	list, _ = reloaded.List()
+	if got := strings.Join(ids(list), ","); got != "B,C,A" {
+		t.Fatalf("second order = %s", got)
 	}
 }

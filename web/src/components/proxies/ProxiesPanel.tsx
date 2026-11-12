@@ -1,11 +1,11 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import type { ProxyView } from "../../api/types";
 import { localeTag, type T } from "../../i18n";
 import { credentialsOf } from "../../lib/credentials";
 import { formatWhen } from "../../lib/format";
 import {
-  checkedAtText, DIRECT_KEY, egressName, egressPlace, flagUrl, INHERIT_KEY, proxyCheckKey, proxyUsage, shownCheck, unlistedProxyKeys,
-  type ProxyCheckEntry,
+  checkedAtText, DIRECT_KEY, dropIndex, egressName, egressPlace, flagUrl, INHERIT_KEY, moveItem, proxyCheckKey, proxyUsage, shownCheck,
+  unlistedProxyKeys, type ProxyCheckEntry,
 } from "../../lib/proxies";
 import { store, type State } from "../../state/store";
 
@@ -46,7 +46,7 @@ export function EgressCell({ t, entry, locale }: { t: T; entry: ProxyCheckEntry 
 export function CheckedCell({ entry, locale }: { entry: ProxyCheckEntry | undefined; locale: string }) {
   const at = entry && entry.state !== "loading" && entry.result ? entry.result.checked_at : undefined;
   if (!at) return <td className="nowrap"><span className="sub">{entry && entry.state === "loading" ? "…" : "—"}</span></td>;
-  return <td className="nowrap" title={formatWhen(at, locale)}>{checkedAtText(at, locale)}</td>;
+  return <td className="nowrap proxy-checked" title={formatWhen(at, locale)}>{checkedAtText(at)}</td>;
 }
 
 export function LatencyCell({ t, entry }: { t: T; entry: ProxyCheckEntry | undefined }) {
@@ -79,8 +79,14 @@ function BuiltinRow({ t, s, checkKey, name, address, used, locale }: {
   return (
     <tr className="proxy-builtin" data-key={checkKey}>
       <td>
-        <div className="strong">{name}</div>
-        <div className="sub">{t("proxies.builtin")}</div>
+        <div className="proxy-name">
+          {/* Built-in rows stay on top; the spacer lines their names up with the handles below. */}
+          <span className="drag-spacer" aria-hidden="true" />
+          <div>
+            <div className="strong">{name}</div>
+            <div className="sub">{t("proxies.builtin")}</div>
+          </div>
+        </div>
       </td>
       <td>{address}</td>
       <UsageCell t={t} n={used} />
@@ -96,14 +102,57 @@ function BuiltinRow({ t, s, checkKey, name, address, used, locale }: {
   );
 }
 
-function ProxyRow({ t, s, proxy, used, locale }: { t: T; s: State; proxy: ProxyView; used: number; locale: string }) {
+const grip = (
+  <svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true" fill="currentColor">
+    <circle cx="2.5" cy="3" r="1.4" /><circle cx="7.5" cy="3" r="1.4" />
+    <circle cx="2.5" cy="8" r="1.4" /><circle cx="7.5" cy="8" r="1.4" />
+    <circle cx="2.5" cy="13" r="1.4" /><circle cx="7.5" cy="13" r="1.4" />
+  </svg>
+);
+
+/** Where the dragged row would land, drawn as a line above or below a row. */
+type DropMark = "drop-before" | "drop-after" | "";
+
+function ProxyRow({ t, s, proxy, used, locale, dragging, mark, onGrab }: {
+  t: T;
+  s: State;
+  proxy: ProxyView;
+  used: number;
+  locale: string;
+  dragging: boolean;
+  mark: DropMark;
+  onGrab: (event: ReactPointerEvent<HTMLButtonElement>, id: string) => void;
+}) {
   const key = proxyCheckKey(proxy.id);
   const entry = shownCheck(key, s.proxyChecks, s.proxies);
   const armed = s.armedDelete === "proxy:" + proxy.id;
+  const name = proxy.name || proxy.label;
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+    const delta = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+    if (!delta) return;
+    event.preventDefault();
+    const handle = event.currentTarget;
+    store.moveProxy(proxy.id, delta);
+    // The row moves in the DOM, which can take focus away from its handle.
+    requestAnimationFrame(() => handle.focus());
+  };
   return (
-    <tr data-key={key}>
+    <tr data-key={key} data-proxy-id={proxy.id} className={[dragging ? "is-dragging" : "", mark].filter(Boolean).join(" ") || undefined}>
       <td>
-        <div className="strong">{proxy.name || proxy.label}</div>
+        <div className="proxy-name">
+          <button
+            type="button"
+            className="drag-handle"
+            data-handle={proxy.id}
+            title={t("proxies.dragHint")}
+            aria-label={t("proxies.dragLabel", { name })}
+            onPointerDown={(event) => onGrab(event, proxy.id)}
+            onKeyDown={onKeyDown}
+          >
+            {grip}
+          </button>
+          <div className="strong">{name}</div>
+        </div>
       </td>
       <td><span className="mono">{proxy.url}</span></td>
       <UsageCell t={t} n={used} />
@@ -131,17 +180,84 @@ function ProxyRow({ t, s, proxy, used, locale }: { t: T; s: State; proxy: ProxyV
   );
 }
 
+interface Drag {
+  id: string;
+  from: number;
+  to: number;
+}
+
 function ProxiesTable({ t, s }: { t: T; s: State }) {
   const data = s.proxies!;
   const usage = proxyUsage(credentialsOf(s.status));
   const locale = localeTag(s.lang);
+  const body = useRef<HTMLTableSectionElement>(null);
+  const ids = useRef<string[]>([]);
+  ids.current = data.proxies.map((p) => p.id);
+  // The drag lives in this table only; the order is saved when it ends.
+  const dragRef = useRef<Drag | null>(null);
+  const [drag, setDragState] = useState<Drag | null>(null);
+  const setDrag = (next: Drag | null) => {
+    dragRef.current = next;
+    setDragState(next);
+  };
+  const draggingId = drag ? drag.id : null;
+
+  useEffect(() => {
+    if (!draggingId) return;
+    const middles = () =>
+      [...(body.current ? body.current.querySelectorAll<HTMLTableRowElement>("tr[data-proxy-id]") : [])].map((row) => {
+        const box = row.getBoundingClientRect();
+        return box.top + box.height / 2;
+      });
+    const onMove = (event: PointerEvent) => {
+      const current = dragRef.current;
+      if (!current) return;
+      event.preventDefault();
+      const to = dropIndex(middles(), event.clientY, current.from);
+      if (to !== current.to) setDrag({ ...current, to });
+    };
+    const onUp = () => {
+      const current = dragRef.current;
+      setDrag(null);
+      if (!current) return;
+      const from = ids.current.indexOf(current.id);
+      if (from >= 0 && current.to !== from) void store.reorderProxies(moveItem(ids.current, from, current.to));
+    };
+    const onCancel = () => setDrag(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDrag(null);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    window.addEventListener("keydown", onKey);
+    document.body.classList.add("proxy-dragging");
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("keydown", onKey);
+      document.body.classList.remove("proxy-dragging");
+    };
+  }, [draggingId]);
+
+  const onGrab = (event: ReactPointerEvent<HTMLButtonElement>, id: string) => {
+    if (event.button !== 0 || data.proxies.length < 2) return;
+    event.preventDefault();
+    const from = ids.current.indexOf(id);
+    if (from >= 0) setDrag({ id, from, to: from });
+  };
+  const markOf = (index: number): DropMark => {
+    if (!drag || drag.to === drag.from || index !== drag.to) return "";
+    return drag.to < drag.from ? "drop-before" : "drop-after";
+  };
   return (
     <div className="table-wrap">
       <table className="proxies-table">
         <thead>
           <tr>{COLUMNS.map((key) => <th key={key} className={"col-" + key}>{t("proxies.col." + key)}</th>)}</tr>
         </thead>
-        <tbody>
+        <tbody ref={body}>
           <BuiltinRow
             t={t}
             s={s}
@@ -160,8 +276,18 @@ function ProxiesTable({ t, s }: { t: T; s: State }) {
             used={usage.direct}
             locale={locale}
           />
-          {data.proxies.map((proxy) => (
-            <ProxyRow key={proxy.id} t={t} s={s} proxy={proxy} used={usage.byId.get(proxy.id) || 0} locale={locale} />
+          {data.proxies.map((proxy, index) => (
+            <ProxyRow
+              key={proxy.id}
+              t={t}
+              s={s}
+              proxy={proxy}
+              used={usage.byId.get(proxy.id) || 0}
+              locale={locale}
+              dragging={draggingId === proxy.id}
+              mark={markOf(index)}
+              onGrab={onGrab}
+            />
           ))}
           {data.proxies.length === 0 ? (
             <tr>

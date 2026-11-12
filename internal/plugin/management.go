@@ -59,6 +59,7 @@ func managementRoutes() managementRegistration {
 			{Method: http.MethodPatch, Path: proxiesPath, Description: `Rename a proxy or change its URL. Body: {"id","name","url"}. Credentials using the old URL move to the new one.`},
 			{Method: http.MethodDelete, Path: proxiesPath, Description: "Remove a proxy (?id=). Credentials using it keep its URL."},
 			{Method: http.MethodPost, Path: proxiesImportPath, Description: "Add the proxies Wokey credentials already use to the list."},
+			{Method: http.MethodPost, Path: proxiesOrderPath, Description: `Reorder the proxy list. Body: {"ids":[...]}.`},
 			{Method: http.MethodPost, Path: proxiesCheckPath, Description: `Look up the exit IP and latency of a proxy. Body: {"id"} or {"target":"direct"|"inherit"}.`},
 		},
 		Resources: []resourceDeclaration{
@@ -160,6 +161,10 @@ func (s *Service) handleManagement(req pluginapi.ManagementRequest) pluginapi.Ma
 	case proxiesImportPath:
 		if method == http.MethodPost {
 			return s.importProxies()
+		}
+	case proxiesOrderPath:
+		if method == http.MethodPost {
+			return s.reorderProxies(req.Body)
 		}
 	case proxiesCheckPath:
 		if method == http.MethodPost {
