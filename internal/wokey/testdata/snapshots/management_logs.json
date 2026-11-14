@@ -565,7 +565,7 @@
                   "upstream_status": 200,
                   "upstream_request_id": "wk-req-log-2",
                   "finish_reason": "end_turn",
-                  "frames": 3,
+                  "frames": 2,
                   "last_frame_ms": "<volatile>",
                   "usage_reported": true,
                   "attempts": 1
@@ -767,7 +767,7 @@
                   "upstream_status": 200,
                   "upstream_request_id": "wk-req-log-2",
                   "finish_reason": "end_turn",
-                  "frames": 3,
+                  "frames": 2,
                   "last_frame_ms": "<volatile>",
                   "usage_reported": true,
                   "attempts": 1
