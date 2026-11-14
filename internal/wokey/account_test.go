@@ -36,6 +36,10 @@ func TestQuotaFromAccountEmptyBalance(t *testing.T) {
 			t.Fatalf("spent %v: groups = %+v", spent, resp.Groups)
 		}
 	}
+	// Nothing held and nothing spent is an empty bar, not a division by zero.
+	if resp := QuotaFromAccount(AccountInfo{Balance: &BalanceInfo{}, Key: &KeyInfo{}}); resp.Groups[0].Buckets[0].RemainingFraction != 0 {
+		t.Fatalf("both zero = %+v", resp.Groups)
+	}
 	// A balance with no spend this month is full.
 	if resp := QuotaFromAccount(AccountInfo{Balance: &BalanceInfo{AvailableUSD: 5}, Key: &KeyInfo{}}); resp.Groups[0].Buckets[0].RemainingFraction != 1 {
 		t.Fatalf("unspent = %+v", resp.Groups)
@@ -66,6 +70,11 @@ func TestOptionalNumber(t *testing.T) {
 		{nil, 0, false},
 		{"n/a", 0, false},
 		{true, 0, false},
+		// Not amounts, and JSON cannot carry them.
+		{"NaN", 0, false},
+		{"Infinity", 0, false},
+		{"-Inf", 0, false},
+		{math.Inf(1), 0, false},
 	}
 	for _, tc := range cases {
 		if got, ok := optionalNumber(tc.in); got != tc.want || ok != tc.ok {

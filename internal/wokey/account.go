@@ -156,19 +156,29 @@ func numberField(fields map[string]any, keys ...string) float64 {
 
 // optionalNumber accepts JSON numbers and decimal strings; null is absent.
 func optionalNumber(raw any) (float64, bool) {
+	var parsed float64
 	switch value := raw.(type) {
 	case float64:
-		return value, true
+		parsed = value
 	case string:
-		parsed, errParse := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		number, errParse := strconv.ParseFloat(strings.TrimSpace(value), 64)
 		if errParse != nil {
 			return 0, false
 		}
-		return parsed, true
+		parsed = number
 	case json.Number:
-		parsed, errParse := value.Float64()
-		return parsed, errParse == nil
+		number, errParse := value.Float64()
+		if errParse != nil {
+			return 0, false
+		}
+		parsed = number
 	default:
 		return 0, false
 	}
+	// ParseFloat reads "NaN" and "Infinity"; they are no amount, and JSON
+	// cannot carry them to the page or CPA's quota panel.
+	if math.IsNaN(parsed) || math.IsInf(parsed, 0) {
+		return 0, false
+	}
+	return parsed, true
 }
