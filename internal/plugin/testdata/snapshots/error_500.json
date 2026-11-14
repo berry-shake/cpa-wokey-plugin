@@ -1,0 +1,372 @@
+{
+  "case": "error_500",
+  "description": "Upstream 500 is retryable; 404 becomes 400 and 529 becomes 503.",
+  "setup": {
+    "version": "9.9.9-snapshot",
+    "config": {
+      "base-url": "{{UPSTREAM}}",
+      "data-dir": "{{DATA_DIR}}"
+    },
+    "credentials": [
+      {
+        "name": "k1.json",
+        "fields": {
+          "api_key": "sk-wk-snapshot-fake-0001",
+          "label": "primary",
+          "type": "wokey"
+        }
+      }
+    ]
+  },
+  "upstream_script": [
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "status": 500,
+      "header": {
+        "Content-Type": [
+          "application/json"
+        ]
+      },
+      "body": "{\"error\":{\"message\":\"internal error\",\"type\":\"server_error\"}}",
+      "chunks": []
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "status": 404,
+      "header": {
+        "Content-Type": [
+          "application/json"
+        ]
+      },
+      "body": "{\"error\":{\"code\":\"model_not_found\",\"message\":\"no such model\"}}",
+      "chunks": []
+    },
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "status": 529,
+      "header": {
+        "Content-Type": [
+          "application/json"
+        ]
+      },
+      "body": "{\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded\"}}",
+      "chunks": []
+    }
+  ],
+  "steps": [
+    {
+      "rpc": {
+        "method": "executor.execute",
+        "request": {
+          "AuthID": "k1.json",
+          "AuthProvider": "wokey",
+          "Model": "model-a",
+          "Format": "openai",
+          "Stream": false,
+          "Alt": "",
+          "Headers": {
+            "Content-Type": [
+              "application/json"
+            ],
+            "User-Agent": [
+              "snapshot-client/1.0"
+            ]
+          },
+          "Query": null,
+          "OriginalRequest": {
+            "model": "wokey/model-a",
+            "messages": [
+              {
+                "role": "user",
+                "content": "Say hello"
+              }
+            ],
+            "max_tokens": 64
+          },
+          "SourceFormat": "openai",
+          "Payload": {
+            "model": "model-a",
+            "messages": [
+              {
+                "role": "user",
+                "content": "Say hello"
+              }
+            ],
+            "max_tokens": 64
+          },
+          "Metadata": {
+            "request_path": "/v1/chat/completions",
+            "requested_model": "wokey/model-a",
+            "selected_auth_id": "k1.json",
+            "selected_auth_index": "idx-1"
+          },
+          "StorageJSON": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "AuthMetadata": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "AuthAttributes": {
+            "path": "/auths/k1.json",
+            "source": "file"
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [
+          {
+            "method": "POST",
+            "path": "/v1/chat/completions",
+            "query": "",
+            "header": {
+              "Accept": [
+                "application/json"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "Authorization": [
+                "Bearer sk-wk-snapshot-fake-0001"
+              ],
+              "Content-Length": [
+                "86"
+              ],
+              "Content-Type": [
+                "application/json"
+              ],
+              "User-Agent": [
+                "cpa-wokey-plugin/9.9.9-snapshot"
+              ]
+            },
+            "body": "{\"model\":\"model-a\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hello\"}],\"max_tokens\":64}"
+          }
+        ],
+        "host_calls": [],
+        "response": {
+          "ok": false,
+          "error": {
+            "code": "server_error",
+            "message": "wokey: internal error",
+            "retryable": true,
+            "http_status": 500
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "executor.execute",
+        "request": {
+          "AuthID": "k1.json",
+          "AuthProvider": "wokey",
+          "Model": "model-a",
+          "Format": "openai",
+          "Stream": false,
+          "Alt": "",
+          "Headers": {
+            "Content-Type": [
+              "application/json"
+            ],
+            "User-Agent": [
+              "snapshot-client/1.0"
+            ]
+          },
+          "Query": null,
+          "OriginalRequest": {
+            "model": "wokey/model-a",
+            "messages": [
+              {
+                "role": "user",
+                "content": "Say hello"
+              }
+            ],
+            "max_tokens": 64
+          },
+          "SourceFormat": "openai",
+          "Payload": {
+            "model": "model-a",
+            "messages": [
+              {
+                "role": "user",
+                "content": "Say hello"
+              }
+            ],
+            "max_tokens": 64
+          },
+          "Metadata": {
+            "request_path": "/v1/chat/completions",
+            "requested_model": "wokey/model-a",
+            "selected_auth_id": "k1.json",
+            "selected_auth_index": "idx-1"
+          },
+          "StorageJSON": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "AuthMetadata": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "AuthAttributes": {
+            "path": "/auths/k1.json",
+            "source": "file"
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [
+          {
+            "method": "POST",
+            "path": "/v1/chat/completions",
+            "query": "",
+            "header": {
+              "Accept": [
+                "application/json"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "Authorization": [
+                "Bearer sk-wk-snapshot-fake-0001"
+              ],
+              "Content-Length": [
+                "86"
+              ],
+              "Content-Type": [
+                "application/json"
+              ],
+              "User-Agent": [
+                "cpa-wokey-plugin/9.9.9-snapshot"
+              ]
+            },
+            "body": "{\"model\":\"model-a\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hello\"}],\"max_tokens\":64}"
+          }
+        ],
+        "host_calls": [],
+        "response": {
+          "ok": false,
+          "error": {
+            "code": "model_not_found",
+            "message": "wokey: no such model",
+            "http_status": 400
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "executor.execute",
+        "request": {
+          "AuthID": "k1.json",
+          "AuthProvider": "wokey",
+          "Model": "model-a",
+          "Format": "openai",
+          "Stream": false,
+          "Alt": "",
+          "Headers": {
+            "Content-Type": [
+              "application/json"
+            ],
+            "User-Agent": [
+              "snapshot-client/1.0"
+            ]
+          },
+          "Query": null,
+          "OriginalRequest": {
+            "model": "wokey/model-a",
+            "messages": [
+              {
+                "role": "user",
+                "content": "Say hello"
+              }
+            ],
+            "max_tokens": 64
+          },
+          "SourceFormat": "openai",
+          "Payload": {
+            "model": "model-a",
+            "messages": [
+              {
+                "role": "user",
+                "content": "Say hello"
+              }
+            ],
+            "max_tokens": 64
+          },
+          "Metadata": {
+            "request_path": "/v1/chat/completions",
+            "requested_model": "wokey/model-a",
+            "selected_auth_id": "k1.json",
+            "selected_auth_index": "idx-1"
+          },
+          "StorageJSON": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "AuthMetadata": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "AuthAttributes": {
+            "path": "/auths/k1.json",
+            "source": "file"
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [
+          {
+            "method": "POST",
+            "path": "/v1/chat/completions",
+            "query": "",
+            "header": {
+              "Accept": [
+                "application/json"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "Authorization": [
+                "Bearer sk-wk-snapshot-fake-0001"
+              ],
+              "Content-Length": [
+                "86"
+              ],
+              "Content-Type": [
+                "application/json"
+              ],
+              "User-Agent": [
+                "cpa-wokey-plugin/9.9.9-snapshot"
+              ]
+            },
+            "body": "{\"model\":\"model-a\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hello\"}],\"max_tokens\":64}"
+          }
+        ],
+        "host_calls": [],
+        "response": {
+          "ok": false,
+          "error": {
+            "code": "overloaded_error",
+            "message": "wokey: Overloaded",
+            "retryable": true,
+            "http_status": 503
+          }
+        }
+      }
+    }
+  ]
+}

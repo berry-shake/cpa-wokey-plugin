@@ -1,0 +1,175 @@
+{
+  "case": "exec_responses_nonstream",
+  "description": "Responses API, buffered, with reasoning effort and usage.",
+  "setup": {
+    "version": "9.9.9-snapshot",
+    "config": {
+      "base-url": "{{UPSTREAM}}",
+      "data-dir": "{{DATA_DIR}}"
+    },
+    "credentials": [
+      {
+        "name": "k1.json",
+        "fields": {
+          "api_key": "sk-wk-snapshot-fake-0001",
+          "label": "primary",
+          "type": "wokey"
+        }
+      }
+    ]
+  },
+  "upstream_script": [
+    {
+      "method": "POST",
+      "path": "/v1/responses",
+      "status": 200,
+      "header": {
+        "Content-Type": [
+          "application/json"
+        ],
+        "Request-Id": [
+          "wk-req-resp-1"
+        ]
+      },
+      "body": "{\"id\":\"resp_snap_1\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"model-a\",\"output\":[{\"type\":\"message\",\"id\":\"msg_snap_1\",\"status\":\"completed\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"Hello!\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":20,\"input_tokens_details\":{\"cached_tokens\":8},\"output_tokens\":6,\"output_tokens_details\":{\"reasoning_tokens\":3},\"total_tokens\":26}}",
+      "chunks": []
+    }
+  ],
+  "steps": [
+    {
+      "rpc": {
+        "method": "executor.execute",
+        "request": {
+          "AuthID": "k1.json",
+          "AuthProvider": "wokey",
+          "Model": "model-a",
+          "Format": "openai-response",
+          "Stream": false,
+          "Alt": "",
+          "Headers": {
+            "Content-Type": [
+              "application/json"
+            ],
+            "User-Agent": [
+              "snapshot-client/1.0"
+            ]
+          },
+          "Query": null,
+          "OriginalRequest": {
+            "model": "wokey/model-a",
+            "input": "Say hello",
+            "reasoning": {
+              "effort": "high"
+            }
+          },
+          "SourceFormat": "openai-response",
+          "Payload": {
+            "model": "model-a",
+            "input": "Say hello",
+            "reasoning": {
+              "effort": "high"
+            }
+          },
+          "Metadata": {
+            "request_path": "/v1/responses",
+            "requested_model": "wokey/model-a",
+            "selected_auth_id": "k1.json",
+            "selected_auth_index": "idx-1"
+          },
+          "StorageJSON": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "AuthMetadata": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "AuthAttributes": {
+            "path": "/auths/k1.json",
+            "source": "file"
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [
+          {
+            "method": "POST",
+            "path": "/v1/responses",
+            "query": "",
+            "header": {
+              "Accept": [
+                "application/json"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "Authorization": [
+                "Bearer sk-wk-snapshot-fake-0001"
+              ],
+              "Content-Length": [
+                "69"
+              ],
+              "Content-Type": [
+                "application/json"
+              ],
+              "User-Agent": [
+                "cpa-wokey-plugin/9.9.9-snapshot"
+              ]
+            },
+            "body": "{\"model\":\"model-a\",\"input\":\"Say hello\",\"reasoning\":{\"effort\":\"high\"}}"
+          }
+        ],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "Payload": {
+              "id": "resp_snap_1",
+              "object": "response",
+              "status": "completed",
+              "model": "model-a",
+              "output": [
+                {
+                  "type": "message",
+                  "id": "msg_snap_1",
+                  "status": "completed",
+                  "role": "assistant",
+                  "content": [
+                    {
+                      "type": "output_text",
+                      "text": "Hello!",
+                      "annotations": []
+                    }
+                  ]
+                }
+              ],
+              "usage": {
+                "input_tokens": 20,
+                "input_tokens_details": {
+                  "cached_tokens": 8
+                },
+                "output_tokens": 6,
+                "output_tokens_details": {
+                  "reasoning_tokens": 3
+                },
+                "total_tokens": 26
+              }
+            },
+            "Headers": {
+              "Content-Type": [
+                "application/json"
+              ],
+              "Request-Id": [
+                "wk-req-resp-1"
+              ]
+            },
+            "Metadata": null
+          }
+        }
+      }
+    }
+  ]
+}

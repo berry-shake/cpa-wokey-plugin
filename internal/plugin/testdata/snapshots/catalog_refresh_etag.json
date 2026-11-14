@@ -1,0 +1,513 @@
+{
+  "case": "catalog_refresh_etag",
+  "description": "Catalog load with ETag, background tick answered 304, forced refresh with a changed catalog re-registering the auth file, then 304 again.",
+  "setup": {
+    "version": "9.9.9-snapshot",
+    "config": {
+      "base-url": "{{UPSTREAM}}",
+      "data-dir": "{{DATA_DIR}}"
+    },
+    "credentials": [
+      {
+        "name": "k1.json",
+        "fields": {
+          "api_key": "sk-wk-snapshot-fake-0001",
+          "label": "primary",
+          "type": "wokey"
+        }
+      }
+    ]
+  },
+  "upstream_script": [
+    {
+      "method": "GET",
+      "path": "/v1/models",
+      "status": 200,
+      "header": {
+        "Content-Type": [
+          "application/json"
+        ],
+        "Etag": [
+          "\"cat-v1\""
+        ]
+      },
+      "body": "{\"object\":\"list\",\"data\":[{\"id\":\"model-a\",\"object\":\"model\",\"created\":1767225600,\"owned_by\":\"lab-a\",\"name\":\"Model A\",\"context_length\":200000,\"max_completion_tokens\":64000,\"supported_parameters\":[\"reasoning\",\"tools\"],\"architecture\":{\"modality\":\"text+image->text\",\"input_modalities\":[\"text\",\"image\"],\"output_modalities\":[\"text\"]},\"pricing\":{\"prompt\":\"0.000003\",\"completion\":\"0.000015\",\"input_cache_read\":\"0.0000003\",\"input_cache_write\":\"0.00000375\"}},{\"id\":\"model-b\",\"object\":\"model\",\"owned_by\":\"lab-b\",\"name\":\"Model B\",\"context_length\":128000,\"pricing\":{\"prompt\":\"0.000001\",\"completion\":\"0.000002\"}}]}",
+      "chunks": []
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models",
+      "status": 304,
+      "header": {
+        "Etag": [
+          "\"cat-v1\""
+        ]
+      },
+      "body": "",
+      "chunks": []
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models",
+      "status": 200,
+      "header": {
+        "Content-Type": [
+          "application/json"
+        ],
+        "Etag": [
+          "\"cat-v2\""
+        ]
+      },
+      "body": "{\"object\":\"list\",\"data\":[{\"id\":\"model-a\",\"object\":\"model\",\"created\":1767225600,\"owned_by\":\"lab-a\",\"name\":\"Model A\",\"context_length\":200000,\"max_completion_tokens\":64000,\"supported_parameters\":[\"reasoning\",\"tools\"],\"architecture\":{\"modality\":\"text+image->text\",\"input_modalities\":[\"text\",\"image\"],\"output_modalities\":[\"text\"]},\"pricing\":{\"prompt\":\"0.000003\",\"completion\":\"0.000015\",\"input_cache_read\":\"0.0000003\",\"input_cache_write\":\"0.00000375\"}},{\"id\":\"model-b\",\"object\":\"model\",\"owned_by\":\"lab-b\",\"name\":\"Model B\",\"context_length\":128000,\"pricing\":{\"prompt\":\"0.000001\",\"completion\":\"0.000002\"}},{\"id\":\"model-c\",\"object\":\"model\",\"owned_by\":\"lab-c\",\"name\":\"Model C\",\"context_length\":32000}]}",
+      "chunks": []
+    },
+    {
+      "method": "GET",
+      "path": "/v1/models",
+      "status": 304,
+      "header": {
+        "Etag": [
+          "\"cat-v2\""
+        ]
+      },
+      "body": "",
+      "chunks": []
+    }
+  ],
+  "steps": [
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "GET",
+          "Path": "/v0/management/plugins/wokey/models",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [
+          {
+            "method": "GET",
+            "path": "/v1/models",
+            "query": "",
+            "header": {
+              "Accept": [
+                "application/json"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "User-Agent": [
+                "cpa-wokey-plugin/9.9.9-snapshot"
+              ]
+            },
+            "body": ""
+          }
+        ],
+        "host_calls": [
+          {
+            "method": "host.auth.list",
+            "request": {}
+          },
+          {
+            "method": "host.auth.get",
+            "request": {
+              "auth_index": "idx-1"
+            }
+          },
+          {
+            "method": "host.auth.save",
+            "request": {
+              "name": "k1.json",
+              "json": {
+                "api_key": "sk-wk-snapshot-fake-0001",
+                "label": "primary",
+                "model_revision": "f33e3be127d9ddde",
+                "type": "wokey"
+              }
+            }
+          },
+          {
+            "method": "host.log",
+            "request": {
+              "level": "info",
+              "message": "wokey: refreshed registered models",
+              "fields": {
+                "auth": "k1.json",
+                "revision": "f33e3be127d9ddde"
+              }
+            }
+          }
+        ],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 200,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "catalog": {
+                "count": 2,
+                "revision": "f33e3be127d9ddde",
+                "fetched_at": "2026-01-02T03:04:05Z",
+                "checked_at": "2026-01-02T03:04:05Z"
+              },
+              "models": [
+                {
+                  "id": "model-a",
+                  "name": "Model A",
+                  "owned_by": "lab-a",
+                  "context_length": 200000,
+                  "max_completion_tokens": 64000,
+                  "input_modalities": [
+                    "text",
+                    "image"
+                  ],
+                  "output_modalities": [
+                    "text"
+                  ],
+                  "pricing": {
+                    "input": 3,
+                    "output": 15,
+                    "cache_read": 0.3,
+                    "cache_write": 3.75
+                  }
+                },
+                {
+                  "id": "model-b",
+                  "name": "Model B",
+                  "owned_by": "lab-b",
+                  "context_length": 128000,
+                  "pricing": {
+                    "input": 1,
+                    "output": 2
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "seam.refresh_tick",
+        "request": {}
+      },
+      "output": {
+        "upstream_requests": [
+          {
+            "method": "GET",
+            "path": "/v1/models",
+            "query": "",
+            "header": {
+              "Accept": [
+                "application/json"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "If-None-Match": [
+                "\"cat-v1\""
+              ],
+              "User-Agent": [
+                "cpa-wokey-plugin/9.9.9-snapshot"
+              ]
+            },
+            "body": ""
+          }
+        ],
+        "host_calls": [
+          {
+            "method": "host.auth.list",
+            "request": {}
+          },
+          {
+            "method": "host.auth.get",
+            "request": {
+              "auth_index": "idx-1"
+            }
+          }
+        ],
+        "response": {
+          "ok": true,
+          "result": {
+            "models": 2,
+            "revision": "f33e3be127d9ddde"
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "GET",
+          "Path": "/v0/management/plugins/wokey/models",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 200,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "catalog": {
+                "count": 2,
+                "revision": "f33e3be127d9ddde",
+                "fetched_at": "2026-01-02T03:04:05Z",
+                "checked_at": "2026-01-02T03:04:05Z"
+              },
+              "models": [
+                {
+                  "id": "model-a",
+                  "name": "Model A",
+                  "owned_by": "lab-a",
+                  "context_length": 200000,
+                  "max_completion_tokens": 64000,
+                  "input_modalities": [
+                    "text",
+                    "image"
+                  ],
+                  "output_modalities": [
+                    "text"
+                  ],
+                  "pricing": {
+                    "input": 3,
+                    "output": 15,
+                    "cache_read": 0.3,
+                    "cache_write": 3.75
+                  }
+                },
+                {
+                  "id": "model-b",
+                  "name": "Model B",
+                  "owned_by": "lab-b",
+                  "context_length": 128000,
+                  "pricing": {
+                    "input": 1,
+                    "output": 2
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "POST",
+          "Path": "/v0/management/plugins/wokey/models/refresh",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [
+          {
+            "method": "GET",
+            "path": "/v1/models",
+            "query": "",
+            "header": {
+              "Accept": [
+                "application/json"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "User-Agent": [
+                "cpa-wokey-plugin/9.9.9-snapshot"
+              ]
+            },
+            "body": ""
+          }
+        ],
+        "host_calls": [
+          {
+            "method": "host.auth.list",
+            "request": {}
+          },
+          {
+            "method": "host.auth.get",
+            "request": {
+              "auth_index": "idx-1"
+            }
+          },
+          {
+            "method": "host.auth.save",
+            "request": {
+              "name": "k1.json",
+              "json": {
+                "api_key": "sk-wk-snapshot-fake-0001",
+                "label": "primary",
+                "model_revision": "a73599d691abec6d",
+                "type": "wokey"
+              }
+            }
+          },
+          {
+            "method": "host.log",
+            "request": {
+              "level": "info",
+              "message": "wokey: refreshed registered models",
+              "fields": {
+                "auth": "k1.json",
+                "revision": "a73599d691abec6d"
+              }
+            }
+          }
+        ],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 200,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "catalog": {
+                "count": 3,
+                "revision": "a73599d691abec6d",
+                "fetched_at": "2026-01-02T03:04:05Z",
+                "checked_at": "2026-01-02T03:04:05Z"
+              },
+              "models": [
+                {
+                  "id": "model-a",
+                  "name": "Model A",
+                  "owned_by": "lab-a",
+                  "context_length": 200000,
+                  "max_completion_tokens": 64000,
+                  "input_modalities": [
+                    "text",
+                    "image"
+                  ],
+                  "output_modalities": [
+                    "text"
+                  ],
+                  "pricing": {
+                    "input": 3,
+                    "output": 15,
+                    "cache_read": 0.3,
+                    "cache_write": 3.75
+                  }
+                },
+                {
+                  "id": "model-b",
+                  "name": "Model B",
+                  "owned_by": "lab-b",
+                  "context_length": 128000,
+                  "pricing": {
+                    "input": 1,
+                    "output": 2
+                  }
+                },
+                {
+                  "id": "model-c",
+                  "name": "Model C",
+                  "owned_by": "lab-c",
+                  "context_length": 32000,
+                  "pricing": {}
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "seam.refresh_tick",
+        "request": {}
+      },
+      "output": {
+        "upstream_requests": [
+          {
+            "method": "GET",
+            "path": "/v1/models",
+            "query": "",
+            "header": {
+              "Accept": [
+                "application/json"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "If-None-Match": [
+                "\"cat-v2\""
+              ],
+              "User-Agent": [
+                "cpa-wokey-plugin/9.9.9-snapshot"
+              ]
+            },
+            "body": ""
+          }
+        ],
+        "host_calls": [
+          {
+            "method": "host.auth.list",
+            "request": {}
+          },
+          {
+            "method": "host.auth.get",
+            "request": {
+              "auth_index": "idx-1"
+            }
+          }
+        ],
+        "response": {
+          "ok": true,
+          "result": {
+            "models": 3,
+            "revision": "a73599d691abec6d"
+          }
+        }
+      }
+    }
+  ]
+}

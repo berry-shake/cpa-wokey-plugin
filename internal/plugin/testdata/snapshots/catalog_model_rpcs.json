@@ -1,0 +1,335 @@
+{
+  "case": "catalog_model_rpcs",
+  "description": "model.static, then model.for_auth loading the catalog once, for all models and for a selection with a missing model.",
+  "setup": {
+    "version": "9.9.9-snapshot",
+    "config": {
+      "base-url": "{{UPSTREAM}}",
+      "data-dir": "{{DATA_DIR}}"
+    },
+    "credentials": [
+      {
+        "name": "k1.json",
+        "fields": {
+          "api_key": "sk-wk-snapshot-fake-0001",
+          "label": "primary",
+          "type": "wokey"
+        }
+      }
+    ]
+  },
+  "upstream_script": [
+    {
+      "method": "GET",
+      "path": "/v1/models",
+      "status": 200,
+      "header": {
+        "Content-Type": [
+          "application/json"
+        ],
+        "Etag": [
+          "\"cat-v1\""
+        ]
+      },
+      "body": "{\"object\":\"list\",\"data\":[{\"id\":\"model-a\",\"object\":\"model\",\"created\":1767225600,\"owned_by\":\"lab-a\",\"name\":\"Model A\",\"context_length\":200000,\"max_completion_tokens\":64000,\"supported_parameters\":[\"reasoning\",\"tools\"],\"architecture\":{\"modality\":\"text+image->text\",\"input_modalities\":[\"text\",\"image\"],\"output_modalities\":[\"text\"]},\"pricing\":{\"prompt\":\"0.000003\",\"completion\":\"0.000015\",\"input_cache_read\":\"0.0000003\",\"input_cache_write\":\"0.00000375\"}},{\"id\":\"model-b\",\"object\":\"model\",\"owned_by\":\"lab-b\",\"name\":\"Model B\",\"context_length\":128000,\"pricing\":{\"prompt\":\"0.000001\",\"completion\":\"0.000002\"}}]}",
+      "chunks": []
+    }
+  ],
+  "steps": [
+    {
+      "rpc": {
+        "method": "model.static",
+        "request": {
+          "Plugin": {
+            "Name": "Wokey",
+            "Version": "9.9.9-snapshot",
+            "Author": "",
+            "GitHubRepository": "",
+            "Logo": "",
+            "ConfigFields": null
+          },
+          "Host": {
+            "AuthDir": "",
+            "ProxyURL": "",
+            "ForceModelPrefix": false,
+            "OAuthModelAlias": null,
+            "ExcludedModels": null
+          },
+          "multi_provider_models": true
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "Provider": "wokey",
+            "Models": null,
+            "AuthUpdate": {
+              "Provider": "",
+              "ID": "",
+              "FileName": "",
+              "Label": "",
+              "Prefix": "",
+              "ProxyURL": "",
+              "Disabled": false,
+              "StorageJSON": null,
+              "Metadata": null,
+              "Attributes": null,
+              "NextRefreshAfter": "0001-01-01T00:00:00Z"
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "model.for_auth",
+        "request": {
+          "Plugin": {
+            "Name": "Wokey",
+            "Version": "9.9.9-snapshot",
+            "Author": "",
+            "GitHubRepository": "",
+            "Logo": "",
+            "ConfigFields": null
+          },
+          "AuthID": "k1.json",
+          "AuthProvider": "wokey",
+          "StorageJSON": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "Metadata": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "Attributes": {
+            "path": "/auths/k1.json",
+            "source": "file"
+          },
+          "Host": {
+            "AuthDir": "/auths",
+            "ProxyURL": "",
+            "ForceModelPrefix": false,
+            "OAuthModelAlias": null,
+            "ExcludedModels": null
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [
+          {
+            "method": "GET",
+            "path": "/v1/models",
+            "query": "",
+            "header": {
+              "Accept": [
+                "application/json"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "User-Agent": [
+                "cpa-wokey-plugin/9.9.9-snapshot"
+              ]
+            },
+            "body": ""
+          }
+        ],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "Provider": "wokey",
+            "Models": [
+              {
+                "ID": "model-a",
+                "Object": "model",
+                "Created": 1767225600,
+                "OwnedBy": "lab-a",
+                "Type": "wokey",
+                "DisplayName": "Model A",
+                "Name": "model-a",
+                "Version": "",
+                "Description": "Wokey · Model A",
+                "InputTokenLimit": 200000,
+                "OutputTokenLimit": 64000,
+                "SupportedGenerationMethods": null,
+                "ContextLength": 200000,
+                "MaxCompletionTokens": 64000,
+                "SupportedParameters": [
+                  "reasoning",
+                  "tools"
+                ],
+                "SupportedInputModalities": [
+                  "text",
+                  "image"
+                ],
+                "SupportedOutputModalities": [
+                  "text"
+                ],
+                "Thinking": null,
+                "UserDefined": true
+              },
+              {
+                "ID": "model-b",
+                "Object": "model",
+                "Created": 0,
+                "OwnedBy": "lab-b",
+                "Type": "wokey",
+                "DisplayName": "Model B",
+                "Name": "model-b",
+                "Version": "",
+                "Description": "Wokey · Model B",
+                "InputTokenLimit": 128000,
+                "OutputTokenLimit": 0,
+                "SupportedGenerationMethods": null,
+                "ContextLength": 128000,
+                "MaxCompletionTokens": 0,
+                "SupportedParameters": null,
+                "SupportedInputModalities": null,
+                "SupportedOutputModalities": null,
+                "Thinking": null,
+                "UserDefined": true
+              }
+            ],
+            "AuthUpdate": {
+              "Provider": "",
+              "ID": "",
+              "FileName": "",
+              "Label": "",
+              "Prefix": "",
+              "ProxyURL": "",
+              "Disabled": false,
+              "StorageJSON": null,
+              "Metadata": null,
+              "Attributes": null,
+              "NextRefreshAfter": "0001-01-01T00:00:00Z"
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "model.for_auth",
+        "request": {
+          "Plugin": {
+            "Name": "Wokey",
+            "Version": "9.9.9-snapshot",
+            "Author": "",
+            "GitHubRepository": "",
+            "Logo": "",
+            "ConfigFields": null
+          },
+          "AuthID": "picked.json",
+          "AuthProvider": "wokey",
+          "StorageJSON": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "picked",
+            "models": [
+              "model-b",
+              "missing-model"
+            ],
+            "prefix": "wk",
+            "type": "wokey"
+          },
+          "Metadata": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "picked",
+            "models": [
+              "model-b",
+              "missing-model"
+            ],
+            "prefix": "wk",
+            "type": "wokey"
+          },
+          "Attributes": {
+            "path": "/auths/picked.json",
+            "source": "file"
+          },
+          "Host": {
+            "AuthDir": "/auths",
+            "ProxyURL": "",
+            "ForceModelPrefix": true,
+            "OAuthModelAlias": null,
+            "ExcludedModels": null
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "Provider": "wokey",
+            "Models": [
+              {
+                "ID": "missing-model",
+                "Object": "model",
+                "Created": 0,
+                "OwnedBy": "wokey",
+                "Type": "wokey",
+                "DisplayName": "missing-model",
+                "Name": "missing-model",
+                "Version": "",
+                "Description": "Wokey · missing-model",
+                "InputTokenLimit": 0,
+                "OutputTokenLimit": 0,
+                "SupportedGenerationMethods": null,
+                "ContextLength": 0,
+                "MaxCompletionTokens": 0,
+                "SupportedParameters": null,
+                "SupportedInputModalities": null,
+                "SupportedOutputModalities": null,
+                "Thinking": null,
+                "UserDefined": true
+              },
+              {
+                "ID": "model-b",
+                "Object": "model",
+                "Created": 0,
+                "OwnedBy": "lab-b",
+                "Type": "wokey",
+                "DisplayName": "Model B",
+                "Name": "model-b",
+                "Version": "",
+                "Description": "Wokey · Model B",
+                "InputTokenLimit": 128000,
+                "OutputTokenLimit": 0,
+                "SupportedGenerationMethods": null,
+                "ContextLength": 128000,
+                "MaxCompletionTokens": 0,
+                "SupportedParameters": null,
+                "SupportedInputModalities": null,
+                "SupportedOutputModalities": null,
+                "Thinking": null,
+                "UserDefined": true
+              }
+            ],
+            "AuthUpdate": {
+              "Provider": "",
+              "ID": "",
+              "FileName": "",
+              "Label": "",
+              "Prefix": "",
+              "ProxyURL": "",
+              "Disabled": false,
+              "StorageJSON": null,
+              "Metadata": null,
+              "Attributes": null,
+              "NextRefreshAfter": "0001-01-01T00:00:00Z"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

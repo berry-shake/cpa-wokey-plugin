@@ -1,0 +1,497 @@
+{
+  "case": "management_register",
+  "description": "Lifecycle and static RPCs: plugin.register, management.register, identifiers, resources and routing errors.",
+  "setup": {
+    "version": "9.9.9-snapshot",
+    "config": {
+      "base-url": "{{UPSTREAM}}",
+      "data-dir": "{{DATA_DIR}}"
+    },
+    "credentials": []
+  },
+  "upstream_script": [],
+  "steps": [
+    {
+      "rpc": {
+        "method": "plugin.register",
+        "request": {
+          "config_yaml": "base-url: '{{UPSTREAM}}'\ndata-dir: '{{DATA_DIR}}'\n",
+          "schema_version": 10,
+          "multi_auth_providers": true
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "schema_version": 7,
+            "metadata": {
+              "Name": "Wokey",
+              "Version": "9.9.9-snapshot",
+              "Author": "berry-shake",
+              "GitHubRepository": "https://github.com/berry-shake/cpa-wokey-plugin",
+              "Logo": "/v0/resource/plugins/wokey/logo.svg",
+              "ConfigFields": [
+                {
+                  "Name": "base-url",
+                  "Type": "string",
+                  "Default": "https://api.wokey.ai",
+                  "EnumValues": null,
+                  "Description": "Wokey API origin. Auth files may override it with base_url."
+                },
+                {
+                  "Name": "model-prefix",
+                  "Type": "string",
+                  "Default": "wokey",
+                  "EnumValues": null,
+                  "Description": "Default CPA prefix for Wokey keys (\"wokey\" -> wokey/claude-fable-5). Empty adds no prefix. An auth file's own prefix field wins."
+                },
+                {
+                  "Name": "models-refresh-minutes",
+                  "Type": "integer",
+                  "Default": 60,
+                  "EnumValues": null,
+                  "Description": "How often to poll Wokey's model catalog; 0 disables polling."
+                },
+                {
+                  "Name": "request-timeout-seconds",
+                  "Type": "integer",
+                  "Default": 600,
+                  "EnumValues": null,
+                  "Description": "Timeout for non-streaming requests and for stream response headers."
+                },
+                {
+                  "Name": "stream-idle-timeout-seconds",
+                  "Type": "integer",
+                  "Default": 300,
+                  "EnumValues": null,
+                  "Description": "Abort a stream after this long without upstream bytes."
+                },
+                {
+                  "Name": "data-dir",
+                  "Type": "string",
+                  "Default": "plugins/wokey-data",
+                  "EnumValues": null,
+                  "Description": "Directory for plugin data: the request log database (wokey.db) and the proxy list (proxies.json), relative to CPA's working directory."
+                },
+                {
+                  "Name": "log-retention",
+                  "Type": "integer",
+                  "Default": 100000,
+                  "EnumValues": null,
+                  "Description": "Most requests the request log keeps; 0 disables it."
+                },
+                {
+                  "Name": "log-retention-days",
+                  "Type": "integer",
+                  "Default": 30,
+                  "EnumValues": null,
+                  "Description": "Drop request log entries older than this many days; 0 keeps them until log-retention is reached."
+                }
+              ]
+            },
+            "capabilities": {
+              "auth_provider": true,
+              "model_provider": true,
+              "executor": true,
+              "executor_model_scope": "oauth",
+              "executor_input_formats": [
+                "chat-completions",
+                "responses",
+                "anthropic"
+              ],
+              "executor_output_formats": [
+                "chat-completions",
+                "responses",
+                "anthropic"
+              ],
+              "management_api": true,
+              "quota_provider": true,
+              "request_interceptor": true,
+              "request_interceptor_omit_body_before": true,
+              "request_interceptor_omit_body_after": true
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.register",
+        "request": {}
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "routes": [
+              {
+                "method": "GET",
+                "path": "/v0/management/plugins/wokey/status",
+                "description": "Plugin status, model catalog summary and Wokey credentials."
+              },
+              {
+                "method": "GET",
+                "path": "/v0/management/plugins/wokey/models",
+                "description": "Wokey model catalog with prices per million tokens."
+              },
+              {
+                "method": "POST",
+                "path": "/v0/management/plugins/wokey/models/refresh",
+                "description": "Reload the Wokey model catalog and re-register changed models."
+              },
+              {
+                "method": "POST",
+                "path": "/v0/management/plugins/wokey/credentials",
+                "description": "Add a Wokey API key. Body: {\"api_key\",\"label\",\"note\",\"models\",\"prefix\",\"proxy_url\"|\"proxy_id\",\"issuer_token\"}."
+              },
+              {
+                "method": "PATCH",
+                "path": "/v0/management/plugins/wokey/credentials",
+                "description": "Edit a Wokey credential. Body: {\"auth_index\",\"label\",\"note\",\"models\",\"prefix\",\"proxy_url\"|\"proxy_id\",\"priority\",\"issuer_token\"}."
+              },
+              {
+                "method": "GET",
+                "path": "/v0/management/plugins/wokey/credentials/quota",
+                "description": "Balance and key usage of one Wokey credential (?auth_index=), plus Provider earnings when it has an issuing token."
+              },
+              {
+                "method": "GET",
+                "path": "/v0/management/plugins/wokey/logs",
+                "description": "Request log, newest first (?search=&status=all|success|error&from=&to=&request_id=&limit=&offset=), with a summary."
+              },
+              {
+                "method": "DELETE",
+                "path": "/v0/management/plugins/wokey/logs",
+                "description": "Clear the request log."
+              },
+              {
+                "method": "GET",
+                "path": "/v0/management/plugins/wokey/proxies",
+                "description": "Proxy list (URLs redacted) and CPA's global proxy."
+              },
+              {
+                "method": "POST",
+                "path": "/v0/management/plugins/wokey/proxies",
+                "description": "Add a proxy. Body: {\"name\",\"url\"}."
+              },
+              {
+                "method": "PATCH",
+                "path": "/v0/management/plugins/wokey/proxies",
+                "description": "Rename a proxy or change its URL. Body: {\"id\",\"name\",\"url\"}. Credentials using the old URL move to the new one."
+              },
+              {
+                "method": "DELETE",
+                "path": "/v0/management/plugins/wokey/proxies",
+                "description": "Remove a proxy (?id=). Credentials using it keep its URL."
+              },
+              {
+                "method": "POST",
+                "path": "/v0/management/plugins/wokey/proxies/import",
+                "description": "Add the proxies Wokey credentials already use to the list."
+              },
+              {
+                "method": "POST",
+                "path": "/v0/management/plugins/wokey/proxies/order",
+                "description": "Reorder the proxy list. Body: {\"ids\":[...]}."
+              },
+              {
+                "method": "POST",
+                "path": "/v0/management/plugins/wokey/proxies/check",
+                "description": "Look up the exit IP and latency of a proxy. Body: {\"id\"} or {\"target\":\"direct\"|\"inherit\"}."
+              }
+            ],
+            "resources": [
+              {
+                "path": "/manage",
+                "menu": "Wokey",
+                "description": "Manage Wokey API keys, model selection and egress proxies."
+              },
+              {
+                "path": "/logo.svg",
+                "description": "Plugin logo served to the management panel sidebar."
+              },
+              {
+                "path": "/flag.svg",
+                "description": "Country flag icon for egress checks (?cc=<ISO 3166-1 alpha-2>)."
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "auth.identifier",
+        "request": {}
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "identifier": "wokey"
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "executor.identifier",
+        "request": {}
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "identifier": "wokey"
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "plugin.quiesce",
+        "request": {}
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {}
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "GET",
+          "Path": "/v0/resource/plugins/wokey/logo.svg",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 200,
+            "Headers": {
+              "Cache-Control": [
+                "public, max-age=86400"
+              ],
+              "Content-Security-Policy": [
+                "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+              ],
+              "Content-Type": [
+                "image/svg+xml"
+              ],
+              "X-Content-Type-Options": [
+                "nosniff"
+              ]
+            },
+            "Body": "<svg width=\"48\" height=\"48\" viewBox=\"0 0 48 48\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\">\n  <style>\n    .wokey-body { stroke: #2e3132; }\n    .wokey-keyhole { stroke: #0b7285; }\n\n    @media (prefers-color-scheme: dark) {\n      .wokey-body { stroke: #f2f7f7; }\n      .wokey-keyhole { stroke: #49b8c4; }\n    }\n  </style>\n  <path\n    class=\"wokey-body\"\n    d=\"M7 16L15 42L24 22L33 42L41 16\"\n    stroke-width=\"6\"\n    stroke-linecap=\"round\"\n    stroke-linejoin=\"round\"\n  />\n  <circle class=\"wokey-keyhole\" cx=\"24\" cy=\"8\" r=\"3\" stroke-width=\"2\" />\n  <path\n    class=\"wokey-keyhole\"\n    d=\"M22.5 10.5L24 16L25.5 10.5\"\n    stroke-width=\"2\"\n    stroke-linecap=\"round\"\n    stroke-linejoin=\"round\"\n  />\n</svg>\n"
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "GET",
+          "Path": "/v0/resource/plugins/wokey/flag.svg",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": {
+            "cc": [
+              "jp"
+            ]
+          },
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 200,
+            "Headers": {
+              "Cache-Control": [
+                "public, max-age=604800"
+              ],
+              "Content-Security-Policy": [
+                "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+              ],
+              "Content-Type": [
+                "image/svg+xml"
+              ],
+              "X-Content-Type-Options": [
+                "nosniff"
+              ]
+            },
+            "Body": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 36 36\"><path fill=\"#EEE\" d=\"M36 27a4 4 0 0 1-4 4H4a4 4 0 0 1-4-4V9a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4v18z\"/><circle cx=\"18\" cy=\"18\" r=\"7\" fill=\"#ED1B2F\"/></svg>"
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "GET",
+          "Path": "/v0/resource/plugins/wokey/flag.svg",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": {
+            "cc": [
+              "zz"
+            ]
+          },
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 404,
+            "Headers": {
+              "Cache-Control": [
+                "public, max-age=86400"
+              ],
+              "Content-Type": [
+                "text/plain; charset=utf-8"
+              ]
+            },
+            "Body": "unknown country code"
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "GET",
+          "Path": "/v0/management/plugins/wokey/nope",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 404,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "error": "not_found",
+              "message": "plugin route not found"
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "PUT",
+          "Path": "/v0/management/plugins/wokey/status",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 405,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "error": "method_not_allowed",
+              "message": "method not allowed on this route"
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "plugin.unknown",
+        "request": {}
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": false,
+          "error": {
+            "code": "unknown_method",
+            "message": "unknown method: plugin.unknown"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,382 @@
+{
+  "case": "management_proxies",
+  "description": "Proxy list: empty, add, duplicate and invalid adds, unknown delete, import from credentials, list.",
+  "setup": {
+    "version": "9.9.9-snapshot",
+    "config": {
+      "base-url": "{{UPSTREAM}}",
+      "data-dir": "{{DATA_DIR}}"
+    },
+    "credentials": [
+      {
+        "name": "k1.json",
+        "fields": {
+          "api_key": "sk-wk-snapshot-fake-0001",
+          "label": "primary",
+          "type": "wokey"
+        }
+      },
+      {
+        "name": "k2.json",
+        "fields": {
+          "api_key": "sk-wk-snapshot-fake-0002",
+          "proxy_url": "http://user:pw@10.0.0.2:8080",
+          "type": "wokey"
+        }
+      }
+    ]
+  },
+  "upstream_script": [],
+  "steps": [
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "GET",
+          "Path": "/v0/management/plugins/wokey/proxies",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 200,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "proxies": []
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "POST",
+          "Path": "/v0/management/plugins/wokey/proxies",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": {
+            "name": "Tokyo",
+            "url": "socks5://user:secret@10.0.0.1:1080"
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [
+          {
+            "method": "host.log",
+            "request": {
+              "level": "info",
+              "message": "wokey: added proxy",
+              "fields": {
+                "proxy": "socks5://10.0.0.1:1080"
+              }
+            }
+          }
+        ],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 201,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "ok": true,
+              "proxy": {
+                "id": "<volatile>",
+                "name": "Tokyo",
+                "url": "socks5://user:xxxxx@10.0.0.1:1080",
+                "label": "socks5://10.0.0.1:1080",
+                "created_at": "<volatile>"
+              },
+              "updated_credentials": 0
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "POST",
+          "Path": "/v0/management/plugins/wokey/proxies",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": {
+            "name": "Again",
+            "url": "socks5://user:secret@10.0.0.1:1080"
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 409,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "error": "duplicate_proxy",
+              "message": "this proxy URL is already in the list"
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "POST",
+          "Path": "/v0/management/plugins/wokey/proxies",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": {
+            "name": "Bad",
+            "url": "ftp://10.0.0.3"
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 400,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "error": "invalid_proxy",
+              "message": "url: invalid proxy_url: unsupported scheme \"ftp\" (use http, https, socks5 or socks5h)"
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "DELETE",
+          "Path": "/v0/management/plugins/wokey/proxies",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": {
+            "id": [
+              "000000000000"
+            ]
+          },
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 404,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "error": "proxy_not_found",
+              "message": "no listed proxy has this id"
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "POST",
+          "Path": "/v0/management/plugins/wokey/proxies/import",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [
+          {
+            "method": "host.auth.list",
+            "request": {}
+          },
+          {
+            "method": "host.auth.get",
+            "request": {
+              "auth_index": "idx-1"
+            }
+          },
+          {
+            "method": "host.auth.get",
+            "request": {
+              "auth_index": "idx-2"
+            }
+          }
+        ],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 200,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "added": 1,
+              "ok": true,
+              "proxies": [
+                {
+                  "id": "<volatile>",
+                  "name": "Tokyo",
+                  "url": "socks5://user:xxxxx@10.0.0.1:1080",
+                  "label": "socks5://10.0.0.1:1080",
+                  "created_at": "<volatile>"
+                },
+                {
+                  "id": "<volatile>",
+                  "name": "10.0.0.2:8080",
+                  "url": "http://user:xxxxx@10.0.0.2:8080",
+                  "label": "http://10.0.0.2:8080",
+                  "created_at": "<volatile>"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "GET",
+          "Path": "/v0/management/plugins/wokey/proxies",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 200,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "proxies": [
+                {
+                  "id": "<volatile>",
+                  "name": "Tokyo",
+                  "url": "socks5://user:xxxxx@10.0.0.1:1080",
+                  "label": "socks5://10.0.0.1:1080",
+                  "created_at": "<volatile>"
+                },
+                {
+                  "id": "<volatile>",
+                  "name": "10.0.0.2:8080",
+                  "url": "http://user:xxxxx@10.0.0.2:8080",
+                  "label": "http://10.0.0.2:8080",
+                  "created_at": "<volatile>"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

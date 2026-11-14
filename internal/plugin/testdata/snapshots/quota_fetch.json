@@ -1,0 +1,200 @@
+{
+  "case": "quota_fetch",
+  "description": "quota.fetch: balance and key usage become one monthly bar; describe, identifier and reset.",
+  "setup": {
+    "version": "9.9.9-snapshot",
+    "config": {
+      "base-url": "{{UPSTREAM}}",
+      "data-dir": "{{DATA_DIR}}"
+    },
+    "credentials": [
+      {
+        "name": "k1.json",
+        "fields": {
+          "api_key": "sk-wk-snapshot-fake-0001",
+          "label": "primary",
+          "type": "wokey"
+        }
+      }
+    ]
+  },
+  "upstream_script": [
+    {
+      "method": "GET",
+      "path": "/v1/dashboard/balance",
+      "status": 200,
+      "header": {
+        "Content-Type": [
+          "application/json"
+        ]
+      },
+      "body": "{\"userId\":\"user-1234\",\"availableUsd\":42.5,\"reservedUsd\":\"0.75\"}",
+      "chunks": []
+    },
+    {
+      "method": "GET",
+      "path": "/v1/key",
+      "status": 200,
+      "header": {
+        "Content-Type": [
+          "application/json"
+        ]
+      },
+      "body": "{\"label\":\"primary key\",\"usage\":1.5,\"usage_daily\":0.25,\"usage_weekly\":1,\"usage_monthly\":1.5,\"limit\":10,\"limit_remaining\":8.5,\"limit_reset\":\"monthly\"}",
+      "chunks": []
+    }
+  ],
+  "steps": [
+    {
+      "rpc": {
+        "method": "quota.identifier",
+        "request": {}
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "identifier": "wokey"
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "quota.describe",
+        "request": {
+          "plugin": {
+            "Name": "",
+            "Version": "",
+            "Author": "",
+            "GitHubRepository": "",
+            "Logo": "",
+            "ConfigFields": null
+          }
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "supported_providers": [
+              "wokey"
+            ],
+            "display_name": "Wokey"
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "quota.fetch",
+        "request": {
+          "auth_index": "idx-1",
+          "auth_id": "k1.json",
+          "provider": "wokey",
+          "storage_json": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "metadata": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "host": {
+            "AuthDir": "",
+            "ProxyURL": "",
+            "ForceModelPrefix": false,
+            "OAuthModelAlias": null,
+            "ExcludedModels": null
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [
+          {
+            "method": "GET",
+            "path": "/v1/dashboard/balance",
+            "query": "",
+            "header": {
+              "Accept": [
+                "application/json"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "Authorization": [
+                "Bearer sk-wk-snapshot-fake-0001"
+              ],
+              "User-Agent": [
+                "cpa-wokey-plugin/9.9.9-snapshot"
+              ]
+            },
+            "body": ""
+          },
+          {
+            "method": "GET",
+            "path": "/v1/key",
+            "query": "",
+            "header": {
+              "Accept": [
+                "application/json"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "Authorization": [
+                "Bearer sk-wk-snapshot-fake-0001"
+              ],
+              "User-Agent": [
+                "cpa-wokey-plugin/9.9.9-snapshot"
+              ]
+            },
+            "body": ""
+          }
+        ],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "groups": [
+              {
+                "displayName": "Wokey",
+                "buckets": [
+                  {
+                    "window": "monthly",
+                    "remainingFraction": 0.9659090909090909
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "quota.reset",
+        "request": {}
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": false,
+          "error": {
+            "code": "unsupported_operation",
+            "message": "wokey: quota reset is not supported",
+            "http_status": 501
+          }
+        }
+      }
+    }
+  ]
+}

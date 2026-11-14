@@ -1,0 +1,355 @@
+{
+  "case": "management_status",
+  "description": "Status before CPA sent its host summary, then after model.for_auth (force prefix, redacted global proxy, catalog).",
+  "setup": {
+    "version": "9.9.9-snapshot",
+    "config": {
+      "base-url": "{{UPSTREAM}}/v1/",
+      "data-dir": "{{DATA_DIR}}",
+      "log-retention": 500,
+      "log-retention-days": 7,
+      "model-prefix": "/wk/",
+      "models-refresh-minutes": 15,
+      "request-timeout-seconds": 120,
+      "stream-idle-timeout-seconds": 45
+    },
+    "credentials": [
+      {
+        "name": "k1.json",
+        "fields": {
+          "api_key": "sk-wk-snapshot-fake-0001",
+          "proxy_url": "direct",
+          "type": "wokey"
+        }
+      }
+    ]
+  },
+  "upstream_script": [
+    {
+      "method": "GET",
+      "path": "/v1/models",
+      "status": 200,
+      "header": {
+        "Content-Type": [
+          "application/json"
+        ],
+        "Etag": [
+          "\"cat-v1\""
+        ]
+      },
+      "body": "{\"object\":\"list\",\"data\":[{\"id\":\"model-a\",\"object\":\"model\",\"created\":1767225600,\"owned_by\":\"lab-a\",\"name\":\"Model A\",\"context_length\":200000,\"max_completion_tokens\":64000,\"supported_parameters\":[\"reasoning\",\"tools\"],\"architecture\":{\"modality\":\"text+image->text\",\"input_modalities\":[\"text\",\"image\"],\"output_modalities\":[\"text\"]},\"pricing\":{\"prompt\":\"0.000003\",\"completion\":\"0.000015\",\"input_cache_read\":\"0.0000003\",\"input_cache_write\":\"0.00000375\"}},{\"id\":\"model-b\",\"object\":\"model\",\"owned_by\":\"lab-b\",\"name\":\"Model B\",\"context_length\":128000,\"pricing\":{\"prompt\":\"0.000001\",\"completion\":\"0.000002\"}}]}",
+      "chunks": []
+    }
+  ],
+  "steps": [
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "GET",
+          "Path": "/v0/management/plugins/wokey/status",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [
+          {
+            "method": "host.auth.list",
+            "request": {}
+          },
+          {
+            "method": "host.auth.get",
+            "request": {
+              "auth_index": "idx-1"
+            }
+          },
+          {
+            "method": "host.auth.models",
+            "request": {}
+          }
+        ],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 200,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "plugin": "wokey",
+              "version": "9.9.9-snapshot",
+              "now": "2026-01-02T03:04:05Z",
+              "config": {
+                "base_url": "{{UPSTREAM}}",
+                "default_prefix": "wk",
+                "models_refresh_minutes": 15,
+                "request_timeout_seconds": 120,
+                "stream_idle_timeout_seconds": 45
+              },
+              "catalog": {
+                "count": 0
+              },
+              "credentials": [
+                {
+                  "auth_index": "idx-1",
+                  "id": "k1.json",
+                  "name": "k1.json",
+                  "label": "",
+                  "key_masked": "sk-wk-…0001",
+                  "disabled": false,
+                  "unavailable": false,
+                  "priority": 0,
+                  "proxy_url": "direct",
+                  "prefix": null,
+                  "effective_prefix": "wk",
+                  "all_models": true,
+                  "models": [],
+                  "registered_models": 0,
+                  "registered_known": true,
+                  "success": 0,
+                  "failed": 0
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "model.for_auth",
+        "request": {
+          "Plugin": {
+            "Name": "Wokey",
+            "Version": "9.9.9-snapshot",
+            "Author": "",
+            "GitHubRepository": "",
+            "Logo": "",
+            "ConfigFields": null
+          },
+          "AuthID": "k1.json",
+          "AuthProvider": "wokey",
+          "StorageJSON": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "proxy_url": "direct",
+            "type": "wokey"
+          },
+          "Metadata": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "proxy_url": "direct",
+            "type": "wokey"
+          },
+          "Attributes": {
+            "path": "/auths/k1.json",
+            "source": "file"
+          },
+          "Host": {
+            "AuthDir": "/auths",
+            "ProxyURL": "http://proxyuser:proxypass@proxy.example.invalid:3128",
+            "ForceModelPrefix": true,
+            "OAuthModelAlias": null,
+            "ExcludedModels": null
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [
+          {
+            "method": "GET",
+            "path": "/v1/models",
+            "query": "",
+            "header": {
+              "Accept": [
+                "application/json"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "User-Agent": [
+                "cpa-wokey-plugin/9.9.9-snapshot"
+              ]
+            },
+            "body": ""
+          }
+        ],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "Provider": "wokey",
+            "Models": [
+              {
+                "ID": "model-a",
+                "Object": "model",
+                "Created": 1767225600,
+                "OwnedBy": "lab-a",
+                "Type": "wokey",
+                "DisplayName": "Model A",
+                "Name": "model-a",
+                "Version": "",
+                "Description": "Wokey · Model A",
+                "InputTokenLimit": 200000,
+                "OutputTokenLimit": 64000,
+                "SupportedGenerationMethods": null,
+                "ContextLength": 200000,
+                "MaxCompletionTokens": 64000,
+                "SupportedParameters": [
+                  "reasoning",
+                  "tools"
+                ],
+                "SupportedInputModalities": [
+                  "text",
+                  "image"
+                ],
+                "SupportedOutputModalities": [
+                  "text"
+                ],
+                "Thinking": null,
+                "UserDefined": true
+              },
+              {
+                "ID": "model-b",
+                "Object": "model",
+                "Created": 0,
+                "OwnedBy": "lab-b",
+                "Type": "wokey",
+                "DisplayName": "Model B",
+                "Name": "model-b",
+                "Version": "",
+                "Description": "Wokey · Model B",
+                "InputTokenLimit": 128000,
+                "OutputTokenLimit": 0,
+                "SupportedGenerationMethods": null,
+                "ContextLength": 128000,
+                "MaxCompletionTokens": 0,
+                "SupportedParameters": null,
+                "SupportedInputModalities": null,
+                "SupportedOutputModalities": null,
+                "Thinking": null,
+                "UserDefined": true
+              }
+            ],
+            "AuthUpdate": {
+              "Provider": "",
+              "ID": "",
+              "FileName": "",
+              "Label": "",
+              "Prefix": "",
+              "ProxyURL": "",
+              "Disabled": false,
+              "StorageJSON": null,
+              "Metadata": null,
+              "Attributes": null,
+              "NextRefreshAfter": "0001-01-01T00:00:00Z"
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "GET",
+          "Path": "/v0/management/plugins/wokey/status",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [
+          {
+            "method": "host.auth.list",
+            "request": {}
+          },
+          {
+            "method": "host.auth.get",
+            "request": {
+              "auth_index": "idx-1"
+            }
+          },
+          {
+            "method": "host.auth.models",
+            "request": {}
+          }
+        ],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 200,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "plugin": "wokey",
+              "version": "9.9.9-snapshot",
+              "now": "2026-01-02T03:04:05Z",
+              "config": {
+                "base_url": "{{UPSTREAM}}",
+                "default_prefix": "wk",
+                "force_model_prefix": true,
+                "models_refresh_minutes": 15,
+                "request_timeout_seconds": 120,
+                "stream_idle_timeout_seconds": 45,
+                "global_proxy": "http://proxyuser:xxxxx@proxy.example.invalid:3128"
+              },
+              "catalog": {
+                "count": 2,
+                "revision": "f33e3be127d9ddde",
+                "fetched_at": "2026-01-02T03:04:05Z",
+                "checked_at": "2026-01-02T03:04:05Z"
+              },
+              "credentials": [
+                {
+                  "auth_index": "idx-1",
+                  "id": "k1.json",
+                  "name": "k1.json",
+                  "label": "",
+                  "key_masked": "sk-wk-…0001",
+                  "disabled": false,
+                  "unavailable": false,
+                  "priority": 0,
+                  "proxy_url": "direct",
+                  "prefix": null,
+                  "effective_prefix": "wk",
+                  "all_models": true,
+                  "models": [],
+                  "registered_models": 0,
+                  "registered_known": true,
+                  "success": 0,
+                  "failed": 0
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

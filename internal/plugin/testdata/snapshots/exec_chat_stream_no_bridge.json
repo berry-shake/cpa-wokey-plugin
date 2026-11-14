@@ -1,0 +1,185 @@
+{
+  "case": "exec_chat_stream_no_bridge",
+  "description": "Chat completions stream without a stream_id: the whole stream comes back as chunks in the RPC response.",
+  "setup": {
+    "version": "9.9.9-snapshot",
+    "config": {
+      "base-url": "{{UPSTREAM}}",
+      "data-dir": "{{DATA_DIR}}"
+    },
+    "credentials": [
+      {
+        "name": "k1.json",
+        "fields": {
+          "api_key": "sk-wk-snapshot-fake-0001",
+          "label": "primary",
+          "type": "wokey"
+        }
+      }
+    ]
+  },
+  "upstream_script": [
+    {
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "status": 200,
+      "header": {
+        "Cache-Control": [
+          "no-cache"
+        ],
+        "Content-Type": [
+          "text/event-stream"
+        ]
+      },
+      "body": "",
+      "chunks": [
+        "data: {\"id\":\"chatcmpl-snap-2\",\"object\":\"chat.completion.chunk\",\"created\":1767225600,\"model\":\"model-a\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-snap-2\",\"object\":\"chat.completion.chunk\",\"created\":1767225600,\"model\":\"model-a\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hel\"},\"finish_reason\":null}]}\n\n",
+        ": keepalive\n\n",
+        "data: {\"id\":\"chatcmpl-snap-2\",\"object\":\"chat.completion.chunk\",\"created\":1767225600,\"model\":\"model-a\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"lo!\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-snap-2\",\"object\":\"chat.completion.chunk\",\"created\":1767225600,\"model\":\"model-a\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+        "data: {\"id\":\"chatcmpl-snap-2\",\"object\":\"chat.completion.chunk\",\"created\":1767225600,\"model\":\"model-a\",\"choices\":[],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":5,\"total_tokens\":17,\"completion_tokens_details\":{\"reasoning_tokens\":2}}}\n\n",
+        "data: [DONE]\n\n"
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "rpc": {
+        "method": "executor.execute_stream",
+        "request": {
+          "AuthID": "k1.json",
+          "AuthProvider": "wokey",
+          "Model": "model-a",
+          "Format": "openai",
+          "Stream": true,
+          "Alt": "",
+          "Headers": {
+            "Content-Type": [
+              "application/json"
+            ],
+            "User-Agent": [
+              "snapshot-client/1.0"
+            ]
+          },
+          "Query": null,
+          "OriginalRequest": {
+            "model": "wokey/model-a",
+            "messages": [
+              {
+                "role": "user",
+                "content": "Say hello"
+              }
+            ],
+            "stream": true,
+            "stream_options": {
+              "include_usage": true
+            }
+          },
+          "SourceFormat": "openai",
+          "Payload": {
+            "model": "model-a",
+            "messages": [
+              {
+                "role": "user",
+                "content": "Say hello"
+              }
+            ],
+            "stream": true,
+            "stream_options": {
+              "include_usage": true
+            }
+          },
+          "Metadata": {
+            "request_path": "/v1/chat/completions",
+            "requested_model": "wokey/model-a",
+            "selected_auth_id": "k1.json",
+            "selected_auth_index": "idx-1"
+          },
+          "StorageJSON": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "AuthMetadata": {
+            "api_key": "sk-wk-snapshot-fake-0001",
+            "label": "primary",
+            "type": "wokey"
+          },
+          "AuthAttributes": {
+            "path": "/auths/k1.json",
+            "source": "file"
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [
+          {
+            "method": "POST",
+            "path": "/v1/chat/completions",
+            "query": "",
+            "header": {
+              "Accept": [
+                "text/event-stream"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "Authorization": [
+                "Bearer sk-wk-snapshot-fake-0001"
+              ],
+              "Content-Length": [
+                "124"
+              ],
+              "Content-Type": [
+                "application/json"
+              ],
+              "User-Agent": [
+                "cpa-wokey-plugin/9.9.9-snapshot"
+              ]
+            },
+            "body": "{\"model\":\"model-a\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hello\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true}}"
+          }
+        ],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "headers": {
+              "Content-Type": [
+                "text/event-stream"
+              ]
+            },
+            "chunks": [
+              {
+                "Payload": "data: {\"id\":\"chatcmpl-snap-2\",\"object\":\"chat.completion.chunk\",\"created\":1767225600,\"model\":\"model-a\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":null}]}\n\n",
+                "Err": null
+              },
+              {
+                "Payload": "data: {\"id\":\"chatcmpl-snap-2\",\"object\":\"chat.completion.chunk\",\"created\":1767225600,\"model\":\"model-a\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hel\"},\"finish_reason\":null}]}\n\n",
+                "Err": null
+              },
+              {
+                "Payload": "data: {\"id\":\"chatcmpl-snap-2\",\"object\":\"chat.completion.chunk\",\"created\":1767225600,\"model\":\"model-a\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"lo!\"},\"finish_reason\":null}]}\n\n",
+                "Err": null
+              },
+              {
+                "Payload": "data: {\"id\":\"chatcmpl-snap-2\",\"object\":\"chat.completion.chunk\",\"created\":1767225600,\"model\":\"model-a\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+                "Err": null
+              },
+              {
+                "Payload": "data: {\"id\":\"chatcmpl-snap-2\",\"object\":\"chat.completion.chunk\",\"created\":1767225600,\"model\":\"model-a\",\"choices\":[],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":5,\"total_tokens\":17,\"completion_tokens_details\":{\"reasoning_tokens\":2}}}\n\n",
+                "Err": null
+              },
+              {
+                "Payload": "data: [DONE]\n\n",
+                "Err": null
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

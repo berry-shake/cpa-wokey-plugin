@@ -1,0 +1,189 @@
+{
+  "case": "management_proxies_check",
+  "description": "Egress check of the direct line against the (scripted) IP lookup service, kept for the proxy list.",
+  "setup": {
+    "version": "9.9.9-snapshot",
+    "config": {
+      "base-url": "{{UPSTREAM}}",
+      "data-dir": "{{DATA_DIR}}"
+    },
+    "credentials": []
+  },
+  "upstream_script": [
+    {
+      "method": "GET",
+      "path": "/ipinfo",
+      "status": 200,
+      "header": {
+        "Content-Type": [
+          "application/json"
+        ]
+      },
+      "body": "{\"ip\":\"203.0.113.7\",\"city\":\"Tokyo\",\"region\":\"Tokyo\",\"country\":\"jp\"}",
+      "chunks": []
+    }
+  ],
+  "steps": [
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "POST",
+          "Path": "/v0/management/plugins/wokey/proxies/check",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": {
+            "target": "direct"
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [
+          {
+            "method": "GET",
+            "path": "/ipinfo",
+            "query": "",
+            "header": {
+              "Accept": [
+                "*/*"
+              ],
+              "Accept-Encoding": [
+                "gzip"
+              ],
+              "Connection": [
+                "close"
+              ],
+              "User-Agent": [
+                "curl/8.7.1"
+              ]
+            },
+            "body": ""
+          }
+        ],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 200,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "ok": true,
+              "egress": "direct",
+              "ip": "203.0.113.7",
+              "country": "JP",
+              "region": "Tokyo",
+              "city": "Tokyo",
+              "latency_ms": "<volatile>",
+              "source": "{{UPSTREAM}}",
+              "checked_at": "2026-01-02T03:04:05Z"
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "GET",
+          "Path": "/v0/management/plugins/wokey/proxies",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": null,
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 200,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "proxies": [],
+              "builtin_checks": {
+                "direct": {
+                  "ok": true,
+                  "egress": "direct",
+                  "ip": "203.0.113.7",
+                  "country": "JP",
+                  "region": "Tokyo",
+                  "city": "Tokyo",
+                  "latency_ms": "<volatile>",
+                  "source": "{{UPSTREAM}}",
+                  "checked_at": "2026-01-02T03:04:05Z"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "rpc": {
+        "method": "management.handle",
+        "request": {
+          "Method": "POST",
+          "Path": "/v0/management/plugins/wokey/proxies/check",
+          "Headers": {
+            "Accept": [
+              "application/json"
+            ]
+          },
+          "Query": null,
+          "Body": {
+            "target": "elsewhere"
+          },
+          "host_callback_id": "cb-snapshot-1"
+        }
+      },
+      "output": {
+        "upstream_requests": [],
+        "host_calls": [],
+        "response": {
+          "ok": true,
+          "result": {
+            "StatusCode": 400,
+            "Headers": {
+              "Cache-Control": [
+                "no-store"
+              ],
+              "Content-Type": [
+                "application/json; charset=utf-8"
+              ]
+            },
+            "Body": {
+              "error": "invalid_target",
+              "message": "send {\"id\"} or {\"target\":\"direct\"|\"inherit\"}"
+            }
+          }
+        }
+      }
+    }
+  ]
+}
