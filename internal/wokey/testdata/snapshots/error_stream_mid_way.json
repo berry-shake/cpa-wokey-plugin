@@ -1,6 +1,6 @@
 {
   "case": "error_stream_mid_way",
-  "description": "An error event after output started is passed to the client as is and the stream closes normally.",
+  "description": "An error event after output started reaches the client as is and the stream closes normally; the request log records the call as failed in the stream phase",
   "setup": {
     "version": "9.9.9-snapshot",
     "config": {
