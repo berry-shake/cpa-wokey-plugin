@@ -95,8 +95,9 @@ func TestQuotaFetch(t *testing.T) {
 		t.Fatalf("quota: %+v", envelope.Error)
 	}
 	resp := mustDecode[pluginapi.QuotaFetchResponse](t, envelope.Result)
-	if len(resp.Summary) != 0 || len(resp.Groups) != 2 || len(resp.Groups[0].Buckets) != 3 ||
-		resp.Groups[0].Buckets[2].RemainingFraction != 42.5/44 || !strings.Contains(resp.Groups[0].Buckets[0].Description, "$0.25 spent") {
+	// One monthly bar: the balance against the balance plus this month's spend.
+	if len(resp.Summary) != 0 || len(resp.Groups) != 1 || resp.Groups[0].DisplayName != "Wokey" || len(resp.Groups[0].Buckets) != 1 ||
+		resp.Groups[0].Buckets[0].Window != "monthly" || resp.Groups[0].Buckets[0].RemainingFraction != 42.5/44 || resp.Groups[0].Buckets[0].Description != "" {
 		t.Fatalf("quota = %+v", resp)
 	}
 

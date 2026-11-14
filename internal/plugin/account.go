@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/berry-shake/cpa-wokey-plugin/internal/credential"
@@ -134,10 +135,26 @@ func (s *Service) quotaFetch(req pluginapi.QuotaFetchRequest) []byte {
 	if cred.APIKey == "" {
 		return errorEnvelopeFrom(wokey.AuthError("wokey: credential has no api_key"))
 	}
-	// CPA's quota panel shows spend only, so it skips the issuing balance.
+	// CPA's quota panel shows the balance against this month's spend, so it
+	// skips the issuing balance.
 	info, perr := s.fetchAccount(cred, false)
 	if perr != nil {
 		return errorEnvelopeFrom(perr)
 	}
+	// The bar needs both figures; say which one is missing instead of
+	// showing an empty card.
+	switch {
+	case info.Balance == nil:
+		return errorEnvelopeFrom(&pluginabi.Error{Code: "balance_unavailable", Message: "wokey: read balance: " + orUnknown(info.BalanceError), HTTPStatus: http.StatusBadGateway})
+	case info.Key == nil:
+		return errorEnvelopeFrom(&pluginabi.Error{Code: "usage_unavailable", Message: "wokey: read key usage: " + orUnknown(info.KeyError), HTTPStatus: http.StatusBadGateway})
+	}
 	return okEnvelope(wokey.QuotaFromAccount(info))
+}
+
+func orUnknown(message string) string {
+	if strings.TrimSpace(message) == "" {
+		return "no answer"
+	}
+	return message
 }

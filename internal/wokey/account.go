@@ -3,7 +3,6 @@ package wokey
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"math"
 	"net/http"
@@ -110,64 +109,27 @@ func KeyInfoFrom(raw map[string]any) *KeyInfo {
 	return key
 }
 
-// QuotaFromAccount renders account info for CPA's quota panel. Each rolling
-// window (24h / 7d / 30d; Wokey has no shorter one) becomes a bar showing how
-// much of the money held at the window's start is left:
-// balance / (balance + spent in the window). Top-ups during the window and
-// several keys sharing one balance make it approximate. Without a balance the
-// spend is shown as plain numbers. A key with a spend cap gets its own bar.
+// QuotaFromAccount renders account info for CPA's quota panel: one Wokey
+// group with a single monthly bar, the share of the money held at the start
+// of the month that is left: balance / (balance + this key's usage_monthly).
+// Top-ups during the month and several keys sharing one balance make it
+// approximate. Without the balance or the key's usage there is nothing to
+// draw. The daily and weekly spend and a key's spend cap stay on the plugin's
+// own page.
 func QuotaFromAccount(info AccountInfo) pluginapi.QuotaFetchResponse {
 	var out pluginapi.QuotaFetchResponse
-	key := info.Key
-	if key == nil {
+	if info.Key == nil || info.Balance == nil {
 		return out
 	}
-	windows := []struct {
-		key, label string
-		spent      float64
-	}{
-		{"spent_24h", "24h", key.DailyUSD},
-		{"spent_7d", "7d", key.WeeklyUSD},
-		{"spent_30d", "30d", key.MonthlyUSD},
+	balance := math.Max(0, info.Balance.AvailableUSD)
+	fraction := 0.0
+	if start := balance + math.Max(0, info.Key.MonthlyUSD); start > 0 {
+		fraction = balance / start
 	}
-	if info.Balance != nil {
-		balance := math.Max(0, info.Balance.AvailableUSD)
-		group := pluginapi.QuotaGroup{DisplayName: "Spend vs balance"}
-		for _, window := range windows {
-			fraction := 0.0
-			if start := balance + math.Max(0, window.spent); start > 0 {
-				fraction = balance / start
-			}
-			group.Buckets = append(group.Buckets, pluginapi.QuotaBucket{
-				Window:            window.label,
-				RemainingFraction: fraction,
-				Description:       fmt.Sprintf("$%.2f spent · $%.2f balance", window.spent, info.Balance.AvailableUSD),
-			})
-		}
-		out.Groups = append(out.Groups, group)
-	} else {
-		for _, window := range windows {
-			out.Summary = append(out.Summary, pluginapi.QuotaMetric{Key: window.key, Label: window.label, Value: window.spent, Format: "currency", Currency: "USD"})
-		}
-	}
-	if key.LimitUSD != nil && key.LimitRemaining != nil {
-		fraction := 0.0
-		if *key.LimitUSD > 0 {
-			fraction = math.Max(0, math.Min(1, *key.LimitRemaining / *key.LimitUSD))
-		}
-		window := "total"
-		if key.LimitResetLabel != "" {
-			window = key.LimitResetLabel
-		}
-		out.Groups = append(out.Groups, pluginapi.QuotaGroup{
-			DisplayName: "Key spend cap",
-			Buckets: []pluginapi.QuotaBucket{{
-				Window:            window,
-				RemainingFraction: fraction,
-				Description:       fmt.Sprintf("$%.2f of $%.2f left", *key.LimitRemaining, *key.LimitUSD),
-			}},
-		})
-	}
+	out.Groups = []pluginapi.QuotaGroup{{
+		DisplayName: "Wokey",
+		Buckets:     []pluginapi.QuotaBucket{{Window: "monthly", RemainingFraction: fraction}},
+	}}
 	return out
 }
 
