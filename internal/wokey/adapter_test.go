@@ -96,11 +96,15 @@ func credWith(key, issuerToken string) credential.Credential {
 func TestSpecKnobs(t *testing.T) {
 	a := New()
 	spec := a.Spec()
-	if len(spec.ForwardHeaders) != 1 || spec.ForwardHeaders[0] != "X-End-User-Id" || spec.CountTokensRefusal != "token counting is not supported" {
+	if len(spec.ForwardHeaders) != 1 || spec.ForwardHeaders[0] != "X-End-User-Id" {
 		t.Fatalf("spec = %+v", spec)
 	}
 	if spec.Config.Database != "wokey.db" || spec.Config.DataDir != "plugins/wokey-data" {
 		t.Fatalf("config profile = %+v", spec.Config)
+	}
+	// Count_tokens is refused by the core (no TokenCounter).
+	if _, counts := any(a).(provider.TokenCounter); counts {
+		t.Fatal("Wokey must not forward count_tokens")
 	}
 	// Wokey's account answers are not cached.
 	if key := a.AccountKey(provider.Env{}, credWith(testGoodKey, "")); key != "" {

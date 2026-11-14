@@ -88,7 +88,7 @@
           "ok": false,
           "error": {
             "code": "unsupported_operation",
-            "message": "wokey: token counting is not supported",
+            "message": "wokey: count_tokens is not supported by Wokey",
             "http_status": 501
           }
         }

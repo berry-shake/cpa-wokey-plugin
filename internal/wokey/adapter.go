@@ -75,12 +75,13 @@ func (a *Adapter) Spec() provider.Spec {
 		},
 		// Wokey attributes requests to the client's end user by this header.
 		ForwardHeaders: []string{"X-End-User-Id"},
-		// Wokey's count_tokens rejects every request with a 400 ("metadata:
-		// Extra inputs are not permitted", although the request carries no
-		// metadata), so the client gets a quick 501 instead of a slow 400.
-		CountTokensRefusal: "token counting is not supported",
 	}
 }
+
+// The adapter is no provider.TokenCounter: Wokey's count_tokens rejects
+// every request with a 400 ("metadata: Extra inputs are not permitted",
+// although the request carries no metadata), so the client gets the core's
+// quick 501 instead of a slow 400.
 
 // Endpoint is where Wokey serves a protocol.
 func (a *Adapter) Endpoint(protocol provider.Protocol) string {
