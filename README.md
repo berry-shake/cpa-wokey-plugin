@@ -1,25 +1,18 @@
 # CPA Wokey Plugin
 
-一个 CLIProxyAPI（CPA）插件：**把 [Wokey](https://wokey.ai) 的 API Key 作为 CPA 认证文件接入，原生转发 OpenAI Chat Completions、OpenAI Responses 和 Anthropic Messages 三种协议。**
+CLIProxyAPI（CPA）插件：把 [Wokey](https://wokey.ai) 的 API Key 作为 CPA 认证文件接入，转发 OpenAI Chat Completions、OpenAI Responses 和 Anthropic Messages。
 
-- 每个 Wokey API Key 是一个认证文件（`{"type":"wokey","api_key":"..."}`），和其他凭证一样参与 CPA 的选号、冷却和故障转移；
-- 自动拉取 Wokey 公开模型目录并注册到 CPA，前缀走 CPA 通用的 `prefix` 机制，默认 `wokey/<模型 ID>`；每个 Key 可以只注册选中的模型；
-- 请求按客户端格式原样转发到 Wokey 对应的接口，不做协议转换；
-- CPA 的额度面板给每个 Key 画一条 Wokey `monthly` 进度条：剩余比例 = 账户余额 ÷ (账户余额 + 这个 Key 的本月消费 `usage_monthly`)，月内充值或多个 Key 共用余额时只是近似值；余额或用量查不到时面板显示查询失败的原因。24 小时 / 7 天消费和 Key 的限额只在插件管理页显示；
-- 每个 Key 可以单独配置出口代理（CPA 通用认证文件字段 `proxy_url`）；
-- 自带管理页：添加、编辑、启停、删除 Key，选择上游模型，查看账户余额和消费；配了发卡令牌的 Key 还会显示 Provider 收益。
-
-## 环境要求
-
-- CLIProxyAPI v8（已在 v8.0.58 / v8.0.60 上验证），且开启了动态插件支持
-- Linux amd64/arm64、macOS amd64/arm64 或 Windows amd64
-- Unix 平台上需要启用 cgo 编译的 CPA
+- 每个 Key 是一个认证文件，和其他凭证一样参与 CPA 的选号、冷却和故障转移，可以单独设出口代理
+- 自动拉取 Wokey 模型目录注册到 CPA，默认模型名 `wokey/<模型 ID>`，也可以只注册选中的模型
+- 请求原样转发，不做协议转换
+- 查看账户余额、Key 的消费和限额，CPA 额度面板也能看；配了发卡令牌还能看 Provider 收益
+- 自带管理页：Key、模型、出口代理、请求日志
 
 ## 安装
 
-### 通过插件商店
+需要 CLIProxyAPI v8 并开启动态插件（Unix 上 CPA 要用 cgo 编译）；支持 Linux / macOS（amd64、arm64）和 Windows amd64。
 
-在 CPA 配置里加上 berry-shake 的商店源：
+**插件商店**：在 CPA 配置里加上商店源，然后在管理面板的插件商店里安装 **Wokey**。
 
 ```yaml
 plugins:
@@ -28,64 +21,30 @@ plugins:
     - https://raw.githubusercontent.com/berry-shake/CLIProxyAPI-Plugins-Store/main/registry.json
 ```
 
-然后在管理面板的插件商店里找到 **Wokey**（ID `wokey`）安装，也可以直接调用管理接口：
+**手动安装**：从 [Release](https://github.com/berry-shake/cpa-wokey-plugin/releases) 下载对应平台的 zip，把里面的 `wokey.so`（macOS 是 `.dylib`，Windows 是 `.dll`）放到 `plugins/<系统>/<架构>/` 下，再在配置里打开 `plugins.configs.wokey.enabled`。配置里已有 `store.version` 时，CPA 只加载版本号对得上的文件，手动换文件要同时改 `store.version` 和 `release-tag`。
 
-```bash
-curl -X POST -H "Authorization: Bearer $MANAGEMENT_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"version":"0.1.9"}' \
-  http://127.0.0.1:8317/v0/management/plugin-store/wokey/install
-```
+## 配置
 
-### 手动安装
-
-1. 从 Release 下载对应平台的 zip，解压出 `wokey.<so|dylib|dll>`。
-2. 放进对应平台的插件目录，例如：
-
-   ```text
-   plugins/linux/amd64/wokey.so
-   plugins/linux/arm64/wokey.so
-   plugins/darwin/amd64/wokey.dylib
-   plugins/darwin/arm64/wokey.dylib
-   plugins/windows/amd64/wokey.dll
-   ```
-
-3. 在 `config.yaml` 里启用：
-
-   ```yaml
-   plugins:
-     enabled: true
-     configs:
-       wokey:
-         enabled: true
-   ```
-
-> 如果 `config.yaml` 里已经有 `store.version`，CPA 只会加载文件名版本和它一致的插件文件。手动换文件时记得同时改 `store.version` 和 `release-tag`。
-
-## 插件配置
-
-所有配置项都是可选的，写在 `plugins.configs.wokey` 下面：
+都是可选项，写在 `plugins.configs.wokey` 下；填错的值回退默认并记一条警告。
 
 ```yaml
 plugins:
   configs:
     wokey:
       enabled: true
-      base-url: https://api.wokey.ai      # Wokey API 地址，末尾的 /v1 会自动去掉
-      model-prefix: wokey                 # 认证文件没写 prefix 时使用的默认前缀；写 "" 表示不加前缀
-      models-refresh-minutes: 60          # 模型目录轮询间隔（分钟），0 = 不轮询，只按需加载
-      request-timeout-seconds: 600        # 非流式请求超时
-      stream-idle-timeout-seconds: 300    # 流式响应多久没有新数据就中断
-      data-dir: plugins/wokey-data        # 插件数据目录（请求日志数据库 wokey.db、代理列表 proxies.json），相对路径按 CPA 的工作目录算
-      log-retention: 100000               # 请求日志最多保留多少条（上限 1000000），0 = 不记录
-      log-retention-days: 30              # 请求日志保留多少天，0 = 不按天数清理，只受条数限制
+      base-url: https://api.wokey.ai        # 末尾的 /v1 会自动去掉
+      model-prefix: wokey                   # 认证文件没写 prefix 时的默认前缀，"" = 不加
+      models-refresh-minutes: 60            # 模型目录轮询间隔，0 = 不轮询
+      request-timeout-seconds: 600          # 非流式请求超时
+      stream-idle-timeout-seconds: 300      # 流式响应多久没数据就断开
+      data-dir: plugins/wokey-data          # 请求日志和代理列表的目录
+      log-retention: 100000                 # 请求日志最多保留条数，0 = 不记录
+      log-retention-days: 30                # 请求日志保留天数，0 = 只按条数清理
 ```
-
-非法的值会被忽略并回退到默认值，同时写一条警告日志，不会让插件注册失败。
 
 ## 认证文件
 
-放在 CPA 认证目录里的 JSON 文件，`type` 为 `wokey` 的文件由本插件接管。通过管理页添加的 Key 会保存为 `wokey-<Key 指纹>.json`，文件名不包含 Key 本身。
+`type` 为 `wokey` 的认证文件归本插件管理；管理页添加的 Key 保存为 `wokey-<指纹>.json`。
 
 ```json
 {
@@ -95,215 +54,107 @@ plugins:
   "models": ["claude-opus-5-5", "gpt-6-sol"],
   "prefix": "wokey",
   "proxy_url": "socks5://127.0.0.1:1080",
-  "priority": 0,
-  "issuer_token": "wkt_...",
-  "note": "",
-  "disabled": false
+  "issuer_token": "wkt_..."
 }
 ```
 
-| 字段 | 必填 | 说明 |
-|---|---|---|
-| `type` | 是 | 固定为 `wokey` |
-| `api_key` | 是 | Wokey API Key（也接受 `api-key`） |
-| `label` | 否 | 显示名称；为空时用认证文件名（不带 `.json`） |
-| `models` | 否 | 要注册的上游模型 ID 列表。**不写或为 `null` 表示注册目录里的全部模型**；`[]` 表示一个都不注册 |
-| `prefix` | 否 | CPA 通用的模型前缀字段。不写时使用插件配置的 `model-prefix`；`""` 表示这个 Key 不加前缀 |
-| `proxy_url` | 否 | 出口代理，见下文 |
-| `base_url` | 否 | 覆盖插件配置里的 `base-url`，一般不需要 |
-| `priority` | 否 | CPA 通用的凭证优先级 |
-| `issuer_token` | 否 | Wokey 发卡令牌（`wkt_` 开头），见下文 |
-| `note` | 否 | 备注 |
-| `disabled` | 否 | CPA 通用的停用开关 |
-| `model_revision` | — | 插件自己维护的目录版本标记，不要手动修改 |
+| 字段 | 说明 |
+|---|---|
+| `api_key` | 必填 |
+| `label` | 显示名称，默认用文件名 |
+| `models` | 要注册的模型。不写或 `null` = 目录里全部模型，`[]` = 不注册 |
+| `prefix` | 模型名前缀。不写用配置里的 `model-prefix`，`""` = 不加前缀 |
+| `proxy_url` | 出口代理，支持 `http(s)://`、`socks5(h)://`，`direct` = 强制直连；不写时依次用 CPA 的 `proxy-url`、环境变量 |
+| `issuer_token` | Wokey 发卡令牌（`wkt_` 开头），用来查 Provider 收益，见[额度](#额度) |
+| `base_url` | 覆盖配置里的 `base-url` |
+| `priority` / `note` / `disabled` | CPA 通用字段 |
 
-### 模型前缀
+`model_revision` 由插件维护，不要手改。
 
-前缀使用 CPA 通用的 `prefix` 字段，由 CPA 自己加到注册的模型名上，转发前再去掉。前缀为 `wokey` 时，客户端请求 `wokey/claude-opus-5-5`，Wokey 收到的是 `claude-opus-5-5`。
+> CPA 的 `routing.force-model-prefix` 默认关闭，这时模型会同时注册成 `wokey/claude-opus-5-5` 和 `claude-opus-5-5`，后者会和其他渠道的同名模型混在一起轮询。只想用带前缀的名字就把它打开（全局生效）。
 
-- 认证文件没写 `prefix` 时，插件把配置里的 `model-prefix`（默认 `wokey`）作为这个 Key 的前缀交给 CPA，不会写进文件；改了 `model-prefix` 后插件会重新保存所有 Wokey 认证文件，让 CPA 按新前缀重新注册。
-- 写了 `prefix` 就用文件里的值，`""` 表示不加前缀。在管理页或 CPA 面板里修改认证文件的 `prefix`，效果相同。
+## 工作方式
 
-> CPA 的 `routing.force-model-prefix` 默认是 `false`。这时 CPA 会同时注册带前缀和不带前缀的两个名字（`wokey/claude-opus-5-5` 和 `claude-opus-5-5`），Wokey 的 Key 也会进入同名模型的公共号池，和其他渠道一起轮询。如果只想通过 `wokey/...` 访问 Wokey，在 CPA 配置里打开：
->
-> ```yaml
-> routing:
->   force-model-prefix: true
-> ```
->
-> 这是全局开关，打开后其他配置了 `prefix` 的凭证也只会注册带前缀的名字。管理页的"注册到 CPA 的模型名"预览会按这个开关显示。
+**模型**：每隔 `models-refresh-minutes` 拉一次 `/v1/models`（带 ETag，没变化不重复下载）；模型增减或改名才重新注册，价格变化不会；拉取失败保留上一次的目录。
 
-选中的模型如果暂时不在 Wokey 目录里（比如上游下线了），仍然会注册，管理页会把它标成"目录中不存在"。
-
-### 出口代理
-
-`proxy_url` 是 CPA 认证文件的通用字段，本插件的所有上游请求（对话、模型目录、余额、用量）都按以下顺序选择出口：
-
-1. 认证文件里的 `proxy_url`；
-2. CPA 全局配置的 `proxy-url`；
-3. 环境变量 `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY`。
-
-支持 `http://`、`https://`、`socks5://`、`socks5h://`，可以带用户名密码。写 `direct` 或 `none` 表示这个 Key 强制直连，不走全局代理。管理页里显示的代理地址会隐藏密码。
-
-常用的代理可以在管理页的 **代理** 页里存成列表，编辑 Key 时直接从列表里选。选列表里的代理，实际上就是把它的地址写进 `proxy_url`，CPA 那边看到的还是普通的认证文件字段。
-
-## 模型同步
-
-- 插件启动后按 `models-refresh-minutes` 轮询 `GET /v1/models`（带 ETag，没变化时上游返回 304）。
-- 目录里的模型增减或改名时，插件会重新保存受影响的认证文件，CPA 随即重新注册这些 Key 的模型；价格变化不会触发重新注册。
-- 目录拉取失败时保留上一次的目录，不会把已注册的模型清空。
-- 管理页的"重新拉取模型目录"会忽略 ETag 强制刷新。
-
-## 请求转发
+**转发**：
 
 | 客户端格式 | Wokey 接口 |
 |---|---|
 | OpenAI Chat Completions | `POST /v1/chat/completions` |
 | OpenAI Responses | `POST /v1/responses` |
-| Anthropic Messages | `POST /v1/messages`（`count_tokens` 走 `/v1/messages/count_tokens`） |
+| Anthropic Messages | `POST /v1/messages`、`/v1/messages/count_tokens` |
 
-- 请求体只改写顶层的 `model` 字段，其余字节原样转发；
-- Chat Completions 流式请求会自动加上 `stream_options.include_usage`，让 CPA 能统计用量；
-- `anthropic-version` / `anthropic-beta` 只转发给 Messages 接口。
+- 只改写请求体里的 `model`，其余原样转发；Chat 流式请求会自动加上 `stream_options.include_usage`
+- 流式响应在第一帧真正的输出之前，上游报错（限流、过载）按普通错误处理，CPA 照常冷却或换 Key；流没收到结束帧就断了，记为 `stream_truncated`（502）
 
-流式响应：
-
-- 开头几帧（`message_start`、`response.created`、只带角色的 chunk、ping）先攒着，等到第一帧真正的输出再一起发给 CPA。这期间如果 Wokey 在流里报错（限流、过载等），这次调用按对应状态码失败，CPA 会和 HTTP 报错一样冷却 Key 或换 Key 重试；攒的内容超过 64KB 就不再等。
-- 已经开始输出以后的错误帧原样转给客户端。
-- 流没收到结束帧就断了（Chat 的 `[DONE]` 或 `finish_reason`、Responses 的 `response.completed`、Messages 的 `message_stop`），按失败处理，错误码 `stream_truncated`（502）。CPA 对这个错误码不冷却 Key。
-
-上游错误到 CPA 的映射：
+**上游错误**：
 
 | Wokey 返回 | 交给 CPA | 效果 |
 |---|---|---|
-| 401 / 402 / 账号级 403 | 原状态码 | 这个 Key 进入冷却 |
-| 403 `request_blocked` / `model_denylisted` | 400 | 只失败这一次请求，不冷却 Key |
-| 404（模型不存在） | 400 | 同上 |
-| 429 | 429，保留 `Retry-After` | 按上游给的时间冷却 |
-| 529 | 503 | 可重试 |
-| 499 | 408 | 可重试 |
+| 401 / 402 / 账号级 403 | 原状态码 | 冷却这个 Key |
+| 403 `request_blocked` / `model_denylisted`、404 | 400 | 只失败这一次 |
+| 429 | 429，带 `Retry-After` | 按上游给的时间冷却 |
+| 529 / 499 | 503 / 408 | 可重试 |
 
-### 发卡令牌和收益
+## 额度
 
-`issuer_token` 填 Wokey「礼品卡与直充」页面里创建的发卡令牌（`wkt_` 开头，和 API Key 不通用）。填了以后，管理页查余额时会多调用一次 Wokey 发卡接口 `GET /api/issuer/v1/balance`，显示：
+- **管理页**：每个 Key 显示账户余额、近 24 小时 / 7 天 / 30 天消费和 Key 限额。同一账户的多个 Key 汇总时只算一次。
+- **CPA 额度面板**：每个 Key 一条 `monthly` 进度条，剩余比例 = 余额 ÷（余额 + 这个 Key 本月消费）。月内充值过或多个 Key 共用余额时只是近似值。
+- **发卡令牌**：`issuer_token` 填 Wokey「礼品卡与直充」页创建的令牌后，管理页多查一次 `GET /api/issuer/v1/balance`，显示可提现的 Provider 收益和返佣（不算进余额）。这个接口会顺带结算冷却期已满的作废礼品卡，除此之外只查询。令牌设了 IP 白名单的话，要把这个 Key 的出口 IP 加进去。
 
-- **收益**：Provider 收益中可提现的部分；账号没有 Provider 身份时显示 `—`，结算被冻结时会注明；
-- 返佣：可提现的推荐返佣，大于 0 时显示在收益旁边。
-
-收益和 API 余额是两回事，不会加进"可用余额"。没填 `issuer_token` 的 Key 不会调用发卡接口；CPA 原生的额度面板也不调用。这个请求和其他上游请求一样走这个 Key 的出口代理，如果令牌设了 IP 白名单，要把出口 IP 加进去。
-
-Wokey 在这个接口里会顺带结算冷却期已满的作废礼品卡，除此之外只是查询，不会发卡或扣款。插件只用到这一个接口。
+查询按出口排队：同一个出口一次只查一个 Key，不同出口同时查。
 
 ## 管理页
 
-在 CPA 管理面板的插件菜单里点 **Wokey** 打开，页面地址是：
+在 CPA 管理面板的插件菜单里点 **Wokey**（`/v0/resource/plugins/wokey/manage`）。
 
-```text
-/v0/resource/plugins/wokey/manage
-```
+- **凭据**：Key 卡片，添加、编辑、启停、删除，选模型，看余额、消费和收益
+- **代理**：常用出口代理列表，编辑 Key 时直接选；可以检测出口 IP、地区和延迟
+- **模型目录**：模型的提供方、上下文、价格，以及在 CPA 里注册的名字
+- **请求日志**：每次调用的模型、状态、首字时间、耗时、Token 和速度，可以用 CPA 日志里的 8 位请求 ID 搜索；只记元数据，不记内容
+- **配置概览**：当前生效的配置
 
-- 从管理面板里打开时复用面板"记住密码"保存的管理密钥；直接打开时手动输入，只保存在页面内存里。
-- **凭据管理** 页：
-  - 顶部一条统计条：可用余额，以及近 24 小时、7 天、30 天消费。余额按账户去重，同一账户的多个 Key 只算一次。有 Key 配了发卡令牌时，可用余额后面多一格"收益"，同一个令牌只算一次，返佣写在下面。
-  - Key 以卡片网格展示（宽屏一行三张，窄屏单列）。每张卡片从上到下依次是：名称（默认是认证文件名，不带 `.json`）、状态、打码后的 Key 和优先级，配了发卡令牌时右上角显示收益；左边是模型、前缀、出口代理和成功 / 失败次数，右边是余额和 24h / 7d / 30d 消费，两边都是 2×2，详情在鼠标悬停提示里（卡片窄时上下排）；下面是限额进度条、备注和状态；底部是查询时间和操作按钮。
-  - 卡片上可以编辑、启用/停用、删除（删除需要 4 秒内再点一次确认）；可以按名称、Key 或文件名搜索。
-  - 打开页面时自动查询所有 Key 的余额（停用的也查），"刷新余额"重新查询全部。查询按出口排队：同一个出口（同一个代理，或同样直连）一次只查一个 Key，这个 Key 的余额、用量和收益依次查完再轮到下一个；不同出口之间同时查。CPA 额度面板发来的查询、保存 Key 时的校验也一起排队。
-- 添加和编辑在弹窗里进行：名称、出口代理（继承 CPA 全局代理 / 直连 / 代理列表里的代理 / 自定义地址）、模型前缀、优先级、发卡令牌，以及"全部模型 / 只注册选中的模型"，选模型时可以搜索、按价格和上下文长度对比。添加 Key 时默认先调用 Wokey 校验 Key 是否有效；名称留空时用认证文件名。
-- 发卡令牌只显示打码后的样子。编辑时留空表示不改，勾选"移除已保存的令牌"才会删掉；填了新令牌会先调用发卡接口校验，通过才保存（添加时勾了"跳过 Key 校验"则不校验）。
-- **代理** 页：管理出口代理列表。
-  - 可以添加、编辑、删除代理。名称留空时用 `主机:端口`；地址只显示隐藏了密码的样子，编辑时地址留空表示不改。
-  - 改了某个代理的地址时，正在用它的 Key（`proxy_url` 和旧地址完全相同）会一起改成新地址。删除代理不影响 Key：用它的 Key 保留原地址，变成"自定义地址"。
-  - 有 Key 用了列表里没有的代理时，可以点"导入 Key 里的代理"一次加进来。
-  - 列表上面固定两行：继承 CPA 全局代理、直连，对应 Key 编辑弹窗里 CPA 内置的两个选项，位置不能改。
-  - 列表里的代理可以按住名称左边的手柄拖动排序（鼠标和触屏都行），也可以聚焦手柄后按 ↑ ↓ 移动；顺序存进 `proxies.json`，Key 编辑弹窗的下拉框也按这个顺序列出。
-  - 检测要手动点"检测"（单个）或"检测全部"，不会自动检测。检测时插件通过这个代理请求 `https://ipinfo.io/json`，失败再试 `https://api.ip.sb/geoip`，User-Agent 用 `curl/8.7.1`；每次检测新建连接，延迟包含连上代理的时间，单个服务超时 10 秒。
-  - 出口列显示国旗和出口 IP，下面是国家和城市（国家名按页面语言显示）；另外两列是延迟和检测时间（本地时间，带日期）。还没检测过的显示"—"。
-  - 每次检测的结果（包括失败）都会保存，下次打开页面直接显示上一次的结果。代理改了地址，旧结果作废；CPA 全局代理变了，"继承"那行的旧结果也不再显示。
-  - 代理列表和检测结果存在 `<data-dir>/proxies.json`（默认 `plugins/wokey-data/proxies.json`，权限 0600，里面有代理的用户名密码）。
-  - 国旗图标来自 [Twemoji](https://github.com/jdecked/twemoji)（CC-BY 4.0），编进插件里，由 `/v0/resource/plugins/wokey/flag.svg?cc=<国家代码>` 提供，不访问外部网站。
-- **模型目录** 页：Wokey 公开模型的提供方、上下文长度、价格，以及每个模型在 CPA 里注册的名字和服务它的 Key 数。
-- **请求日志** 页：经过本插件的每次调用，最新的在前。
-  - 最上面是时间范围：全部、今天、24 小时、近 7 天、近 30 天、自定义（精确到分钟的起止时间，点"应用"生效）。按请求开始时间筛选，选择会记在浏览器里。
-  - 统计条：请求数（成功 / 失败）、输入 / 输出 / 缓存 Token、缓存命中率、生成速度和端到端速度（成功请求的中位数），按当前时间范围和筛选条件统计。
-  - 每行显示时间、模型（和发给 Wokey 的上游模型）、思考强度、结果状态码、凭据（认证文件名，不带 .json）、Wokey 实际返回的模型、首字时间 / 总耗时、Token 用量和两个速度；点开一行能看到 CPA 的请求 ID、接口、是否流式、CPA 的 auth_index、打码的 Key、缓存写入、思考 Token、两个速度，失败的还有错误码、出错阶段（输出前 / 流式中途）和错误信息。
-  - 速度有两种，口径和业内测速工具一致：**生成速度** =（输出 Token − 1）÷（总耗时 − 首字时间），只算流式请求，即 vLLM 的 1 ÷ TPOT、NVIDIA GenAI-Perf 的单用户输出速度；**端到端速度** = 输出 Token ÷ 总耗时，含首字等待，非流式请求也有，即 Artificial Analysis 的 Output Speed、LLMPerf 的单请求吞吐。计时窗口不超过 50 毫秒的不算。
-  - 可以按请求 ID、模型、凭据、认证文件、错误信息或状态码搜索，按成功 / 失败筛选；每页 20 / 50 / 100 / 200 条，可以输入页码跳转；清空需要 3 秒内再点一次确认。
-  - 日志只记录元数据和用量，不记录请求和响应内容。
-- **配置概览** 页：插件配置的当前生效值（可以展开成 YAML）、CPA 的强制前缀开关和全局代理。强制前缀没开时会提示同名模型会进入公共号池。
-- 支持 English / 中文。
+请求日志里有两种速度，统计条取成功请求的中位数：
 
-请求日志存在 SQLite 数据库 `<data-dir>/wokey.db`（默认 `plugins/wokey-data/wokey.db`，WAL 模式，旁边会有 `-wal` 和 `-shm` 文件），查询、筛选和统计都在数据库里做。超过 `log-retention` 条或早于 `log-retention-days` 天的记录会自动删掉。SQLite 用的是 [mattn/go-sqlite3](https://github.com/mattn/go-sqlite3)，随插件一起编译进去，不依赖系统的 libsqlite3。
+- **生成速度** =（输出 Token − 1）÷（总耗时 − 首字时间），只算流式请求，即 vLLM 的 1 ÷ TPOT
+- **端到端速度** = 输出 Token ÷ 总耗时，包含等首字的时间，即 Artificial Analysis 的 Output Speed
 
-从旧版本升级时，原来的 `requests.jsonl` 会在第一次启动时导入数据库，导入成功后删除。
-
-详情里显示完整的请求 ID。CPA 日志和请求日志文件名里用的是它的末 8 位，把这 8 位粘贴进搜索框也能找到对应的记录。CPA 只把请求 ID 交给请求拦截器，所以插件注册了一个拦截器：CPA 选中 Wokey 凭据后，拦截器把请求 ID 放进内部请求头 `X-Wokey-Cpa-Request-Id`，执行器读出来记进日志。这个头不会转发给 Wokey；其他渠道的请求，拦截器不做任何修改。拦截器只读请求头和元数据，不接收请求体，需要 CPA 支持插件协议 schema 7；CPA 版本更老时不注册拦截器，日志里也就没有请求 ID。之前版本写的记录没有请求 ID，显示为"—"。
-
-启用、停用和删除走 CPA 原生的认证文件接口（`PATCH /v0/management/auth-files/status`、`DELETE /v0/management/auth-files?name=...`），和在 CPA 面板里操作效果相同。
+数据都在 `data-dir` 下：`wokey.db`（请求日志，SQLite）和 `proxies.json`（代理列表，含代理密码，权限 0600）。
 
 ## 管理接口
 
-```text
-GET   /v0/resource/plugins/wokey/manage             管理页外壳，无需鉴权，不含数据
-GET   /v0/resource/plugins/wokey/logo.svg           插件 logo，无需鉴权
-GET   /v0/resource/plugins/wokey/flag.svg?cc=hk     国旗图标，无需鉴权
-GET   /v0/management/plugins/wokey/status           插件状态、目录摘要、Key 列表
-GET   /v0/management/plugins/wokey/models           模型目录（价格为每百万 token 美元）
-POST  /v0/management/plugins/wokey/models/refresh   强制重新拉取模型目录
-POST  /v0/management/plugins/wokey/credentials      添加 Key
-PATCH /v0/management/plugins/wokey/credentials      编辑 Key
-GET   /v0/management/plugins/wokey/credentials/quota?auth_index=...   账户余额、Key 消费，以及发卡令牌对应的收益
-GET   /v0/management/plugins/wokey/logs?search=&status=all|success|error&from=&to=&limit=50&offset=0   请求日志（最新的在前）和统计；from / to 是 RFC 3339 时间，按请求开始时间筛选，含 from 不含 to
-DELETE /v0/management/plugins/wokey/logs            清空请求日志
-GET   /v0/management/plugins/wokey/proxies          代理列表（地址隐藏密码、上一次检测结果）和 CPA 全局代理
-POST  /v0/management/plugins/wokey/proxies          添加代理 {"name","url"}
-PATCH /v0/management/plugins/wokey/proxies          修改代理 {"id","name","url"}，改地址时同步改用它的 Key
-DELETE /v0/management/plugins/wokey/proxies?id=...  删除代理，用它的 Key 保留原地址
-POST  /v0/management/plugins/wokey/proxies/import   把 Key 里用到、列表里还没有的代理加进列表
-POST  /v0/management/plugins/wokey/proxies/order    调整代理顺序 {"ids":[...]}
-POST  /v0/management/plugins/wokey/proxies/check    检测出口 IP、国家、城市和延迟并保存结果，{"id"} 或 {"target":"direct"|"inherit"}
-```
+都在 `/v0/management/plugins/wokey/` 下，CPA 先校验管理密钥再转给插件。
 
-`/v0/management` 路由由 CPA 宿主先校验管理密钥，通过后才转发给插件。
+| 接口 | 用途 |
+|---|---|
+| `GET status` | 插件状态和 Key 列表 |
+| `GET models`、`POST models/refresh` | 模型目录、强制重新拉取 |
+| `POST credentials`、`PATCH credentials` | 添加、编辑 Key |
+| `GET credentials/quota?auth_index=` | 余额、消费和收益 |
+| `GET logs`、`DELETE logs` | 查询、清空请求日志 |
+| `GET` / `POST` / `PATCH` / `DELETE proxies`，`POST proxies/import`、`proxies/order`、`proxies/check` | 代理列表 |
 
 ```bash
-# 添加 Key，只注册两个模型，不加前缀
-curl -X POST -H "Authorization: Bearer $MANAGEMENT_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"api_key":"sk-wk-...","models":["claude-opus-5-5","gpt-6-sol"],"prefix":""}' \
-  http://127.0.0.1:8317/v0/management/plugins/wokey/credentials
-
-# 改成注册全部模型、使用默认前缀、走指定代理
-curl -X PATCH -H "Authorization: Bearer $MANAGEMENT_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"auth_index":"<AUTH_INDEX>","models":null,"prefix":null,"proxy_url":"socks5://127.0.0.1:1080"}' \
+curl -X POST -H "Authorization: Bearer $MANAGEMENT_KEY" -H "Content-Type: application/json" \
+  -d '{"api_key":"sk-wk-...","models":["claude-opus-5-5"],"prefix":""}' \
   http://127.0.0.1:8317/v0/management/plugins/wokey/credentials
 ```
 
-添加和编辑 Key 时可以用 `"proxy_id"` 代替 `"proxy_url"`，表示使用代理列表里的那个代理（写入它的地址）。Key 的 `proxy_url` 和列表里某个代理完全相同时，`status` 返回的这个 Key 带 `proxy_id` 和 `proxy_name`。
+编辑只改传了的字段：`null` 恢复默认，`""` 清空。`api_key` 不能改，换 Key 就新增一个再删掉旧的。启停和删除用 CPA 原生的认证文件接口。
 
-编辑接口只修改请求里出现的字段：`null` 表示恢复默认（`models` 恢复为全部模型，`prefix` 恢复为插件默认前缀，`priority` 清除），空字符串表示清除（`label`、`note`、`proxy_url`、`base_url`、`issuer_token`）。`api_key` 不能修改，换 Key 请新增一个再删掉旧的。
+## 构建
 
-## 安全说明
-
-- 读取和修改 Key 的接口都需要 CPA 管理密钥；公开的只有不含数据的页面外壳、logo 和国旗图标。
-- 管理页设置了 `frame-ancestors 'self'`，其他站点不能嵌入。
-- 接口和页面只显示打码后的 Key、打码后的发卡令牌和隐藏了密码的代理地址。
-
-## 本地构建
-
-管理页在 `web/`，用 React + TypeScript + Vite 写，构建成单个 HTML 文件后嵌进插件。需要 Node 20 和 Go：
+需要 Go 和 Node 20：
 
 ```bash
-make web        # 构建管理页，输出到 internal/web/dist/index.html
-make web-test   # 管理页的单元测试
-go test ./...
-CGO_ENABLED=1 go build -buildmode=c-shared \
-  -ldflags '-X main.pluginVersion=0.1.9-dev' \
-  -o wokey.dylib .
+make web    # 构建管理页（web/，React + Vite），嵌进插件
+CGO_ENABLED=1 go build -buildmode=c-shared -o wokey.so .
+make web-test && go test ./...
 ```
 
-Linux 用 `.so`，Windows 用 `.dll`。c-shared 构建会顺带生成一个 C 头文件，宿主用不到它。没执行 `make web` 就构建的话，管理页只是一个提示"尚未构建"的占位页。
+推送 `v*` tag 后，GitHub Actions 跑测试、构建五个平台并发布 Release。
 
-本地调试管理页可以在 `web/` 里运行 `npm run dev`，开发服务器会把管理接口代理到 `VITE_CPA_BASE`（默认 `http://127.0.0.1:8317`）。
+## License
 
-推送 `v*` tag 后，GitHub Actions 会先构建管理页并跑前端测试，再跑 gofmt / vet / test，然后构建五个平台的产物，按插件商店规范打包成 `wokey_<version>_<goos>_<goarch>.zip` 并连同 `checksums.txt` 发布 Release。
+MIT。国旗图标来自 [Twemoji](https://github.com/jdecked/twemoji)（CC-BY 4.0）。
