@@ -192,16 +192,8 @@ func (r *callRecord) finish(perr *pluginabi.Error, phase string) {
 	}
 	entry.InputTokens, entry.OutputTokens = r.usage.input, r.usage.output
 	entry.CachedTokens, entry.CacheWrite, entry.ReasoningTokens = r.usage.cached, r.usage.cacheWrite, r.usage.reasoning
-	if entry.OutputTokens > 0 {
-		from := r.start
-		if !r.first.IsZero() {
-			from = r.first
-		}
-		if seconds := end.Sub(from).Seconds(); seconds > 0.05 {
-			rate := float64(entry.OutputTokens) / seconds
-			entry.TokensPerSecond = &rate
-		}
-	}
+	entry.TokensPerSecond = requestlog.GenerationSpeed(entry.Stream, entry.OutputTokens, entry.DurationMS, entry.TTFTMS)
+	entry.E2ETokensPerSecond = requestlog.E2ESpeed(entry.OutputTokens, entry.DurationMS)
 	if answered := entry.UpstreamStatus >= 200 && entry.UpstreamStatus <= 299; answered {
 		if entry.Stream {
 			frames := r.frames

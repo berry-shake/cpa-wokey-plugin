@@ -241,6 +241,7 @@ header.hero { display: flex; flex-direction: column; align-items: stretch; gap: 
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
 }
+.strip.strip-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .strip-item { min-width: 0; padding: 8px 16px; border-left: 1px solid var(--border-subtle); }
 .strip-item:first-child { border-left: none; }
 .strip-label { font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -640,7 +641,7 @@ footer { margin-top: auto; padding-top: 8px; text-align: center; color: var(--te
 footer a { color: inherit; text-decoration: none; border-bottom: 1px dashed var(--border-strong); }
 footer a:hover { color: var(--text-primary); }
 @media (max-width: 860px) {
-  .summary, .summary.has-earn { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .summary, .summary.has-earn, .summary.strip-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .summary .strip-item:nth-child(odd) { border-left: none; }
   .summary .strip-item:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .summary .strip-item:nth-child(n+3) { border-top: 1px solid var(--border-subtle); }

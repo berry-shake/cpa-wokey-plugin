@@ -28,7 +28,8 @@ function LogSummaryStrip({ t, page }: { t: T; page: LogPage }) {
         note={t("logs.sum.io", { i: fmtTokens(sum.input_tokens), o: fmtTokens(sum.output_tokens), c: fmtTokens(sum.cached_tokens) })}
       />
       <StripItem label={t("logs.sum.cache")} value={fmtPct(sum.cache_hit_rate)} />
-      <StripItem label={t("logs.sum.speed")} value={fmtRate(sum.output_tokens_per_second)} />
+      <StripItem label={t("logs.sum.genSpeed")} value={fmtRate(sum.output_tokens_per_second)} note={t("logs.sum.genNote")} />
+      <StripItem label={t("logs.sum.e2eSpeed")} value={fmtRate(sum.e2e_tokens_per_second)} note={t("logs.sum.e2eNote")} />
     </>
   );
 }
@@ -63,7 +64,7 @@ export function LogsPanel({ t, s }: { t: T; s: State }) {
       <div className="notice" id="logs-error" data-state="error" role="alert" hidden={!(page && page.error)}>
         <span className="notice-text" id="logs-error-text">{page && page.error ? t("logs.storeError", { msg: page.error }) : ""}</span>
       </div>
-      <div className="summary strip" id="logs-summary">{page ? <LogSummaryStrip t={t} page={page} /> : null}</div>
+      <div className="summary strip strip-5" id="logs-summary">{page ? <LogSummaryStrip t={t} page={page} /> : null}</div>
       <section className="card">
         <div className="card-header">
           <div className="card-title">

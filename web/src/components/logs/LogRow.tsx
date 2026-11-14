@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { CredentialView, LogEntry } from "../../api/types";
 import type { T } from "../../i18n";
 import { errorMessage } from "../../api/client";
-import { fmtCount, fmtMS, fmtPct, fmtRate, formatWhen } from "../../lib/format";
+import { fmtCount, fmtMS, fmtPct, fmtRate, fmtRateNum, formatWhen } from "../../lib/format";
 import {
   attemptCount,
   cacheRate,
@@ -27,6 +27,12 @@ function LatLine({ t, kind, ms, outTokens }: { t: T; kind: "ttft" | "total"; ms:
       <strong>{fmtMS(ms)}</strong>
     </div>
   );
+}
+
+/** Both speeds of a row, the unit named once. */
+function speedLine(t: T, e: LogEntry): string {
+  if (e.output_tokens_per_second === undefined && e.e2e_tokens_per_second === undefined) return "—";
+  return t("logs.speedLine", { g: fmtRateNum(e.output_tokens_per_second), e: fmtRateNum(e.e2e_tokens_per_second) });
 }
 
 function Datum({ label, mono, className, children }: { label: string; mono?: boolean; className?: string; children: ReactNode }) {
@@ -194,9 +200,8 @@ export function LogRow({ t, e, creds, locale }: { t: T; e: LogEntry; creds: Cred
           ) : (
             <>
               <div title={t("logs.usageHint")}>{fmtCount(e.input_tokens) + " / " + fmtCount(e.output_tokens)}</div>
-              <div className="sub" title={t("logs.speedHint")}>
-                {t("logs.cacheLine", { c: fmtCount(e.cached_tokens), p: rate === null ? "—" : fmtPct(rate) }) + " · " + fmtRate(e.output_tokens_per_second)}
-              </div>
+              <div className="sub">{t("logs.cacheLine", { c: fmtCount(e.cached_tokens), p: rate === null ? "—" : fmtPct(rate) })}</div>
+              <div className="sub" title={t("logs.speedHint")}>{speedLine(t, e)}</div>
             </>
           )}
         </div>
@@ -233,7 +238,12 @@ export function LogRow({ t, e, creds, locale }: { t: T; e: LogEntry; creds: Cred
 
           <Datum label={t("logs.d.ttft")}>{fmtMS(e.ttft_ms)}</Datum>
           <Datum label={t("logs.d.total")}>{fmtMS(e.duration_ms)}</Datum>
-          <Datum label={t("logs.d.speed")}>{noUsage ? "—" : fmtRate(e.output_tokens_per_second)}</Datum>
+          <Datum label={t("logs.d.speed")}>
+            <span title={t("logs.speedHint")}>
+              {noUsage ? "—" : t("logs.d.genSpeed", { v: fmtRate(e.output_tokens_per_second) })}
+              {noUsage ? null : <span className="datum-note">{t("logs.d.e2eSpeed", { v: fmtRate(e.e2e_tokens_per_second) })}</span>}
+            </span>
+          </Datum>
 
           <Datum label={t("logs.d.input")}>{tokens(e.input_tokens)}</Datum>
           <Datum label={t("logs.d.output")}>{tokens(e.output_tokens)}</Datum>

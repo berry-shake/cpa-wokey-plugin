@@ -28,9 +28,12 @@ type Entry struct {
 	CachedTokens    int64     `json:"cached_tokens"`
 	CacheWrite      int64     `json:"cache_write_tokens,omitempty"`
 	ReasoningTokens int64     `json:"reasoning_tokens,omitempty"`
-	TokensPerSecond *float64  `json:"output_tokens_per_second,omitempty"`
-	ErrorCode       string    `json:"error_code,omitempty"`
-	Error           string    `json:"error,omitempty"`
+	// TokensPerSecond is the generation speed and E2ETokensPerSecond the
+	// end-to-end speed (see GenerationSpeed and E2ESpeed).
+	TokensPerSecond    *float64 `json:"output_tokens_per_second,omitempty"`
+	E2ETokensPerSecond *float64 `json:"e2e_tokens_per_second,omitempty"`
+	ErrorCode          string   `json:"error_code,omitempty"`
+	Error              string   `json:"error,omitempty"`
 	// ErrorPhase is "request" (before any output reached the client) or
 	// "stream" (after output started).
 	ErrorPhase string `json:"error_phase,omitempty"`

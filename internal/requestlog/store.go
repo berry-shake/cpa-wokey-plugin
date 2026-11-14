@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS requests (
 	finish_reason      TEXT    NOT NULL DEFAULT '',
 	frames             INTEGER,
 	last_frame_ms      INTEGER,
-	usage_reported     INTEGER
+	usage_reported     INTEGER,
+	e2e_tokens_per_second REAL
 );
 CREATE INDEX IF NOT EXISTS requests_time ON requests(time_ms);
 `
@@ -79,7 +80,7 @@ const requestColumns = `time_ms, endpoint, model, upstream_model, served_model, 
 	credential, auth_id, duration_ms, ttft_ms, input_tokens, output_tokens, cached_tokens, cache_write_tokens,
 	reasoning_tokens, tokens_per_second, error_code, error, error_phase, request_id,
 	client_path, user_agent, auth_index, egress, upstream_status, upstream_request_id, retry_after, finish_reason,
-	frames, last_frame_ms, usage_reported`
+	frames, last_frame_ms, usage_reported, e2e_tokens_per_second`
 
 // attemptsColumn counts the entries of the same CPA request.
 const attemptsColumn = `CASE WHEN request_id = '' THEN 1 ELSE (SELECT COUNT(*) FROM requests AS same WHERE same.request_id = requests.request_id) END`
@@ -101,6 +102,7 @@ var requestMigrations = []struct{ column, ddl string }{
 	{"frames", `ALTER TABLE requests ADD COLUMN frames INTEGER`},
 	{"last_frame_ms", `ALTER TABLE requests ADD COLUMN last_frame_ms INTEGER`},
 	{"usage_reported", `ALTER TABLE requests ADD COLUMN usage_reported INTEGER`},
+	{"e2e_tokens_per_second", `ALTER TABLE requests ADD COLUMN e2e_tokens_per_second REAL`},
 }
 
 // requestSearchColumns are matched by the search box.
@@ -286,9 +288,12 @@ func (l *Log) importLegacyLocked() {
 }
 
 func insertArgs(e Entry) []any {
-	var rate, reported any
+	var rate, e2e, reported any
 	if e.TokensPerSecond != nil {
 		rate = *e.TokensPerSecond
+	}
+	if e.E2ETokensPerSecond != nil {
+		e2e = *e.E2ETokensPerSecond
 	}
 	if e.UsageReported != nil {
 		reported = boolInt(*e.UsageReported)
@@ -297,7 +302,7 @@ func insertArgs(e Entry) []any {
 		e.Credential, e.AuthID, e.DurationMS, nullInt(e.TTFTMS), e.InputTokens, e.OutputTokens, e.CachedTokens, e.CacheWrite,
 		e.ReasoningTokens, rate, e.ErrorCode, e.Error, e.ErrorPhase, e.RequestID,
 		e.ClientPath, e.UserAgent, e.AuthIndex, e.Egress, e.UpstreamStatus, e.UpstreamRequestID, e.RetryAfter, e.FinishReason,
-		nullInt(e.Frames), nullInt(e.LastFrameMS), reported}
+		nullInt(e.Frames), nullInt(e.LastFrameMS), reported, e2e}
 }
 
 func boolInt(v bool) int {
@@ -421,14 +426,18 @@ type Query struct {
 
 // Summary totals every entry matching a query.
 type Summary struct {
-	Requests        int      `json:"requests"`
-	Success         int      `json:"success"`
-	Failed          int      `json:"failed"`
-	InputTokens     int64    `json:"input_tokens"`
-	OutputTokens    int64    `json:"output_tokens"`
-	CachedTokens    int64    `json:"cached_tokens"`
-	CacheHitRate    *float64 `json:"cache_hit_rate"`
-	TokensPerSecond *float64 `json:"output_tokens_per_second"`
+	Requests     int      `json:"requests"`
+	Success      int      `json:"success"`
+	Failed       int      `json:"failed"`
+	InputTokens  int64    `json:"input_tokens"`
+	OutputTokens int64    `json:"output_tokens"`
+	CachedTokens int64    `json:"cached_tokens"`
+	CacheHitRate *float64 `json:"cache_hit_rate"`
+	// TokensPerSecond and E2ETokensPerSecond are the medians of the
+	// generation and end-to-end speeds of the successful entries (see
+	// GenerationSpeed and E2ESpeed); nil when none has one.
+	TokensPerSecond    *float64 `json:"output_tokens_per_second"`
+	E2ETokensPerSecond *float64 `json:"e2e_tokens_per_second"`
 }
 
 // Page is one page of query results.
@@ -488,9 +497,8 @@ func (l *Log) Query(q Query) Page {
 	}
 	where, args := q.where()
 	var success, input, output, cached sql.NullInt64
-	var rate sql.NullFloat64
-	errSum := db.QueryRow(`SELECT COUNT(*), SUM(status = 'success'), SUM(input_tokens), SUM(output_tokens), SUM(cached_tokens), AVG(tokens_per_second) FROM requests`+where, args...).
-		Scan(&page.Total, &success, &input, &output, &cached, &rate)
+	errSum := db.QueryRow(`SELECT COUNT(*), SUM(status = 'success'), SUM(input_tokens), SUM(output_tokens), SUM(cached_tokens) FROM requests`+where, args...).
+		Scan(&page.Total, &success, &input, &output, &cached)
 	if errSum != nil {
 		page.Error = "read request log: " + errSum.Error()
 		return page
@@ -503,8 +511,13 @@ func (l *Log) Query(q Query) Page {
 		hit := float64(sum.CachedTokens) / float64(sum.InputTokens)
 		sum.CacheHitRate = &hit
 	}
-	if rate.Valid {
-		sum.TokensPerSecond = &rate.Float64
+	var errMedian error
+	if sum.TokensPerSecond, errMedian = medianSpeed(db, "tokens_per_second", where, args); errMedian == nil {
+		sum.E2ETokensPerSecond, errMedian = medianSpeed(db, "e2e_tokens_per_second", where, args)
+	}
+	if errMedian != nil {
+		page.Error = "read request log: " + errMedian.Error()
+		return page
 	}
 	limit := q.Limit
 	if limit <= 0 || limit > 500 {
@@ -536,12 +549,12 @@ func scanEntry(rows *sql.Rows) (Entry, error) {
 	var id, timeMS int64
 	var stream int
 	var ttft, frames, lastFrame, reported sql.NullInt64
-	var rate sql.NullFloat64
+	var rate, e2e sql.NullFloat64
 	errScan := rows.Scan(&id, &timeMS, &e.Endpoint, &e.Model, &e.UpstreamModel, &e.ServedModel, &e.ReasoningEffort, &stream, &e.Status, &e.HTTPStatus,
 		&e.Credential, &e.AuthID, &e.DurationMS, &ttft, &e.InputTokens, &e.OutputTokens, &e.CachedTokens, &e.CacheWrite,
 		&e.ReasoningTokens, &rate, &e.ErrorCode, &e.Error, &e.ErrorPhase, &e.RequestID,
 		&e.ClientPath, &e.UserAgent, &e.AuthIndex, &e.Egress, &e.UpstreamStatus, &e.UpstreamRequestID, &e.RetryAfter, &e.FinishReason,
-		&frames, &lastFrame, &reported, &e.Attempts)
+		&frames, &lastFrame, &reported, &e2e, &e.Attempts)
 	if errScan != nil {
 		return e, errScan
 	}
@@ -556,5 +569,33 @@ func scanEntry(rows *sql.Rows) (Entry, error) {
 	if rate.Valid {
 		e.TokensPerSecond = &rate.Float64
 	}
+	if e2e.Valid {
+		e.E2ETokensPerSecond = &e2e.Float64
+	}
 	return e, nil
+}
+
+// medianSpeed is the median of a speed column over the successful entries
+// a query matches; nil when none has the speed.
+func medianSpeed(db *sql.DB, column, where string, args []any) (*float64, error) {
+	cond := column + " IS NOT NULL AND status = 'success'"
+	if where == "" {
+		where = " WHERE " + cond
+	} else {
+		where += " AND " + cond
+	}
+	var n int
+	if errCount := db.QueryRow(`SELECT COUNT(*) FROM requests`+where, args...).Scan(&n); errCount != nil {
+		return nil, errCount
+	}
+	if n == 0 {
+		return nil, nil
+	}
+	// The middle value, or the mean of the two middle values.
+	var median float64
+	errMedian := db.QueryRow(`SELECT AVG(v) FROM (SELECT `+column+` AS v FROM requests`+where+` ORDER BY `+column+` LIMIT ? OFFSET ?)`, append(append([]any(nil), args...), 2-n%2, (n-1)/2)...).Scan(&median)
+	if errMedian != nil {
+		return nil, errMedian
+	}
+	return &median, nil
 }

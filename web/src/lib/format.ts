@@ -54,6 +54,11 @@ export function fmtRate(v: number | null | undefined): string {
   return v === null || v === undefined ? "—" : Math.round(v).toLocaleString() + " t/s";
 }
 
+/** A speed without its unit, for lines that name the unit once. */
+export function fmtRateNum(v: number | null | undefined): string {
+  return v === null || v === undefined ? "—" : Math.round(v).toLocaleString();
+}
+
 export function fmtCount(n: unknown): string {
   return (Number(n) || 0).toLocaleString();
 }

@@ -167,7 +167,10 @@ export interface LogEntry {
   cached_tokens: number;
   cache_write_tokens?: number;
   reasoning_tokens?: number;
+  /** Generation speed: (output − 1) ÷ (total − TTFT); streams only. */
   output_tokens_per_second?: number;
+  /** End-to-end speed: output ÷ total, the wait for the first token included. */
+  e2e_tokens_per_second?: number;
   error_code?: string;
   error?: string;
   error_phase?: string;
@@ -198,7 +201,9 @@ export interface LogSummary {
   output_tokens: number;
   cached_tokens: number;
   cache_hit_rate: number | null;
+  /** Medians of the two speeds over the successful requests. */
   output_tokens_per_second: number | null;
+  e2e_tokens_per_second: number | null;
 }
 
 export interface LogPage {
