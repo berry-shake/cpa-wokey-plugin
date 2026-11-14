@@ -146,7 +146,7 @@ curl -X POST -H "Authorization: Bearer $MANAGEMENT_KEY" -H "Content-Type: applic
 
 ## 构建
 
-需要 Go 和 Node 20：
+需要 Go 和 Node 20。各供应商插件共用的代码（Go 和管理页的公共部分）在 [cpa-provider-core](https://github.com/berry-shake/cpa-provider-core)，版本跟着 `go.mod` 走；`make web` 会先把它的公共前端拷到 `web/src/core/`。要同时改 core，用 `go.work` 把本地的 core 加进来，或者设 `CPA_PROVIDER_CORE_DIR` 指向它。
 
 ```bash
 make web    # 构建管理页（web/，React + Vite），嵌进插件
