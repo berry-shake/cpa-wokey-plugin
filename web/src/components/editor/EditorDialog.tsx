@@ -235,7 +235,7 @@ export function EditorDialog({ t, s }: { t: T; s: State }) {
               />
               <label className="check">
                 <input type="checkbox" id="f-prefix-default" checked={ed.prefixDefault} onChange={(event) => store.setPrefixDefault(event.target.checked)} />{" "}
-                <span id="f-prefix-default-label">{dp ? t("form.prefixDefault", { prefix: dp + "/" }) : t("form.prefixDefaultNone")}</span>
+                <span id="f-prefix-default-label">{dp ? t("form.prefixDefault", { prefix: dp }) : t("form.prefixDefaultNone")}</span>
               </label>
               <span className="help">{t("form.prefixHelp")}</span>
             </div>

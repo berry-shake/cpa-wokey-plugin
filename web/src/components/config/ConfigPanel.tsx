@@ -33,7 +33,7 @@ export function configRows(t: T, data: StatusView): KV[] {
   return [
     { label: t("cfg.version"), value: data.version || "—" },
     { label: t("cfg.baseURL"), value: cfg.base_url || "—", mono: true },
-    { label: t("cfg.prefix"), value: prefix ? prefix + "/" : t("prefix.none"), mono: !!prefix, sub: t("cfg.prefixSub") },
+    { label: t("cfg.prefix"), value: prefix || t("prefix.none"), mono: !!prefix, sub: t("cfg.prefixSub") },
     { label: t("cfg.refresh"), value: minutes > 0 ? t("cfg.refreshValue", { n: minutes }) : t("cfg.refreshOff") },
     { label: t("cfg.timeout"), value: cfg.request_timeout_seconds ? t("cfg.seconds", { n: cfg.request_timeout_seconds }) : "—" },
     { label: t("cfg.streamIdle"), value: cfg.stream_idle_timeout_seconds ? t("cfg.seconds", { n: cfg.stream_idle_timeout_seconds }) : "—" },
