@@ -189,15 +189,21 @@ func (a *Adapter) QuotaError(info any) *pluginabi.Error {
 	account, _ := info.(AccountInfo)
 	switch {
 	case account.Balance == nil:
-		return &pluginabi.Error{Code: "balance_unavailable", Message: "wokey: read balance: " + orUnknown(account.BalanceError), HTTPStatus: http.StatusBadGateway}
+		return &pluginabi.Error{Code: "balance_unavailable", Message: errorPrefix + "read balance: " + reason(account.BalanceError), HTTPStatus: http.StatusBadGateway}
 	case account.Key == nil:
-		return &pluginabi.Error{Code: "usage_unavailable", Message: "wokey: read key usage: " + orUnknown(account.KeyError), HTTPStatus: http.StatusBadGateway}
+		return &pluginabi.Error{Code: "usage_unavailable", Message: errorPrefix + "read key usage: " + reason(account.KeyError), HTTPStatus: http.StatusBadGateway}
 	}
 	return nil
 }
 
-func orUnknown(message string) string {
-	if strings.TrimSpace(message) == "" {
+// errorPrefix starts the plugin's error messages.
+const errorPrefix = ProviderID + ": "
+
+// reason is a failed call's error message without the prefix it already
+// carries, or "no answer".
+func reason(message string) string {
+	message = strings.TrimSpace(strings.TrimPrefix(message, errorPrefix))
+	if message == "" {
 		return "no answer"
 	}
 	return message

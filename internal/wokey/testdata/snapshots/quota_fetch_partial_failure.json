@@ -144,7 +144,7 @@
           "ok": false,
           "error": {
             "code": "balance_unavailable",
-            "message": "wokey: read balance: wokey: balance service down",
+            "message": "wokey: read balance: balance service down",
             "http_status": 502
           }
         }

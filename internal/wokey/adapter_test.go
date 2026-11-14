@@ -154,7 +154,7 @@ func TestFetchAccountFailures(t *testing.T) {
 		t.Fatalf("one failing endpoint = %+v %v %+v", account, complete, perr)
 	}
 	if qerr := a.QuotaError(account); qerr == nil || qerr.Code != "balance_unavailable" || qerr.HTTPStatus != http.StatusBadGateway ||
-		qerr.Message != "wokey: read balance: wokey: dashboard scope required" {
+		qerr.Message != "wokey: read balance: dashboard scope required" {
 		t.Fatalf("quota error = %+v", qerr)
 	}
 	// Both failing returns the key endpoint's error.
