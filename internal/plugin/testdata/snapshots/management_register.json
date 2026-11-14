@@ -7,7 +7,8 @@
       "base-url": "{{UPSTREAM}}",
       "data-dir": "{{DATA_DIR}}"
     },
-    "credentials": []
+    "credentials": [],
+    "drop_queued_refresh": true
   },
   "upstream_script": [],
   "steps": [

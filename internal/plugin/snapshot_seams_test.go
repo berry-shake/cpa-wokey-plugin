@@ -1,38 +1,58 @@
 package plugin
 
-import "time"
+import (
+	"net/url"
+	"testing"
+	"time"
+)
 
-// Every access the RPC snapshot runner (snapshot_test.go) makes to the
-// plugin's unexported internals lives in this file, so the runner can be
-// pointed at a refactored plugin by rewriting only these functions.
+// Snapshot seams: the only place the RPC snapshot tests reach into the
+// Service's unexported state. Everything else drives the plugin through
+// Service.Call and the host callbacks.
 
-// snapshotClock is the plugin clock during snapshot runs: status "now",
-// catalog fetched_at/checked_at, auth NextRefreshAfter, quota fetched_at and
-// egress check checked_at all read it.
-var snapshotClock = time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+// snapshotProviderID is the auth provider the fake host parses files for.
+const snapshotProviderID = ProviderID
 
-// seamRefreshTickMethod is the pseudo RPC method a snapshot step uses to run
-// one iteration of the background catalog loop synchronously.
+// snapshotConcurrentPaths are the upstream routes the plugin calls
+// concurrently; Wokey has none.
+var snapshotConcurrentPaths []string
+
+// snapshotIssuerPath is where the issuing API lives on the scripted
+// upstream.
+const snapshotIssuerPath = "/api/issuer/v1"
+
+// snapshotIdleTimeout bounds the wait for stream pumps after a step.
+const snapshotIdleTimeout = 10 * time.Second
+
+// seamRefreshTickMethod is the pseudo RPC method a step uses to run one
+// iteration of the background catalog loop synchronously.
 const seamRefreshTickMethod = "seam.refresh_tick"
 
-// seamPrepare wires a fresh service for a snapshot run, before the first RPC:
-//   - pins the plugin clock;
-//   - points the issuing API (not configurable) and the egress check lookups
-//     (public IP services) at the scripted upstream;
-//   - keeps the background catalog loop from starting, so plugin.register
-//     does not fetch the catalog at a random moment; steps drive the loop
-//     with seamRefreshTickMethod instead.
-func seamPrepare(svc *Service, upstream string) {
+// snapshotNewService builds the service the way main.go does, then pins the
+// clock, keeps plugin.register from starting the catalog refresh loop and
+// points the egress check at the fake upstream. The issuing API is not
+// configurable; it is put on the same fake upstream as the egress check.
+func snapshotNewService(version string, host HostCaller, egressCheckURLs []string) *Service {
+	svc := New(version, host)
 	svc.now = func() time.Time { return snapshotClock }
-	svc.issuerBase = upstream + testIssuerPath
-	svc.egressCheckURLs = []string{upstream + "/ipinfo"}
 	svc.loopOnce.Do(func() {})
+	svc.egressCheckURLs = append([]string(nil), egressCheckURLs...)
+	if len(egressCheckURLs) > 0 {
+		if upstream, errParse := url.Parse(egressCheckURLs[0]); errParse == nil {
+			svc.issuerBase = upstream.Scheme + "://" + upstream.Host + snapshotIssuerPath
+		}
+	}
+	return svc
 }
 
-// seamRefreshTick runs what one background loop iteration runs (a catalog
-// refresh honouring the cached ETag, then re-registration of stale auth
-// files) and reports it as an RPC envelope.
-func seamRefreshTick(svc *Service) []byte {
+// snapshotCall sends one step's RPC. The pseudo-method seam.refresh_tick
+// runs what one background loop iteration runs (a catalog refresh honouring
+// the cached ETag, then re-registration of stale auth files) and reports it
+// as an RPC envelope.
+func snapshotCall(svc *Service, method string, request []byte) []byte {
+	if method != seamRefreshTickMethod {
+		return svc.Call(method, request)
+	}
 	snapshot, errRefresh := svc.refreshCatalog(false)
 	if errRefresh != nil {
 		return ErrorEnvelope("refresh_failed", errRefresh.Error())
@@ -40,8 +60,40 @@ func seamRefreshTick(svc *Service) []byte {
 	return okEnvelope(map[string]any{"revision": snapshot.Revision, "models": len(snapshot.Models)})
 }
 
-// seamWaitBackground waits until every stream pump has finished: emitted
-// its chunks, closed the host stream and written its request log row.
-func seamWaitBackground(svc *Service, timeout time.Duration) bool {
-	return svc.streams.waitTimeout(timeout)
+// snapshotDropQueuedRefresh discards a queued catalog refresh without
+// running it.
+func snapshotDropQueuedRefresh(svc *Service) {
+	select {
+	case <-svc.kick:
+	default:
+	}
+}
+
+// snapshotRunQueuedRefresh runs, synchronously, the refresh the background
+// loop would run for a queued kick, and reports whether one was queued.
+func snapshotRunQueuedRefresh(svc *Service) bool {
+	select {
+	case <-svc.kick:
+		_, _ = svc.refreshCatalog(false)
+		return true
+	default:
+		return false
+	}
+}
+
+// snapshotWaitIdle blocks until every background stream pump has closed its
+// host stream and written its request log entry.
+func snapshotWaitIdle(svc *Service) {
+	if !svc.streams.waitTimeout(snapshotIdleTimeout) {
+		panic("snapshot: stream pumps did not finish within " + snapshotIdleTimeout.String())
+	}
+}
+
+// snapshotSkeletons are the generated inputs of the cases.
+func snapshotSkeletons(t *testing.T) []snapshotFixture {
+	var out []snapshotFixture
+	for _, c := range snapshotCases() {
+		out = append(out, c.fixture(t))
+	}
+	return out
 }

@@ -1,8 +1,6 @@
 package plugin
 
 import (
-	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -10,6 +8,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
+	"gopkg.in/yaml.v3"
 )
 
 // snapshotCases seeds the inputs of RPC snapshot fixtures that do not exist
@@ -65,8 +64,10 @@ type snapshotCaseDef struct {
 	// config is the plugin config subtree; nil means snapConfig().
 	config      map[string]any
 	credentials []snapCred
-	script      []scriptedReply
+	script      []snapshotReply
 	steps       []snapStepDef
+	// dropQueuedRefresh drops the catalog refresh a step queues.
+	dropQueuedRefresh bool
 }
 
 type snapCred struct {
@@ -78,9 +79,6 @@ type snapStepDef struct {
 	method  string
 	request any
 }
-
-// snapRawRequest is a step request that is already in fixture form.
-type snapRawRequest json.RawMessage
 
 func snapConfig() map[string]any {
 	return map[string]any{"base-url": "{{UPSTREAM}}", "data-dir": "{{DATA_DIR}}"}
@@ -95,12 +93,12 @@ func (def snapshotCaseDef) fixture(t *testing.T) snapshotFixture {
 	fixture := snapshotFixture{
 		Case:           def.name,
 		Description:    def.description,
-		Setup:          snapshotSetup{Version: snapVersion, Config: snapMarshal(t, config), Credentials: []snapshotCredential{}},
-		UpstreamScript: []scriptedReply{},
+		Setup:          snapshotSetup{Version: snapVersion, Config: snapshotCaseJSON(t, config), Credentials: []snapshotCredential{}, DropQueuedRefresh: def.dropQueuedRefresh},
+		UpstreamScript: []snapshotReply{},
 		Steps:          []snapshotStep{},
 	}
 	for _, cred := range def.credentials {
-		fixture.Setup.Credentials = append(fixture.Setup.Credentials, snapshotCredential{Name: cred.name, Fields: snapMarshal(t, cred.fields)})
+		fixture.Setup.Credentials = append(fixture.Setup.Credentials, snapshotCredential{Name: cred.name, Fields: snapshotCaseJSON(t, cred.fields)})
 	}
 	for _, reply := range def.script {
 		if reply.Header == nil {
@@ -112,36 +110,9 @@ func (def snapshotCaseDef) fixture(t *testing.T) snapshotFixture {
 		fixture.UpstreamScript = append(fixture.UpstreamScript, reply)
 	}
 	for _, step := range def.steps {
-		if raw, ok := step.request.(snapRawRequest); ok {
-			fixture.Steps = append(fixture.Steps, snapshotStep{RPC: snapshotRPC{Method: step.method, Request: json.RawMessage(raw)}})
-			continue
-		}
-		wire := snapMarshal(t, step.request)
-		node, errParse := parseJSON(wire)
-		if errParse != nil {
-			t.Fatalf("%s: %v", def.name, errParse)
-		}
-		decodeBytesFields(node)
-		form := node.bytes()
-		back, _ := parseJSON(form)
-		encodeBytesFields(back)
-		if !bytes.Equal(back.bytes(), wire) {
-			t.Fatalf("%s: %s request does not survive the fixture form:\n%s\n%s", def.name, step.method, wire, back.bytes())
-		}
-		fixture.Steps = append(fixture.Steps, snapshotStep{RPC: snapshotRPC{Method: step.method, Request: form}})
+		fixture.Steps = append(fixture.Steps, snapshotStep{RPC: snapshotRPC{Method: step.method, Request: snapshotCaseJSON(t, step.request)}})
 	}
 	return fixture
-}
-
-func snapMarshal(t *testing.T, v any) json.RawMessage {
-	t.Helper()
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	if errEncode := enc.Encode(v); errEncode != nil {
-		t.Fatalf("marshal: %v", errEncode)
-	}
-	return bytes.TrimSuffix(buf.Bytes(), []byte("\n"))
 }
 
 // ---- builders --------------------------------------------------------------
@@ -167,8 +138,8 @@ const (
 
 var snapK1 = snapCred{name: "k1.json", fields: map[string]any{"type": "wokey", "api_key": snapKey1, "label": "primary"}}
 
-// snapK1Storage is k1.json as CPA stores it (the fake host marshals the
-// seeded fields with sorted keys).
+// snapK1Storage is k1.json as CPA stores it (the seeded fields are written
+// with sorted keys).
 const snapK1Storage = `{"api_key":"` + snapKey1 + `","label":"primary","type":"wokey"}`
 
 func snapK1Metadata() map[string]any {
@@ -192,19 +163,19 @@ func snapQuery(pairs ...string) url.Values {
 	return values
 }
 
-func snapReply(method, path string, status int, body string, header ...string) scriptedReply {
-	return scriptedReply{Method: method, Path: path, Status: status, Header: snapHeader(header...), Body: body}
+func snapReply(method, path string, status int, body string, header ...string) snapshotReply {
+	return snapshotReply{Method: method, Path: path, Status: status, Header: snapHeader(header...), Body: body}
 }
 
-func snapJSONReply(method, path string, status int, body string, header ...string) scriptedReply {
+func snapJSONReply(method, path string, status int, body string, header ...string) snapshotReply {
 	return snapReply(method, path, status, body, append([]string{"Content-Type", "application/json"}, header...)...)
 }
 
-func snapStreamReply(path string, chunks []string, header ...string) scriptedReply {
-	return scriptedReply{Method: http.MethodPost, Path: path, Status: http.StatusOK, Header: snapHeader(append([]string{"Content-Type", "text/event-stream", "Cache-Control", "no-cache"}, header...)...), Chunks: chunks}
+func snapStreamReply(path string, chunks []string, header ...string) snapshotReply {
+	return snapshotReply{Method: http.MethodPost, Path: path, Status: http.StatusOK, Header: snapHeader(append([]string{"Content-Type", "text/event-stream", "Cache-Control", "no-cache"}, header...)...), Chunks: chunks}
 }
 
-func snapCatalogReply(body, etag string) scriptedReply {
+func snapCatalogReply(body, etag string) snapshotReply {
 	return snapJSONReply(http.MethodGet, "/v1/models", http.StatusOK, body, "Etag", etag)
 }
 
@@ -413,7 +384,7 @@ func snapExecCases() []snapshotCaseDef {
 			name:        "exec_chat_nonstream",
 			description: "Chat completions, buffered: model rewrite, forwarded and stripped headers, filtered response headers, usage.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodPost, "/v1/chat/completions", http.StatusOK, snapChatBody, "X-Request-Id", "wk-req-chat-1", "X-Internal-Trace", "not-forwarded"),
 			},
 			steps: []snapStepDef{
@@ -424,7 +395,7 @@ func snapExecCases() []snapshotCaseDef {
 			name:        "exec_chat_stream",
 			description: "Chat completions stream over the host stream bridge: include_usage added, keepalive dropped, [DONE] kept.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapStreamReply("/v1/chat/completions", snapChatStream(), "X-Request-Id", "wk-req-chat-2"),
 			},
 			steps: []snapStepDef{
@@ -435,7 +406,7 @@ func snapExecCases() []snapshotCaseDef {
 			name:        "exec_chat_stream_no_bridge",
 			description: "Chat completions stream without a stream_id: the whole stream comes back as chunks in the RPC response.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapStreamReply("/v1/chat/completions", snapChatStream()),
 			},
 			steps: []snapStepDef{
@@ -446,7 +417,7 @@ func snapExecCases() []snapshotCaseDef {
 			name:        "exec_responses_nonstream",
 			description: "Responses API, buffered, with reasoning effort and usage.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodPost, "/v1/responses", http.StatusOK, snapResponsesBody, "Request-Id", "wk-req-resp-1"),
 			},
 			steps: []snapStepDef{
@@ -457,7 +428,7 @@ func snapExecCases() []snapshotCaseDef {
 			name:        "exec_responses_stream",
 			description: "Responses API stream: prelude held until output, terminal response.completed with usage.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapStreamReply("/v1/responses", snapResponsesStream(true)),
 			},
 			steps: []snapStepDef{
@@ -468,7 +439,7 @@ func snapExecCases() []snapshotCaseDef {
 			name:        "exec_messages_nonstream",
 			description: "Anthropic Messages, buffered: Anthropic-Beta/Version and X-End-User-Id forwarded, thinking budget, cache usage.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodPost, "/v1/messages", http.StatusOK, snapMessagesBody, "Request-Id", "wk-req-msg-1"),
 			},
 			steps: []snapStepDef{
@@ -479,7 +450,7 @@ func snapExecCases() []snapshotCaseDef {
 			name:        "exec_messages_stream",
 			description: "Anthropic Messages stream without client Anthropic headers: default Anthropic-Version, ping held in the prelude.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapStreamReply("/v1/messages", snapMessagesStream(), "Request-Id", "wk-req-msg-2"),
 			},
 			steps: []snapStepDef{
@@ -490,7 +461,7 @@ func snapExecCases() []snapshotCaseDef {
 			name:        "exec_request_interceptor",
 			description: "Request interceptor: only auths seen as Wokey credentials get CPA's request ID; the header never reaches Wokey.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodPost, "/v1/chat/completions", http.StatusOK, snapChatBody),
 			},
 			steps: []snapStepDef{
@@ -514,7 +485,7 @@ func snapErrorCases() []snapshotCaseDef {
 			name:        "error_400",
 			description: "Upstream 400 with an OpenAI-style error body keeps its status and code.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodPost, "/v1/chat/completions", http.StatusBadRequest, `{"error":{"message":"max_tokens is too large","type":"invalid_request_error","code":"invalid_value"}}`, "X-Request-Id", "wk-req-400"),
 			},
 			steps: []snapStepDef{snapExecStep(chat)},
@@ -523,7 +494,7 @@ func snapErrorCases() []snapshotCaseDef {
 			name:        "error_401",
 			description: "Upstream 401 keeps its status so CPA cools the key down.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodPost, "/v1/chat/completions", http.StatusUnauthorized, snapInvalidKey),
 			},
 			steps: []snapStepDef{snapExecStep(chat)},
@@ -532,7 +503,7 @@ func snapErrorCases() []snapshotCaseDef {
 			name:        "error_403_request_blocked",
 			description: "403 request_blocked (Anthropic error shape) and model_denylisted become 400; an account-level 403 stays 403.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodPost, "/v1/messages", http.StatusForbidden, `{"type":"error","error":{"type":"request_blocked","message":"request blocked by policy"}}`),
 				snapJSONReply(http.MethodPost, "/v1/messages", http.StatusForbidden, `{"error":{"code":"model_denylisted","message":"model-a is not allowed for this key"}}`),
 				snapJSONReply(http.MethodPost, "/v1/messages", http.StatusForbidden, `{"error":{"code":"account_suspended","message":"account suspended"}}`),
@@ -543,7 +514,7 @@ func snapErrorCases() []snapshotCaseDef {
 			name:        "error_429_retry_after",
 			description: "429 with Retry-After, buffered and as a synchronous stream error.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodPost, "/v1/chat/completions", http.StatusTooManyRequests, `{"error":{"code":"rate_limit_exceeded","message":"slow down"}}`, "Retry-After", "17", "X-Request-Id", "wk-req-429"),
 				snapJSONReply(http.MethodPost, "/v1/chat/completions", http.StatusTooManyRequests, `{"error":{"code":"rate_limit_exceeded","message":"slow down"}}`, "Retry-After", "3"),
 			},
@@ -553,7 +524,7 @@ func snapErrorCases() []snapshotCaseDef {
 			name:        "error_500",
 			description: "Upstream 500 is retryable; 404 becomes 400 and 529 becomes 503.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodPost, "/v1/chat/completions", http.StatusInternalServerError, `{"error":{"message":"internal error","type":"server_error"}}`),
 				snapJSONReply(http.MethodPost, "/v1/chat/completions", http.StatusNotFound, `{"error":{"code":"model_not_found","message":"no such model"}}`),
 				snapJSONReply(http.MethodPost, "/v1/chat/completions", 529, `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`),
@@ -564,7 +535,7 @@ func snapErrorCases() []snapshotCaseDef {
 			name:        "error_plain_text",
 			description: "A plain-text error body becomes the message.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapReply(http.MethodPost, "/v1/chat/completions", http.StatusBadGateway, "upstream exploded\n", "Content-Type", "text/plain; charset=utf-8"),
 			},
 			steps: []snapStepDef{snapExecStep(chat)},
@@ -573,7 +544,7 @@ func snapErrorCases() []snapshotCaseDef {
 			name:        "error_string_error_body",
 			description: `A {"error":"msg"} body: the string is the message.`,
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodPost, "/v1/chat/completions", http.StatusBadRequest, `{"error":"messages must not be empty"}`),
 			},
 			steps: []snapStepDef{snapExecStep(chat)},
@@ -582,7 +553,7 @@ func snapErrorCases() []snapshotCaseDef {
 			name:        "error_stream_mid_way",
 			description: "An error event after output started is passed to the client as is and the stream closes normally.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapStreamReply("/v1/messages", append(snapMessagesStart(), snapSSE("error", `{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}`))),
 			},
 			steps: []snapStepDef{
@@ -594,7 +565,7 @@ func snapErrorCases() []snapshotCaseDef {
 			name:        "error_stream_before_output",
 			description: "An error inside the stream before any output closes the stream with a mapped error (429 + Retry-After).",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapStreamReply("/v1/chat/completions", []string{
 					snapChatChunk(`{"role":"assistant","content":""}`, "null", ""),
 					snapSSE("", `{"error":{"code":"rate_limit_exceeded","message":"slow down"}}`),
@@ -606,7 +577,7 @@ func snapErrorCases() []snapshotCaseDef {
 			name:        "error_stream_truncated",
 			description: "A Responses stream that ends without response.completed closes with stream_truncated.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapStreamReply("/v1/responses", snapResponsesStream(false)),
 			},
 			steps: []snapStepDef{
@@ -644,7 +615,7 @@ func snapCatalogCases() []snapshotCaseDef {
 			name:        "catalog_model_rpcs",
 			description: "model.static, then model.for_auth loading the catalog once, for all models and for a selection with a missing model.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapCatalogReply(snapCatalogV1, `"cat-v1"`),
 			},
 			steps: []snapStepDef{
@@ -657,7 +628,7 @@ func snapCatalogCases() []snapshotCaseDef {
 			name:        "catalog_refresh_etag",
 			description: "Catalog load with ETag, background tick answered 304, forced refresh with a changed catalog re-registering the auth file, then 304 again.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapCatalogReply(snapCatalogV1, `"cat-v1"`),
 				snapReply(http.MethodGet, "/v1/models", http.StatusNotModified, "", "Etag", `"cat-v1"`),
 				snapCatalogReply(snapCatalogV2, `"cat-v2"`),
@@ -675,7 +646,7 @@ func snapCatalogCases() []snapshotCaseDef {
 			name:        "catalog_unknown_prefix",
 			description: "UpstreamID: the auth prefix and unknown prefixes are dropped, catalog IDs pass, a thinking suffix is stripped.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapCatalogReply(snapCatalogV1, `"cat-v1"`),
 				snapJSONReply(http.MethodPost, "/v1/chat/completions", http.StatusOK, snapChatBody),
 				snapJSONReply(http.MethodPost, "/v1/chat/completions", http.StatusOK, snapChatBody),
@@ -694,7 +665,7 @@ func snapCatalogCases() []snapshotCaseDef {
 			name:        "catalog_refresh_failure",
 			description: "The models view reports a catalog that cannot be loaded; status shows the last error.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodGet, "/v1/models", http.StatusInternalServerError, `{"error":{"message":"catalog down"}}`),
 			},
 			steps: []snapStepDef{
@@ -711,7 +682,7 @@ func snapCredentialCases() []snapshotCaseDef {
 			name:        "credential_add",
 			description: "Add a key: GET /v1/key check, catalog load, auth file save, credential view with unknown models.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodGet, "/v1/key", http.StatusOK, snapKeyBody),
 				snapCatalogReply(snapCatalogV1, `"cat-v1"`),
 			},
@@ -722,7 +693,7 @@ func snapCredentialCases() []snapshotCaseDef {
 		{
 			name:        "credential_add_issuer_token",
 			description: "Add a key with an issuing token: key check, issuer balance check, then save.",
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodGet, "/v1/key", http.StatusOK, snapKeyBody),
 				snapJSONReply(http.MethodGet, "/api/issuer/v1/balance", http.StatusOK, snapIssuerBody),
 				snapCatalogReply(snapCatalogV1, `"cat-v1"`),
@@ -735,7 +706,7 @@ func snapCredentialCases() []snapshotCaseDef {
 			name:        "credential_add_rejected",
 			description: "Rejected adds: key 401, issuer token 401, malformed issuer token, duplicate key, bad JSON, missing key, unknown proxy_id.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodGet, "/v1/key", http.StatusUnauthorized, snapInvalidKey),
 				snapJSONReply(http.MethodGet, "/v1/key", http.StatusOK, snapKeyBody),
 				snapJSONReply(http.MethodGet, "/api/issuer/v1/balance", http.StatusUnauthorized, snapBadIssuer),
@@ -754,7 +725,7 @@ func snapCredentialCases() []snapshotCaseDef {
 			name:        "credential_update",
 			description: "Edit a credential (issuer token verified), remove its issuer token and selection, then rejected edits and the missing DELETE route.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodGet, "/api/issuer/v1/balance", http.StatusOK, snapIssuerBody),
 				snapCatalogReply(snapCatalogV1, `"cat-v1"`),
 			},
@@ -802,7 +773,7 @@ func snapQuotaCases() []snapshotCaseDef {
 			name:        "quota_fetch",
 			description: "quota.fetch: balance and key usage become one monthly bar; describe, identifier and reset.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodGet, "/v1/dashboard/balance", http.StatusOK, snapBalanceBody),
 				snapJSONReply(http.MethodGet, "/v1/key", http.StatusOK, snapKeyBody),
 			},
@@ -817,7 +788,7 @@ func snapQuotaCases() []snapshotCaseDef {
 			name:        "quota_fetch_from_auth_index",
 			description: "quota.fetch without storage reads the auth file by auth_index; an unknown index has no key.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodGet, "/v1/dashboard/balance", http.StatusOK, `{"marketOrderId":"order-77","availableUsd":"3.25"}`),
 				snapJSONReply(http.MethodGet, "/v1/key", http.StatusOK, `{"usage":9,"usage_monthly":"6.75","limit":null}`),
 			},
@@ -830,7 +801,7 @@ func snapQuotaCases() []snapshotCaseDef {
 			name:        "quota_fetch_partial_failure",
 			description: "quota.fetch when the balance fails, then when both calls fail (the key's status wins).",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodGet, "/v1/dashboard/balance", http.StatusInternalServerError, `{"error":{"message":"balance service down"}}`),
 				snapJSONReply(http.MethodGet, "/v1/key", http.StatusOK, snapKeyBody),
 				snapJSONReply(http.MethodGet, "/v1/dashboard/balance", http.StatusUnauthorized, snapInvalidKey),
@@ -845,7 +816,7 @@ func snapQuotaCases() []snapshotCaseDef {
 			name:        "quota_management_view",
 			description: "The management quota view: balance, key usage and the issuer balance via the issuing API.",
 			credentials: []snapCred{withIssuer},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodGet, "/v1/dashboard/balance", http.StatusOK, snapBalanceBody),
 				snapJSONReply(http.MethodGet, "/v1/key", http.StatusOK, snapKeyBody),
 				snapJSONReply(http.MethodGet, "/api/issuer/v1/balance", http.StatusOK, snapIssuerBody),
@@ -858,7 +829,7 @@ func snapQuotaCases() []snapshotCaseDef {
 			name:        "quota_management_errors",
 			description: "Management quota view: issuer failure next to good figures, unknown auth_index, both account calls rejected.",
 			credentials: []snapCred{withIssuer},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodGet, "/v1/dashboard/balance", http.StatusOK, snapBalanceBody),
 				snapJSONReply(http.MethodGet, "/v1/key", http.StatusOK, snapKeyBody),
 				snapJSONReply(http.MethodGet, "/api/issuer/v1/balance", http.StatusUnauthorized, snapBadIssuer),
@@ -880,8 +851,10 @@ func snapManagementCases() []snapshotCaseDef {
 		{
 			name:        "management_register",
 			description: "Lifecycle and static RPCs: plugin.register, management.register, identifiers, resources and routing errors.",
+			// The catalog refresh plugin.register queues is not run.
+			dropQueuedRefresh: true,
 			steps: []snapStepDef{
-				{method: pluginabi.MethodPluginRegister, request: snapRawRequest(registerRequestForm(snapConfig()))},
+				{method: pluginabi.MethodPluginRegister, request: snapRegister(snapConfig())},
 				snapEmptyStep(pluginabi.MethodManagementRegister),
 				snapEmptyStep(pluginabi.MethodAuthIdentifier),
 				snapEmptyStep(pluginabi.MethodExecutorIdentifier),
@@ -899,7 +872,7 @@ func snapManagementCases() []snapshotCaseDef {
 			description: "Status before CPA sent its host summary, then after model.for_auth (force prefix, redacted global proxy, catalog).",
 			config:      map[string]any{"base-url": "{{UPSTREAM}}/v1/", "data-dir": "{{DATA_DIR}}", "model-prefix": "/wk/", "models-refresh-minutes": 15, "request-timeout-seconds": 120, "stream-idle-timeout-seconds": 45, "log-retention": 500, "log-retention-days": 7},
 			credentials: []snapCred{{name: "k1.json", fields: map[string]any{"type": "wokey", "api_key": snapKey1, "proxy_url": "direct"}}},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapCatalogReply(snapCatalogV1, `"cat-v1"`),
 			},
 			steps: []snapStepDef{
@@ -912,7 +885,7 @@ func snapManagementCases() []snapshotCaseDef {
 			name:        "management_logs",
 			description: "Request log after buffered, streamed and failed calls (both speeds, summary), filters, then clearing it.",
 			credentials: []snapCred{snapK1},
-			script: []scriptedReply{
+			script: []snapshotReply{
 				snapJSONReply(http.MethodPost, "/v1/chat/completions", http.StatusOK, snapChatBody, "X-Request-Id", "wk-req-log-1"),
 				snapStreamReply("/v1/messages", snapMessagesStream(), "Request-Id", "wk-req-log-2"),
 				snapJSONReply(http.MethodPost, "/v1/responses", http.StatusTooManyRequests, `{"error":{"code":"rate_limit_exceeded","message":"slow down"}}`, "Retry-After", "30"),
@@ -950,8 +923,8 @@ func snapManagementCases() []snapshotCaseDef {
 		{
 			name:        "management_proxies_check",
 			description: "Egress check of the direct line against the (scripted) IP lookup service, kept for the proxy list.",
-			script: []scriptedReply{
-				snapJSONReply(http.MethodGet, "/ipinfo", http.StatusOK, `{"ip":"203.0.113.7","city":"Tokyo","region":"Tokyo","country":"jp"}`),
+			script: []snapshotReply{
+				snapJSONReply(http.MethodGet, "/json", http.StatusOK, `{"ip":"203.0.113.7","city":"Tokyo","region":"Tokyo","country":"jp"}`),
 			},
 			steps: []snapStepDef{
 				snapManage(http.MethodPost, snapMgmt+"/proxies/check", nil, `{"target":"direct"}`),
@@ -962,12 +935,12 @@ func snapManagementCases() []snapshotCaseDef {
 	}
 }
 
-// registerRequestForm is the fixture form of plugin.register for a config.
-func registerRequestForm(config map[string]any) json.RawMessage {
-	raw, _ := json.Marshal(config)
-	form, errForm := registerRequest(raw)
-	if errForm != nil {
-		panic(errForm)
+// snapRegister is the plugin.register request CPA v8 sends for a plugin
+// config subtree.
+func snapRegister(config map[string]any) cpaLifecycleRequest {
+	configYAML, errYAML := yaml.Marshal(config)
+	if errYAML != nil {
+		panic(errYAML)
 	}
-	return form
+	return cpaLifecycleRequest{ConfigYAML: configYAML, SchemaVersion: pluginabi.SchemaVersion, MultiAuthProviders: true}
 }

@@ -558,8 +558,6 @@
                   "input_tokens": 15,
                   "output_tokens": 7,
                   "cached_tokens": 5,
-                  "output_tokens_per_second": "<volatile>",
-                  "e2e_tokens_per_second": "<volatile>",
                   "client_path": "/v1/messages",
                   "user_agent": "snapshot-client/1.0",
                   "auth_index": "idx-1",
@@ -591,7 +589,6 @@
                   "output_tokens": 5,
                   "cached_tokens": 4,
                   "reasoning_tokens": 2,
-                  "e2e_tokens_per_second": "<volatile>",
                   "client_path": "/v1/chat/completions",
                   "user_agent": "snapshot-client/1.0",
                   "auth_index": "idx-1",
@@ -700,8 +697,8 @@
                 "output_tokens": 0,
                 "cached_tokens": 0,
                 "cache_hit_rate": null,
-                "output_tokens_per_second": null,
-                "e2e_tokens_per_second": null
+                "output_tokens_per_second": "<volatile>",
+                "e2e_tokens_per_second": "<volatile>"
               }
             }
           }
@@ -763,8 +760,6 @@
                   "input_tokens": 15,
                   "output_tokens": 7,
                   "cached_tokens": 5,
-                  "output_tokens_per_second": "<volatile>",
-                  "e2e_tokens_per_second": "<volatile>",
                   "client_path": "/v1/messages",
                   "user_agent": "snapshot-client/1.0",
                   "auth_index": "idx-1",
@@ -881,8 +876,8 @@
                 "output_tokens": 0,
                 "cached_tokens": 0,
                 "cache_hit_rate": null,
-                "output_tokens_per_second": null,
-                "e2e_tokens_per_second": null
+                "output_tokens_per_second": "<volatile>",
+                "e2e_tokens_per_second": "<volatile>"
               }
             }
           }
@@ -1015,8 +1010,8 @@
                 "output_tokens": 0,
                 "cached_tokens": 0,
                 "cache_hit_rate": null,
-                "output_tokens_per_second": null,
-                "e2e_tokens_per_second": null
+                "output_tokens_per_second": "<volatile>",
+                "e2e_tokens_per_second": "<volatile>"
               }
             }
           }

@@ -12,7 +12,7 @@
   "upstream_script": [
     {
       "method": "GET",
-      "path": "/ipinfo",
+      "path": "/json",
       "status": 200,
       "header": {
         "Content-Type": [
@@ -46,7 +46,7 @@
         "upstream_requests": [
           {
             "method": "GET",
-            "path": "/ipinfo",
+            "path": "/json",
             "query": "",
             "header": {
               "Accept": [
@@ -86,7 +86,7 @@
               "region": "Tokyo",
               "city": "Tokyo",
               "latency_ms": "<volatile>",
-              "source": "{{UPSTREAM}}",
+              "source": "{{UPSTREAM_HOST}}",
               "checked_at": "2026-01-02T03:04:05Z"
             }
           }
@@ -135,7 +135,7 @@
                   "region": "Tokyo",
                   "city": "Tokyo",
                   "latency_ms": "<volatile>",
-                  "source": "{{UPSTREAM}}",
+                  "source": "{{UPSTREAM_HOST}}",
                   "checked_at": "2026-01-02T03:04:05Z"
                 }
               }

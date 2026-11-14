@@ -199,35 +199,6 @@ func (h *fakeHost) save(req pluginapi.HostAuthSaveRequest) ([]byte, error) {
 	return okResult(pluginapi.HostAuthSaveResponse{Name: name, Path: filepath.Join("/auths", name)}), nil
 }
 
-// cpaAuthPrefix mirrors how CPA resolves an auth's prefix: the plugin's
-// AuthData.Prefix, else the file's own prefix field.
-func cpaAuthPrefix(auth pluginapi.AuthData) string {
-	if prefix := strings.TrimSpace(auth.Prefix); prefix != "" {
-		return prefix
-	}
-	if prefix, ok := auth.Metadata["prefix"].(string); ok {
-		return strings.Trim(strings.TrimSpace(prefix), "/")
-	}
-	return ""
-}
-
-// cpaPrefixedIDs mirrors CPA's applyModelPrefixes: without force-model-prefix
-// both the bare and the prefixed ID are registered.
-func cpaPrefixedIDs(models []pluginapi.ModelInfo, prefix string, force bool) []string {
-	var out []string
-	for _, model := range models {
-		if prefix == "" {
-			out = append(out, model.ID)
-			continue
-		}
-		if !force {
-			out = append(out, model.ID)
-		}
-		out = append(out, prefix+"/"+model.ID)
-	}
-	return out
-}
-
 // seed stores an auth file directly, as if it had been uploaded earlier.
 func (h *fakeHost) seed(name, provider string, fields map[string]any) *fakeAuthFile {
 	h.t.Helper()
