@@ -263,9 +263,16 @@ func (u *usageTotals) merge(raw any) {
 			set(&u.cached, number(details["cached_tokens"]))
 		}
 	}
+	// Reasoning (thinking) tokens, a part of the output, read the way CPA
+	// reads them: Anthropic's output_tokens_details.thinking_tokens first,
+	// then OpenAI's reasoning_tokens, then the top-level thinking_tokens some
+	// gateways send. set keeps the last positive value, so the preferred
+	// field comes last.
+	set(&u.reasoning, number(usage["thinking_tokens"]))
 	for _, key := range []string{"completion_tokens_details", "output_tokens_details"} {
 		if details, ok := usage[key].(map[string]any); ok {
 			set(&u.reasoning, number(details["reasoning_tokens"]))
+			set(&u.reasoning, number(details["thinking_tokens"]))
 		}
 	}
 }
