@@ -70,7 +70,7 @@ func GetJSON(ctx context.Context, client *http.Client, target, token, userAgent,
 		return nil, TransportError(errRead)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, UpstreamError(resp.StatusCode, resp.Header, body, path)
+		return nil, UpstreamError(resp.StatusCode, resp.Header, body)
 	}
 	var out map[string]any
 	if errUnmarshal := json.Unmarshal(body, &out); errUnmarshal != nil {

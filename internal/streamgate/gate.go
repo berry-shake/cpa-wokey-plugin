@@ -87,7 +87,7 @@ func (g *Gate) Push(event []byte) error {
 	case Failed:
 		if !g.open {
 			g.held = nil
-			g.failure = wokey.UpstreamError(streamErrorStatus(detail), g.header, detail, g.endpoint)
+			g.failure = wokey.UpstreamError(streamErrorStatus(detail), g.header, detail)
 			return errStreamRejected
 		}
 		// After output has started the client gets the error event as is.

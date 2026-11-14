@@ -23,13 +23,13 @@ const MaxErrorBodyBytes = 2048
 //     cool the model on this key for 12 hours).
 //   - 529 upstream_overloaded becomes 503 (transient).
 //   - 429 keeps Retry-After so CPA waits exactly that long.
-func UpstreamError(status int, header http.Header, body []byte, endpoint string) *pluginabi.Error {
+func UpstreamError(status int, header http.Header, body []byte) *pluginabi.Error {
 	code, message := parseUpstreamErrorBody(body)
 	mapped := status
 	switch {
 	case status == http.StatusForbidden && (code == "request_blocked" || code == "model_denylisted"):
 		mapped = http.StatusBadRequest
-	case status == http.StatusNotFound && endpoint != EndpointCountTokens:
+	case status == http.StatusNotFound:
 		mapped = http.StatusBadRequest
 	case status == 529:
 		mapped = http.StatusServiceUnavailable

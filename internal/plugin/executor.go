@@ -96,7 +96,7 @@ func (s *Service) prepareCall(req pluginapi.ExecutorRequest, endpoint string) (*
 	header.Set("Authorization", "Bearer "+cred.APIKey)
 	header.Set("Content-Type", "application/json")
 	header.Set("User-Agent", s.userAgent())
-	if req.Stream && endpoint != wokey.EndpointCountTokens {
+	if req.Stream {
 		header.Set("Accept", "text/event-stream")
 	} else {
 		header.Set("Accept", "application/json")
@@ -106,7 +106,7 @@ func (s *Service) prepareCall(req pluginapi.ExecutorRequest, endpoint string) (*
 			header.Set(name, value)
 		}
 	}
-	if endpoint == wokey.EndpointMessages || endpoint == wokey.EndpointCountTokens {
+	if endpoint == wokey.EndpointMessages {
 		if header.Get("Anthropic-Version") == "" {
 			header.Set("Anthropic-Version", defaultAnthropicVersion)
 		}
@@ -148,30 +148,13 @@ func (s *Service) execute(req pluginapi.ExecutorRequest) []byte {
 	return s.executeBuffered(req, endpoint)
 }
 
-// countTokens serves Anthropic count_tokens; Wokey has no equivalent for the
-// OpenAI protocols.
-func (s *Service) countTokens(req pluginapi.ExecutorRequest) []byte {
-	endpoint, ok := wokey.EndpointForFormat(req.Format)
-	if !ok || endpoint != wokey.EndpointMessages {
-		return errorEnvelopeFrom(&pluginabi.Error{
-			Code:       "unsupported_operation",
-			Message:    "wokey: count_tokens is only available for the Anthropic messages format",
-			HTTPStatus: http.StatusNotImplemented,
-		})
-	}
-	return s.executeBuffered(req, wokey.EndpointCountTokens)
-}
-
 func (s *Service) executeBuffered(req pluginapi.ExecutorRequest, endpoint string) []byte {
 	call, perr := s.prepareCall(req, endpoint)
 	if perr != nil {
 		s.recordFailure(req, endpoint, false, perr)
 		return errorEnvelopeFrom(perr)
 	}
-	var rec *callRecord
-	if endpoint != wokey.EndpointCountTokens {
-		rec = s.startRecord(req, call, false)
-	}
+	rec := s.startRecord(req, call, false)
 	fail := func(perr *pluginabi.Error) []byte {
 		rec.finish(perr, "request")
 		return errorEnvelopeFrom(perr)
@@ -193,12 +176,10 @@ func (s *Service) executeBuffered(req pluginapi.ExecutorRequest, endpoint string
 		return fail(wokey.TransportError(fmt.Errorf("read response: %w", errRead)))
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return fail(wokey.UpstreamError(resp.StatusCode, resp.Header, body, endpoint))
+		return fail(wokey.UpstreamError(resp.StatusCode, resp.Header, body))
 	}
-	if rec != nil {
-		rec.observeJSON(body)
-		rec.finish(nil, "")
-	}
+	rec.observeJSON(body)
+	rec.finish(nil, "")
 	return okEnvelope(pluginapi.ExecutorResponse{
 		Payload: body,
 		Headers: filterHeaders(resp.Header, forwardedResponseHeaders),

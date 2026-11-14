@@ -238,11 +238,10 @@ func (s *Service) Call(method string, request []byte) []byte {
 		}
 		return s.executeStream(req)
 	case pluginabi.MethodExecutorCountTokens:
-		var req rpcExecutorRequest
-		if errUnmarshal := json.Unmarshal(request, &req); errUnmarshal != nil {
-			return ErrorEnvelope("invalid_request", "decode executor request: "+errUnmarshal.Error())
-		}
-		return s.countTokens(req.ExecutorRequest)
+		// Wokey's count_tokens rejects every request with a 400 ("metadata:
+		// Extra inputs are not permitted", although the request carries no
+		// metadata), so the client gets a quick 501 instead of a slow 400.
+		return errorEnvelopeFrom(&pluginabi.Error{Code: "unsupported_operation", Message: "wokey: token counting is not supported", HTTPStatus: http.StatusNotImplemented})
 	case pluginabi.MethodExecutorHTTPRequest:
 		return errorEnvelopeFrom(&pluginabi.Error{Code: "unsupported_operation", Message: "wokey: raw HTTP requests are not supported", HTTPStatus: http.StatusNotImplemented})
 

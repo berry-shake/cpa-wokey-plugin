@@ -75,7 +75,7 @@ func (s *Service) executeStream(req rpcExecutorRequest) []byte {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, wokey.MaxErrorBodyBytes*4))
 		_ = resp.Body.Close()
 		cancel(nil)
-		return fail(wokey.UpstreamError(resp.StatusCode, resp.Header, body, endpoint))
+		return fail(wokey.UpstreamError(resp.StatusCode, resp.Header, body))
 	}
 	headers := filterHeaders(resp.Header, forwardedResponseHeaders)
 	sse := streamgate.IsEventStream(resp.Header.Get("Content-Type"))

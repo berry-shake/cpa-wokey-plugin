@@ -211,24 +211,30 @@ func TestExecuteErrors(t *testing.T) {
 	}
 }
 
-func TestCountTokens(t *testing.T) {
+// Wokey's count_tokens rejects every request, so the plugin answers 501
+// without calling it.
+func TestCountTokensUnsupported(t *testing.T) {
 	upstream := newFakeWokey(t)
 	seen := make(chan observedRequest, 1)
-	upstream.handle(wokey.EndpointCountTokens, observe(seen, func(rw http.ResponseWriter, _ *http.Request) {
+	upstream.handle("/v1/messages/count_tokens", observe(seen, func(rw http.ResponseWriter, _ *http.Request) {
 		writeJSON(rw, http.StatusOK, map[string]any{"input_tokens": 12})
 	}))
 	svc, _ := newTestService(t, upstream)
 
-	envelope := decodeEnvelope(t, svc.countTokens(executorRequest("claude", "wokey/model-a", `{"model":"wokey/model-a"}`)))
-	if !envelope.OK {
-		t.Fatalf("count_tokens: %+v", envelope.Error)
+	for _, format := range []string{"claude", "openai"} {
+		request, _ := json.Marshal(rpcExecutorRequest{ExecutorRequest: executorRequest(format, "wokey/model-a", `{"model":"wokey/model-a"}`)})
+		envelope := decodeEnvelope(t, svc.Call(pluginabi.MethodExecutorCountTokens, request))
+		if envelope.OK || envelope.Error.HTTPStatus != http.StatusNotImplemented || envelope.Error.Code != "unsupported_operation" {
+			t.Fatalf("%s count_tokens: %+v", format, envelope.Error)
+		}
 	}
-	if got := receive(t, seen); got.Body["model"] != "model-a" || got.Header.Get("Accept") != "application/json" {
-		t.Fatalf("upstream saw %+v", got)
+	select {
+	case got := <-seen:
+		t.Fatalf("count_tokens reached Wokey: %+v", got)
+	default:
 	}
-	envelope = decodeEnvelope(t, svc.countTokens(executorRequest("openai", "wokey/model-a", `{}`)))
-	if envelope.OK || envelope.Error.HTTPStatus != http.StatusNotImplemented {
-		t.Fatalf("openai count_tokens: %+v", envelope.Error)
+	if page := svc.reqlog.Query(requestlog.Query{}); len(page.Items) != 0 {
+		t.Fatalf("count_tokens was logged: %+v", page.Items)
 	}
 }
 

@@ -83,9 +83,10 @@ plugins:
 |---|---|
 | OpenAI Chat Completions | `POST /v1/chat/completions` |
 | OpenAI Responses | `POST /v1/responses` |
-| Anthropic Messages | `POST /v1/messages`、`/v1/messages/count_tokens` |
+| Anthropic Messages | `POST /v1/messages` |
 
 - 只改写请求体里的 `model`，其余原样转发；Chat 流式请求会自动加上 `stream_options.include_usage`
+- Wokey 的 `count_tokens` 接口目前对所有请求都报 400，这类请求直接返回 501，不发给 Wokey
 - 流式响应在第一帧真正的输出之前，上游报错（限流、过载）按普通错误处理，CPA 照常冷却或换 Key；流没收到结束帧就断了，记为 `stream_truncated`（502）
 
 **上游错误**：

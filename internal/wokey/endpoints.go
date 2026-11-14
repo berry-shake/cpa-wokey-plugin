@@ -9,10 +9,9 @@ import "strings"
 const ProviderID = "wokey"
 
 const (
-	EndpointChat        = "/v1/chat/completions"
-	EndpointResponses   = "/v1/responses"
-	EndpointMessages    = "/v1/messages"
-	EndpointCountTokens = "/v1/messages/count_tokens"
+	EndpointChat      = "/v1/chat/completions"
+	EndpointResponses = "/v1/responses"
+	EndpointMessages  = "/v1/messages"
 
 	EndpointBalance = "/v1/dashboard/balance"
 	EndpointKeyInfo = "/v1/key"
