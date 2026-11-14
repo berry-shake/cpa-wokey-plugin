@@ -1,7 +1,6 @@
 package wokey
 
 import (
-	"encoding/json"
 	"math"
 	"testing"
 )
@@ -55,34 +54,6 @@ func TestQuotaFromAccountNeedsBoth(t *testing.T) {
 		if resp := QuotaFromAccount(info); len(resp.Summary) != 0 || len(resp.Groups) != 0 {
 			t.Errorf("%s: %+v", name, resp)
 		}
-	}
-}
-
-func TestOptionalNumber(t *testing.T) {
-	cases := []struct {
-		in   any
-		want float64
-		ok   bool
-	}{
-		{1.5, 1.5, true},
-		{" 0.75 ", 0.75, true},
-		{json.Number("3"), 3, true},
-		{nil, 0, false},
-		{"n/a", 0, false},
-		{true, 0, false},
-		// Not amounts, and JSON cannot carry them.
-		{"NaN", 0, false},
-		{"Infinity", 0, false},
-		{"-Inf", 0, false},
-		{math.Inf(1), 0, false},
-	}
-	for _, tc := range cases {
-		if got, ok := optionalNumber(tc.in); got != tc.want || ok != tc.ok {
-			t.Errorf("optionalNumber(%#v) = %v, %v", tc.in, got, ok)
-		}
-	}
-	if got := numberField(map[string]any{"available_usd": "4"}, "availableUsd", "available_usd"); got != 4 {
-		t.Fatalf("numberField fallback key = %v", got)
 	}
 }
 

@@ -1,22 +1,20 @@
 package wokey
 
-import "testing"
+import (
+	"testing"
 
-func TestEndpointForFormat(t *testing.T) {
-	cases := map[string]string{
-		"openai":           EndpointChat,
-		"chat-completions": EndpointChat,
-		"openai-response":  EndpointResponses,
-		"responses":        EndpointResponses,
-		"claude":           EndpointMessages,
-		"Anthropic":        EndpointMessages,
-	}
-	for format, want := range cases {
-		if got, ok := EndpointForFormat(format); !ok || got != want {
-			t.Errorf("EndpointForFormat(%q) = %q, %v", format, got, ok)
+	"github.com/berry-shake/cpa-provider-core/provider"
+)
+
+func TestEndpoint(t *testing.T) {
+	a := New()
+	for protocol, want := range map[provider.Protocol]string{
+		provider.Chat:      EndpointChat,
+		provider.Responses: EndpointResponses,
+		provider.Messages:  EndpointMessages,
+	} {
+		if got := a.Endpoint(protocol); got != want {
+			t.Errorf("Endpoint(%s) = %q, want %q", protocol, got, want)
 		}
-	}
-	if _, ok := EndpointForFormat("gemini"); ok {
-		t.Error("gemini accepted")
 	}
 }

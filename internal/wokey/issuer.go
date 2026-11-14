@@ -4,7 +4,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/berry-shake/cpa-wokey-plugin/internal/jsonfield"
+	"github.com/berry-shake/cpa-provider-core/jsonfield"
+	"github.com/berry-shake/cpa-provider-core/upstream"
 )
 
 // Wokey's issuing API (gift cards and direct top-ups) reports what an account
@@ -41,12 +42,12 @@ func ValidIssuerToken(token string) bool {
 func IssuerInfoFrom(raw map[string]any, account string) *IssuerInfo {
 	info := &IssuerInfo{Account: account}
 	if provider, ok := raw["provider"].(map[string]any); ok {
-		earnings := numberField(provider, "availableUsd", "available_usd")
+		earnings := upstream.NumberField(provider, "availableUsd", "available_usd")
 		info.ProviderUSD = &earnings
 		info.ProviderFrozen = jsonfield.Bool(provider, "settlementFrozen")
 	}
 	if referrer, ok := raw["referrer"].(map[string]any); ok {
-		info.ReferrerUSD = numberField(referrer, "availableUsd", "available_usd")
+		info.ReferrerUSD = upstream.NumberField(referrer, "availableUsd", "available_usd")
 	}
 	return info
 }

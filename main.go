@@ -1,7 +1,8 @@
 // Command wokey builds the CLIProxyAPI plugin that turns Wokey API keys into
-// CPA auth-file credentials. All behavior lives under internal/, wired up by
-// internal/plugin; this file only adapts the C ABI and keeps the host API so
-// the plugin can call back into CPA (auth files, stream emission, logging).
+// CPA auth-file credentials. The plugin runs on cpa-provider-core with the
+// Wokey adapter (internal/wokey); this file only adapts the C ABI and keeps
+// the host API so the plugin can call back into CPA (auth files, stream
+// emission, logging).
 package main
 
 /*
@@ -71,14 +72,15 @@ import (
 	"sync"
 	"unsafe"
 
-	pluginruntime "github.com/berry-shake/cpa-wokey-plugin/internal/plugin"
+	"github.com/berry-shake/cpa-provider-core/core"
+	"github.com/berry-shake/cpa-wokey-plugin/internal/wokey"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 )
 
 var (
 	pluginVersion = "0.0.0-dev"
 	serviceMu     sync.RWMutex
-	service       *pluginruntime.Service
+	service       *core.Service
 )
 
 func main() {}
@@ -89,7 +91,7 @@ func cliproxy_plugin_init(host *C.cliproxy_host_api, api *C.cliproxy_plugin_api)
 		return 1
 	}
 	C.store_host_api(host)
-	next := pluginruntime.New(pluginVersion, callHost)
+	next := core.New(wokey.New(), pluginVersion, callHost)
 	serviceMu.Lock()
 	previous := service
 	service = next
@@ -111,7 +113,7 @@ func cliproxyPluginCall(method *C.char, request *C.uint8_t, requestLen C.size_t,
 		response.len = 0
 	}
 	if method == nil {
-		writePluginResponse(response, pluginruntime.ErrorEnvelope("invalid_method", "method is required"))
+		writePluginResponse(response, core.ErrorEnvelope("invalid_method", "method is required"))
 		return 1
 	}
 	var requestBytes []byte
@@ -122,7 +124,7 @@ func cliproxyPluginCall(method *C.char, request *C.uint8_t, requestLen C.size_t,
 	current := service
 	serviceMu.RUnlock()
 	if current == nil {
-		writePluginResponse(response, pluginruntime.ErrorEnvelope("not_initialized", "plugin is not initialized"))
+		writePluginResponse(response, core.ErrorEnvelope("not_initialized", "plugin is not initialized"))
 		return 1
 	}
 	writePluginResponse(response, current.Call(C.GoString(method), requestBytes))
@@ -149,7 +151,7 @@ func cliproxyPluginShutdown() {
 }
 
 // callHost invokes one host callback and returns the raw response envelope.
-// The plugin package decodes the envelope.
+// The core package decodes the envelope.
 func callHost(method string, request []byte) ([]byte, error) {
 	cMethod := C.CString(method)
 	defer C.free(unsafe.Pointer(cMethod))

@@ -1,16 +1,11 @@
 package wokey
 
 import (
-	"context"
-	"encoding/json"
-	"io"
 	"math"
-	"net/http"
-	"strconv"
 	"strings"
 
-	"github.com/berry-shake/cpa-wokey-plugin/internal/jsonfield"
-	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
+	"github.com/berry-shake/cpa-provider-core/jsonfield"
+	"github.com/berry-shake/cpa-provider-core/upstream"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
@@ -50,41 +45,12 @@ type KeyInfo struct {
 	LimitResetLabel string   `json:"limit_reset,omitempty"`
 }
 
-// GetJSON GETs a JSON object from Wokey with a bearer token. path names the
-// endpoint in errors.
-func GetJSON(ctx context.Context, client *http.Client, target, token, userAgent, path string) (map[string]any, *pluginabi.Error) {
-	req, errReq := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-	if errReq != nil {
-		return nil, TransportError(errReq)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", userAgent)
-	resp, errDo := client.Do(req)
-	if errDo != nil {
-		return nil, TransportError(errDo)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, errRead := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if errRead != nil {
-		return nil, TransportError(errRead)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, UpstreamError(resp.StatusCode, resp.Header, body)
-	}
-	var out map[string]any
-	if errUnmarshal := json.Unmarshal(body, &out); errUnmarshal != nil {
-		return nil, &pluginabi.Error{Code: "invalid_upstream_response", Message: "wokey: decode " + path + ": " + errUnmarshal.Error(), HTTPStatus: http.StatusBadGateway}
-	}
-	return out, nil
-}
-
 // BalanceFrom reads a /v1/dashboard/balance response.
 func BalanceFrom(raw map[string]any) *BalanceInfo {
 	return &BalanceInfo{
 		Account:      balanceAccount(raw),
-		AvailableUSD: numberField(raw, "availableUsd", "available_usd"),
-		ReservedUSD:  numberField(raw, "reservedUsd", "reserved_usd"),
+		AvailableUSD: upstream.NumberField(raw, "availableUsd", "available_usd"),
+		ReservedUSD:  upstream.NumberField(raw, "reservedUsd", "reserved_usd"),
 	}
 }
 
@@ -92,15 +58,15 @@ func BalanceFrom(raw map[string]any) *BalanceInfo {
 func KeyInfoFrom(raw map[string]any) *KeyInfo {
 	key := &KeyInfo{
 		Label:      jsonfield.String(raw, "label"),
-		UsageUSD:   numberField(raw, "usage"),
-		DailyUSD:   numberField(raw, "usage_daily"),
-		WeeklyUSD:  numberField(raw, "usage_weekly"),
-		MonthlyUSD: numberField(raw, "usage_monthly"),
+		UsageUSD:   upstream.NumberField(raw, "usage"),
+		DailyUSD:   upstream.NumberField(raw, "usage_daily"),
+		WeeklyUSD:  upstream.NumberField(raw, "usage_weekly"),
+		MonthlyUSD: upstream.NumberField(raw, "usage_monthly"),
 	}
-	if limit, ok := optionalNumber(raw["limit"]); ok {
+	if limit, ok := upstream.OptionalNumber(raw["limit"]); ok {
 		key.LimitUSD = &limit
 	}
-	if remaining, ok := optionalNumber(raw["limit_remaining"]); ok {
+	if remaining, ok := upstream.OptionalNumber(raw["limit_remaining"]); ok {
 		key.LimitRemaining = &remaining
 	}
 	if reset, ok := raw["limit_reset"].(string); ok {
@@ -143,42 +109,4 @@ func balanceAccount(fields map[string]any) string {
 		return "user:" + user
 	}
 	return ""
-}
-
-func numberField(fields map[string]any, keys ...string) float64 {
-	for _, key := range keys {
-		if value, ok := optionalNumber(fields[key]); ok {
-			return value
-		}
-	}
-	return 0
-}
-
-// optionalNumber accepts JSON numbers and decimal strings; null is absent.
-func optionalNumber(raw any) (float64, bool) {
-	var parsed float64
-	switch value := raw.(type) {
-	case float64:
-		parsed = value
-	case string:
-		number, errParse := strconv.ParseFloat(strings.TrimSpace(value), 64)
-		if errParse != nil {
-			return 0, false
-		}
-		parsed = number
-	case json.Number:
-		number, errParse := value.Float64()
-		if errParse != nil {
-			return 0, false
-		}
-		parsed = number
-	default:
-		return 0, false
-	}
-	// ParseFloat reads "NaN" and "Infinity"; they are no amount, and JSON
-	// cannot carry them to the page or CPA's quota panel.
-	if math.IsNaN(parsed) || math.IsInf(parsed, 0) {
-		return 0, false
-	}
-	return parsed, true
 }
