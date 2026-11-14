@@ -1,3 +1,5 @@
 node_modules
 dist
 *.tsbuildinfo
+# Copied from cpa-provider-core by scripts/sync-core.mjs
+/src/core/

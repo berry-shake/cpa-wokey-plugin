@@ -1,0 +1,25 @@
+/* Wokey: four figures in a row under the facts, two beside them on a wider
+   card; the spend cap; earnings of a key with an issuing token in the card's
+   corner and as a fifth cell of the summary strip. */
+.summary.has-earn { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.cred-earn { flex: none; display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.cred-earn-label { font-size: 11px; color: var(--text-muted); }
+.cred-earn-value { font-size: 15px; font-weight: 650; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.cred-earn-note { flex: 0 1 auto; min-width: 0; max-width: 65%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--text-muted); }
+/* These rules come after the shared .danger-text; keep it winning. */
+.cred-earn-note.danger-text { color: var(--danger); }
+.meters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-content: start; gap: 10px 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+@container (min-width: 340px) {
+  .cred-body { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 14px; }
+  .cred-body > .cap, .cred-body > .usage-note { grid-column: 1 / -1; }
+  .cred-body > .meters, .cred-body > .usage-state { padding: 0 0 0 14px; border-top: none; border-left: 1px solid var(--border-subtle); }
+  .cred-body > .meters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cred-body > .usage-state { align-content: flex-start; }
+}
+.cap-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.cap-head strong { color: var(--success); font-variant-numeric: tabular-nums; }
+.cap.warn .cap-head strong { color: var(--warning); }
+.cap.bad .cap-head strong { color: var(--danger); }
+@media (max-width: 860px) {
+  .summary.has-earn { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

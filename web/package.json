@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "sync": "node scripts/sync-core.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "test": "vitest run",
