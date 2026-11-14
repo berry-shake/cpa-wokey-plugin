@@ -73,7 +73,6 @@ func (a *Adapter) Spec() provider.Spec {
 			EditCredentialRoute: `Edit a Wokey credential. Body: {"auth_index","label","note","models","prefix","proxy_url"|"proxy_id","priority","issuer_token"}.`,
 			QuotaRoute:          "Balance and key usage of one Wokey credential (?auth_index=), plus Provider earnings when it has an issuing token.",
 		},
-		StreamErrors: provider.StreamErrorsBase,
 		// Wokey attributes requests to the client's end user by this header.
 		ForwardHeaders: []string{"X-End-User-Id"},
 		// Wokey's count_tokens rejects every request with a 400 ("metadata:
