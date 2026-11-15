@@ -264,36 +264,12 @@ func toModelInfo(model Model) pluginapi.ModelInfo {
 	}
 }
 
-// UpstreamID maps the model CPA hands the executor back to Wokey's ID.
-// CPA strips the auth prefix before calling the executor; the prefix is
-// still removed here in case a model arrives with it.
+// UpstreamID maps the model CPA hands the executor back to Wokey's ID
+// (provider.UpstreamID). Wokey IDs contain no slash, so a prefix we do not
+// know (for example from a changed config) is dropped rather than sent
+// upstream.
 func (c Snapshot) UpstreamID(model, prefix string) string {
-	model = stripThinkingSuffix(strings.TrimSpace(model))
-	if prefix != "" && strings.HasPrefix(model, prefix+"/") {
-		return strings.TrimPrefix(model, prefix+"/")
-	}
-	if _, ok := c.Lookup(model); ok {
-		return model
-	}
-	// Wokey IDs contain no slash; a prefix we do not know (for example from a
-	// changed config) is dropped rather than sent upstream.
-	if idx := strings.LastIndex(model, "/"); idx >= 0 && idx < len(model)-1 {
-		return model[idx+1:]
-	}
-	return model
-}
-
-// stripThinkingSuffix removes a trailing CPA reasoning suffix such as
-// "(high)" or "(8192)". CPA normally strips it before calling the executor.
-func stripThinkingSuffix(model string) string {
-	if !strings.HasSuffix(model, ")") {
-		return model
-	}
-	open := strings.LastIndex(model, "(")
-	if open <= 0 {
-		return model
-	}
-	return strings.TrimSpace(model[:open])
+	return provider.UpstreamID(model, prefix, c.Has, provider.FlatIDs)
 }
 
 // PricePerMillion converts Wokey's per-token decimal string to USD per 1M tokens.
