@@ -173,6 +173,7 @@
                 "checked_at": "2026-01-02T03:04:05Z",
                 "last_error": "GET /v1/models returned 500: {\"error\":{\"message\":\"catalog down\"}}"
               },
+              "runtime": "<volatile>",
               "credentials": [
                 {
                   "auth_index": "idx-1",

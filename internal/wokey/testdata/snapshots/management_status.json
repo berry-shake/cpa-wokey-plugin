@@ -102,6 +102,7 @@
               "catalog": {
                 "count": 0
               },
+              "runtime": "<volatile>",
               "credentials": [
                 {
                   "auth_index": "idx-1",
@@ -325,6 +326,7 @@
                 "fetched_at": "2026-01-02T03:04:05Z",
                 "checked_at": "2026-01-02T03:04:05Z"
               },
+              "runtime": "<volatile>",
               "credentials": [
                 {
                   "auth_index": "idx-1",
