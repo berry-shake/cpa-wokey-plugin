@@ -2,6 +2,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { CredentialView, QuotaView } from "@core/api/types";
 import { CredCard } from "@core/components/keys/CredCard";
 import { makeT } from "@core/i18n";
+import { newEditor } from "@core/lib/editor";
+import { initialState } from "@core/state/store";
+import { components } from "./components";
 
 const t = makeT("en");
 
@@ -59,5 +62,18 @@ describe("CredCard earnings", () => {
   it("leaves the corner empty without a token", () => {
     const doc = html(renderToStaticMarkup(<CredCard t={t} cred={cred} q={undefined} armedDelete={null} busy={{}} locale="en-US" />));
     expect(doc.querySelector(".cred-earn")).toBeNull();
+  });
+});
+
+describe("EditorFields", () => {
+  it("shows the issuing token as plain text the browser neither hides nor fills", () => {
+    const Fields = components.EditorFields!;
+    const doc = html(renderToStaticMarkup(<Fields t={t} s={initialState()} ed={newEditor(1, "add", null, "wokey")} />));
+    const issuer = doc.querySelector<HTMLInputElement>("#f-issuer");
+    expect(issuer).not.toBeNull();
+    expect(issuer!.getAttribute("type")).toBe("text");
+    expect(issuer!.getAttribute("autocomplete")).toBe("off");
+    expect(issuer!.getAttribute("autocapitalize")).toBe("off");
+    expect(doc.querySelector('input[type="password"]')).toBeNull();
   });
 });

@@ -151,9 +151,11 @@ function EditorFields({ t, ed }: { t: T; ed: EditorState }) {
       <input
         className="input mono"
         id="f-issuer"
-        type="password"
+        type="text"
+        autoComplete="off"
+        autoCapitalize="off"
+        autoCorrect="off"
         spellCheck={false}
-        autoComplete="new-password"
         placeholder={ed.issuerPlaceholder}
         disabled={ed.issuerClear}
         value={ed.issuer}
