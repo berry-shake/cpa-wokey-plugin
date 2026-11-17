@@ -1,5 +1,5 @@
-github.com/berry-shake/cpa-provider-core v0.1.7 h1:m/u+QIKX7H1Fs4MqkIlj8AXwKuPRg10N5PlEFjpdMa0=
-github.com/berry-shake/cpa-provider-core v0.1.7/go.mod h1:M+WWJ2eaFUj7eVJbXA7spnOCboy/YCAJ4rz7DVgU2QM=
+github.com/berry-shake/cpa-provider-core v0.1.8 h1:ViqrMrfSn92tUPn91GubgE3qhoFPjM7srj9FaMT7vws=
+github.com/berry-shake/cpa-provider-core v0.1.8/go.mod h1:M+WWJ2eaFUj7eVJbXA7spnOCboy/YCAJ4rz7DVgU2QM=
 github.com/mattn/go-sqlite3 v1.14.53 h1:mnTM0owzUMrKuLo+0w51NUiB0ir2Fo7kFXlPt/l3BGs=
 github.com/mattn/go-sqlite3 v1.14.53/go.mod h1:6JTjA44L93a0QCyJef5YvlPoKXntQPjzWv5gtm9sB6w=
 github.com/router-for-me/CLIProxyAPI/v8 v8.0.58 h1:K8MVk7lNikdtGaL46HRCtHd5Qt2hN+QqvybQgGe//1k=
